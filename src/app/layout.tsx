@@ -4,6 +4,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { UserProvider } from "@/context/UserContext";
 import { CartProvider } from "@/context/CartContext";
 import { SearchProvider } from "@/context/SearchContext";
+import { ProduceProvider } from "@/context/ProduceContext";
 import "./globals.css";
 
 
@@ -69,9 +70,11 @@ export default function RootLayout({
         <UserProvider>
           <CartProvider>
             <SearchProvider>
-              <ToastProvider>
-                {children}
-              </ToastProvider>
+              <ProduceProvider>
+                <ToastProvider>
+                  {children}
+                </ToastProvider>
+              </ProduceProvider>
             </SearchProvider>
           </CartProvider>
         </UserProvider>
