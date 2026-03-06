@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+/* ─── Lock to light mode — ignore OS/browser dark mode preference ─────────── */
+:root {
+  color-scheme: light !important;
+  --background: #EEF2EE;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-handwriting: var(--font-caveat);
+
+  --breakpoint-xs: 320px;
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1440px;
+  --breakpoint-3xl: 1920px;
+  --breakpoint-4k: 2560px;
+  --breakpoint-5k: 3840px;
+
+  --color-primary: #1B4D28;
+  --color-primary-hover: #143d20;
+  --color-secondary: #739072;
+  --color-secondary-hover: #5f7a5e;
+  --color-accent: #4CAF50;
+}
+
+/* ─── FORCE light mode — prevents browser dark mode from overriding colors ── */
+html,
+html[data-theme],
+html[class] {
+  color-scheme: light !important;
+  background-color: #EEF2EE !important;
+  color: #171717 !important;
+}
+
+body {
+  color-scheme: light !important;
+  background-color: #EEF2EE;
+  color: #171717;
+  font-family: var(--font-sans);
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
