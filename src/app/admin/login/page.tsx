@@ -115,7 +115,8 @@ export default function AdminLoginPage() {
     };
 
     return (
-        <div className="w-full max-w-md p-6 font-sans relative">
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#EEF2EE] px-4 py-12 font-sans">
+        <div className="w-full max-w-md relative">
             {/* Success Toast */}
             {successToast && (
                 <div className="fixed top-6 right-6 z-50 bg-[#1B4D28] text-white px-6 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-[#2C5E39] animate-slideIn">
@@ -244,6 +245,7 @@ export default function AdminLoginPage() {
                 </div>
 
             </div>
+        </div>
         </div>
     );
 }
