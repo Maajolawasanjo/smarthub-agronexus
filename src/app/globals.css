@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+/* ─── Lock to light mode — ignore OS/browser dark mode preference ─────────── */
+:root {
+  color-scheme: light !important;
+  --background: #EEF2EE;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-handwriting: var(--font-caveat);
+
+  --breakpoint-xs: 320px;
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1440px;
+  --breakpoint-3xl: 1920px;
+  --breakpoint-4k: 2560px;
+  --breakpoint-5k: 3840px;
+
+  --color-primary: #1B4D28;
+  --color-primary-hover: #143d20;
+  --color-secondary: #739072;
+  --color-secondary-hover: #5f7a5e;
+  --color-accent: #4CAF50;
+}
+
+/* ─── FORCE light mode — prevents browser dark mode from overriding colors ── */
+html,
+html[data-theme],
+html[class] {
+  color-scheme: light !important;
+  background-color: #EEF2EE !important;
+  color: #171717 !important;
+}
+
+body {
+  color-scheme: light !important;
+  background-color: #EEF2EE;
+  color: #171717;
+  font-family: var(--font-sans);
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* ─── Premium Brand-Matching Custom Scrollbar ─────────── */
+/* Global WebKit scrollbar styles for root and all elements */
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: #EEF2EE;
+}
+
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: #1B4D28;
+  border-radius: 9999px;
+  border: 2.5px solid #EEF2EE;
+}
+
+::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background: #143d20;
+}
+
+/* Elegant blend for dark sidebar inner scrollbars */
+aside ::-webkit-scrollbar,
+aside::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+aside ::-webkit-scrollbar-track,
+aside::-webkit-scrollbar-track {
+  background: #1B4D28;
+}
+
+aside ::-webkit-scrollbar-thumb,
+aside::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+  border: 1.5px solid #1B4D28;
+}
+
+aside ::-webkit-scrollbar-thumb:hover,
+aside::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Firefox compatibility for global and aside */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1B4D28 #EEF2EE;
+}
+
+aside,
+aside * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) #1B4D28;
+}

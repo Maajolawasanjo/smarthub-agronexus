@@ -1,0 +1,249 @@
+# 🌾 Smarthub Agrochain — Project Overview
+
+## What Is This Project?
+
+**Smarthub Agrochain** is a **B2B agricultural marketplace web application** built as a frontend demo. Its purpose is to connect **international buyers** with **African farmers** who supply premium agricultural commodities — such as cashew nuts, cocoa beans, spices, grains, and fresh produce — through a transparent, traceable digital platform.
+
+Think of it as a **digital trading hub for African agro-exports**, with dashboards, order tracking, wallets, and a product marketplace — all built as a polished, production-style frontend (currently with mock/simulated data, no live backend yet).
+
+---
+
+## Tech Stack
+
+| Technology | Version | Role |
+|---|---|---|
+| **Next.js** | 16 | App Router, SSR, page routing |
+| **React** | 19 | UI component rendering |
+| **TypeScript** | 5 | Type safety across all files |
+| **Tailwind CSS** | 4 | Utility-first styling |
+| **Framer Motion** | 12 | Smooth page & component animations |
+| **Recharts** | 3 | Charts & data visualisation (dashboard) |
+| **Lucide React** | Latest | Icon library |
+| **clsx + tailwind-merge** | Latest | Conditional CSS class utilities |
+
+> **Deployed on:** Vercel (zero-config Next.js deployment)
+
+---
+
+## High-Level Architecture
+
+```
+Browser (User)
+    │
+    ▼
+Next.js App Router (src/app/)
+    │
+    ├── Pages (routes) ─────────────────────────────────────────────────────────┐
+    │   ├── / (Home)            → Landing page                                   │
+    │   ├── /about              → About the platform                             │
+    │   ├── /contact            → Contact form page                              │
+    │   ├── /login              → Buyer/Farmer sign-in                           │
+    │   ├── /signup             → Buyer/Farmer registration                      │
+    │   ├── /cart               → Shopping cart page                             │
+    │   └── /dashboard          → Protected area with sub-pages:                 │
+    │       ├── /dashboard/orders     → Order management                         │
+    │       ├── /dashboard/products   → Product listings                         │
+    │       ├── /dashboard/tracking   → Shipment tracking                        │
+    │       ├── /dashboard/wallet     → Wallet & financials                      │
+    │       ├── /dashboard/settings   → Account settings                         │
+    │       └── /dashboard/notifications → Notifications                         │
+    │                                                                            │
+    ├── React Context (Global State) ─────────────────────────────────────────── │
+    │   ├── CartContext     → Cart items, add/remove, localStorage sync          │
+    │   ├── UserContext     → Auth state, user profile, localStorage sync        │
+    │   └── SearchContext   → Product search query state                         │
+    │                                                                            │
+    ├── Components ────────────────────────────────────────────────────────────── │
+    │   ├── layout/         → Navbar, Footer (global wrappers)                   │
+    │   ├── ui/             → Reusable UI primitives (Button, Input, Toast…)     │
+    │   ├── dashboard/      → Dashboard-specific components                      │
+    │   └── cart/           → Cart-specific components                           │
+    │                                                                            │
+    └── lib/ ──────────────────────────────────────────────────────────────────── │
+        ├── data/products.ts  → Static mock product catalogue                    │
+        ├── constants.ts      → App-wide constants                               │
+        └── utils.ts          → cn() helper for merging Tailwind classes         │
+```
+
+---
+
+## Folder-by-Folder Breakdown
+
+### `src/app/` — Pages & Routing
+The core of the Next.js **App Router**. Every folder here becomes a URL route.
+
+| Folder/File | URL Route | Purpose |
+|---|---|---|
+| `page.tsx` | `/` | Homepage / landing page |
+| `layout.tsx` | (all pages) | Root layout — wraps ALL pages with Navbar, Footer, Context Providers |
+| `template.tsx` | (all pages) | Page transition animation wrapper |
+| `globals.css` | — | Global CSS resets and base styles |
+| `about/` | `/about` | About page |
+| `contact/` | `/contact` | Contact page |
+| `login/` | `/login` | Login page |
+| `signup/` | `/signup` | Signup page |
+| `cart/` | `/cart` | Cart page |
+| `dashboard/` | `/dashboard` | Dashboard area (with its own nested layout) |
+
+---
+
+### `src/app/dashboard/` — Dashboard Sub-Pages
+The dashboard has its **own nested layout** (`dashboard/layout.tsx`) that adds a Sidebar and Header on top of every dashboard page.
+
+| Folder | URL | Purpose |
+|---|---|---|
+| `page.tsx` | `/dashboard` | Main dashboard (stats, charts, recent offers) |
+| `orders/` | `/dashboard/orders` | Order list & management |
+| `products/` | `/dashboard/products` | Product catalogue management |
+| `tracking/` | `/dashboard/tracking` | Shipment/logistics tracking |
+| `wallet/` | `/dashboard/wallet` | Wallet balance, transactions |
+| `settings/` | `/dashboard/settings` | Account & notification settings |
+| `notifications/` | `/dashboard/notifications` | Notification centre |
+
+---
+
+### `src/components/` — UI Components
+
+#### `layout/` — Global Layout
+- **`Navbar.tsx`** — Top navigation bar (logo, links, auth buttons, cart icon)
+- **`Footer.tsx`** — Site-wide footer
+
+#### `ui/` — Reusable UI Primitives
+| Component | Purpose |
+|---|---|
+| `Button.tsx` | Styled button variants (primary, secondary, outline, etc.) |
+| `Input.tsx` | Styled text input field |
+| `Select.tsx` | Styled dropdown select |
+| `Switch.tsx` | Toggle switch (used in settings) |
+| `Toast.tsx` | Global toast/notification popup system |
+| `Hero.tsx` | Landing page hero section |
+| `Connectivity.tsx` | Section showing platform connectivity/supply chain |
+| `TargetMarket.tsx` | Section displaying target market segments (buyers, importers, processors) |
+| `Testimonials.tsx` | Testimonials/reviews carousel section |
+
+#### `dashboard/` — Dashboard Components
+| Component | Purpose |
+|---|---|
+| `Header.tsx` | Dashboard top bar (search, notifications, profile) |
+| `Sidebar.tsx` | Left navigation sidebar for dashboard routes |
+| `StatsCards.tsx` | KPI stat cards (revenue, orders, etc.) |
+| `RevenueChart.tsx` | Recharts-powered revenue line/bar chart |
+| `RecentOffers.tsx` | Table of recent trade offers |
+| `notifications/` | Notification list components |
+| `orders/` | Order table & detail components |
+| `tracking/` | Map + shipment tracking UI |
+| `wallet/` | Wallet balance cards + transaction history |
+
+#### `cart/` — Cart Components
+- Components specific to the shopping cart page
+
+---
+
+### `src/context/` — Global State (React Context)
+
+| File | What It Manages |
+|---|---|
+| `CartContext.tsx` | Cart items, quantity, add/remove/clear — persisted in `localStorage` |
+| `UserContext.tsx` | Logged-in user info, auth state — persisted in `localStorage` |
+| `SearchContext.tsx` | Product search query string — shared across components |
+
+> All three contexts are provided at the **root layout** level so every page can access them.
+
+---
+
+### `src/lib/` — Utilities & Data
+
+| File | Purpose |
+|---|---|
+| `data/products.ts` | Static mock product catalogue (name, price, origin, category, images, etc.) |
+| `constants.ts` | App-wide constants (e.g., site name, nav links) |
+| `utils.ts` | `cn()` function — merges Tailwind class names safely using `clsx` + `tailwind-merge` |
+
+---
+
+### `src/types/` — TypeScript Types
+
+| File | Purpose |
+|---|---|
+| `index.ts` | Shared TypeScript interfaces and types (e.g., `Product`, `Order`, `User`, `CartItem`) used across the whole app |
+
+---
+
+### `public/` — Static Assets
+
+All images are stored here and referenced directly:
+- **`LOGO.jpg`** — The Smarthub Agrochain brand logo
+- **`hero-bg.jpg`** — Landing page hero background
+- **`avatar-1.png` to `avatar-5.png`** — Testimonial profile pictures
+- **`agrochain-farmers.png`**, **`agrochain-logistics.png`** — Feature/section imagery
+- **`target-buyer.png`**, **`target-importer.png`**, **`target-processor.png`** — Target market segment images
+- **`vegetable-container*.png`** — Product visuals
+- **`brush-border.svg`** — Decorative SVG border graphic
+- `images/` and `logos/` — Additional image assets
+
+---
+
+### `scripts/` — Utility Scripts
+
+| File | Purpose |
+|---|---|
+| `generate_brush.js` | Script to programmatically generate the brush-border SVG graphic |
+| `process_brush.py` | Python script for post-processing the brush SVG |
+
+---
+
+### Root Config Files
+
+| File | Purpose |
+|---|---|
+| `package.json` | Project metadata, scripts (`dev`, `build`, `start`, `lint`), dependencies |
+| `next.config.ts` | Next.js configuration (image domains, etc.) |
+| `tsconfig.json` | TypeScript compiler configuration |
+| `eslint.config.mjs` | ESLint linting rules |
+| `postcss.config.mjs` | PostCSS config (required by Tailwind CSS 4) |
+| `.gitignore` | Files excluded from Git (node_modules, .env, build artifacts, etc.) |
+| `.vercelignore` | Files excluded from Vercel deployment |
+| `build.log` | Build output log (likely from a previous build run) |
+
+---
+
+## Key Features Summary
+
+| Feature | Status | Notes |
+|---|---|---|
+| 🌾 Product Marketplace | ✅ Built | Static mock data |
+| 🛒 Cart & Checkout | ✅ Built | localStorage persistence |
+| 👤 Auth (Login/Signup) | ✅ Built | Simulated, localStorage only |
+| 📊 Dashboard + Charts | ✅ Built | Mock data, Recharts |
+| 📦 Order Management | ✅ Built | Mock data |
+| 🗺️ Shipment Tracking | ✅ Built | Mock data |
+| 💰 Wallet | ✅ Built | Mock data |
+| 🔔 Toast Notifications | ✅ Built | Global context |
+| 🌍 Responsive Design | ✅ Built | Mobile-first |
+| 🔒 Real Auth (JWT/NextAuth) | ❌ Not yet | Future roadmap |
+| 💳 Payment Gateway | ❌ Not yet | Future roadmap |
+| 🔌 Backend API | ❌ Not yet | Future roadmap |
+
+---
+
+## Known Limitations (Demo Build)
+
+> [!WARNING]
+> This is currently a **frontend demo only** — no real backend exists.
+
+- **Authentication** is fake — no real login verification. User data stored in `localStorage`.
+- **Products** are hardcoded static data in `lib/data/products.ts`.
+- **Cart** only persists in browser `localStorage`, not a database.
+- **Orders, Tracking, Wallet** all display mock/dummy data.
+- **No real payments** — no Stripe, Paystack, or any payment processing.
+
+---
+
+## Roadmap (What's Coming Next)
+
+- [ ] Real backend API (Node.js / Supabase / Firebase)
+- [ ] Real authentication (JWT / NextAuth.js)
+- [ ] Payment gateway (Stripe / Paystack)
+- [ ] Admin panel for product management
+- [ ] Real-time order tracking (WebSockets)
+- [ ] Multi-currency pricing support
