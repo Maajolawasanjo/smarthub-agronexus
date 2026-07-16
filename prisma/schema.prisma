@@ -8,6 +8,220 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id                    String         @id @default(cuid())
+  fullName              String
+  email                 String         @unique
+  phoneNumber           String         @unique
+  password              String
+  role                  Role           @default(BUYER)
+  isActive              Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  buyerProfile          BuyerProfile?
+  disputes              Dispute[]
+  farmerProfile         FarmerProfile?
+  notifications         Notification[]
+  reviewedVerifications Verification[] @relation("VerificationReviewer")
+}
+
+model FarmerProfile {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  farmName           String
+  farmDescription    String?
+  farmAddress        String
+  state              String
+  lga                String
+  verificationStatus VerificationStatus @default(PENDING)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products           Product[]
+  verification       Verification?
+}
+
+model BuyerProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  address   String?
+  state     String?
+  lga       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders    Order[]
+  reviews   Review[]
+}
+
+model Verification {
+  id              String        @id @default(cuid())
+  farmerProfileId String        @unique
+  documentType    String
+  documentNumber  String?
+  documentUrl     String
+  reviewedById    String?
+  reviewedAt      DateTime?
+  remarks         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  farmerProfile   FarmerProfile @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
+  reviewedBy      User?         @relation("VerificationReviewer", fields: [reviewedById], references: [id])
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model Product {
+  id              String         @id @default(cuid())
+  farmerProfileId String
+  categoryId      String
+  name            String
+  description     String?
+  price           Decimal        @db.Decimal(10, 2)
+  unit            ProductUnit
+  harvestDate     DateTime?
+  isAvailable     Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  inventory       Inventory?
+  orderItems      OrderItem[]
+  category        Category       @relation(fields: [categoryId], references: [id])
+  farmerProfile   FarmerProfile  @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
+  images          ProductImage[]
+  reviews         Review[]
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  imageUrl  String
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Inventory {
+  id           String   @id @default(cuid())
+  productId    String   @unique
+  availableQty Int
+  reservedQty  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id          String       @id @default(cuid())
+  orderNumber String       @unique
+  buyerId     String
+  totalAmount Decimal      @db.Decimal(10, 2)
+  status      OrderStatus  @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  delivery    Delivery?
+  disputes    Dispute[]
+  buyer       BuyerProfile @relation(fields: [buyerId], references: [id])
+  orderItems  OrderItem[]
+  payment     Payment?
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  unitPrice Decimal  @db.Decimal(10, 2)
+  subtotal  Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  orderId        String        @unique
+  amount         Decimal       @db.Decimal(10, 2)
+  paymentMethod  PaymentMethod
+  paymentStatus  PaymentStatus @default(PENDING)
+  transactionRef String?       @unique
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Delivery {
+  id                 String            @id @default(cuid())
+  orderId            String            @unique
+  logisticsPartnerId String?
+  deliveryAddress    String
+  deliveryStatus     DeliveryStatus    @default(PENDING)
+  trackingNumber     String?
+  estimatedDelivery  DateTime?
+  deliveredAt        DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  logisticsPartner   LogisticsPartner? @relation(fields: [logisticsPartnerId], references: [id])
+  order              Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model LogisticsPartner {
+  id          String     @id @default(cuid())
+  companyName String
+  contactName String?
+  phoneNumber String
+  email       String?    @unique
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deliveries  Delivery[]
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id        String       @id @default(cuid())
+  buyerId   String
+  productId String
+  rating    Rating
+  comment   String?
+  createdAt DateTime     @default(now())
+  buyer     BuyerProfile @relation(fields: [buyerId], references: [id])
+  product   Product      @relation(fields: [productId], references: [id])
+
+  @@unique([buyerId, productId])
+}
+
+model Dispute {
+  id          String        @id @default(cuid())
+  orderId     String
+  userId      String
+  title       String
+  description String
+  status      DisputeStatus @default(OPEN)
+  resolution  String?
+  closedAt    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  order       Order         @relation(fields: [orderId], references: [id])
+  user        User          @relation(fields: [userId], references: [id])
+}
+
 enum Role {
   ADMIN
   FARMER
@@ -79,330 +293,4 @@ enum DisputeStatus {
   UNDER_REVIEW
   RESOLVED
   REJECTED
-}
-
-model User {
-  id          String @id @default(cuid())
-  fullName    String
-  email       String @unique
-  phoneNumber String @unique
-  password    String
-
-  role Role
-
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  farmerProfile FarmerProfile?
-  buyerProfile  BuyerProfile?
-
-  notifications Notification[]
-  disputes      Dispute[]
-
-  reviewedVerifications Verification[] @relation("VerificationReviewer")
-}
-
-model FarmerProfile {
-  id String @id @default(cuid())
-
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  farmName        String
-  farmDescription String?
-  farmAddress     String
-
-  state String
-  lga   String
-
-  verificationStatus VerificationStatus @default(PENDING)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  verification Verification?
-  products     Product[]
-}
-
-model BuyerProfile {
-  id String @id @default(cuid())
-
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  address String?
-  state   String?
-  lga     String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  orders  Order[]
-  reviews Review[]
-}
-
-model Verification {
-  id String @id @default(cuid())
-
-  farmerProfileId String        @unique
-  farmerProfile   FarmerProfile @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
-
-  documentType   String
-  documentNumber String?
-  documentUrl    String
-
-  reviewedById String?
-  reviewedBy   User?   @relation("VerificationReviewer", fields: [reviewedById], references: [id])
-
-  reviewedAt DateTime?
-
-  remarks String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Category {
-  id String @id @default(cuid())
-
-  name        String  @unique
-  description String?
-
-  products Product[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Product {
-  id String @id @default(cuid())
-
-  farmerProfileId String
-  farmerProfile   FarmerProfile @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
-
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
-
-  name        String
-  description String?
-
-  price Decimal @db.Decimal(10, 2)
-
-  unit ProductUnit
-
-  harvestDate DateTime?
-
-  isAvailable Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  images     ProductImage[]
-  inventory  Inventory?
-  orderItems OrderItem[]
-  reviews    Review[]
-}
-
-model ProductImage {
-  id String @id @default(cuid())
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  imageUrl String
-
-  createdAt DateTime @default(now())
-}
-
-model Inventory {
-  id String @id @default(cuid())
-
-  productId String  @unique
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  availableQty Int
-
-  reservedQty Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-//
-// ORDER
-//
-
-model Order {
-  id String @id @default(cuid())
-
-  orderNumber String @unique
-
-  buyerId String
-  buyer   BuyerProfile @relation(fields: [buyerId], references: [id])
-
-  totalAmount Decimal @db.Decimal(10, 2)
-
-  status OrderStatus @default(PENDING)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relationships
-  orderItems OrderItem[]
-  payment    Payment?
-  delivery   Delivery?
-
-  disputes Dispute[]
-}
-
-//
-// ORDER ITEM
-//
-
-model OrderItem {
-  id String @id @default(cuid())
-
-  orderId String
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-
-  quantity Int
-
-  unitPrice Decimal @db.Decimal(10, 2)
-
-  subtotal Decimal @db.Decimal(10, 2)
-
-  createdAt DateTime @default(now())
-}
-
-//
-// PAYMENT
-//
-
-model Payment {
-  id String @id @default(cuid())
-
-  orderId String @unique
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  amount Decimal @db.Decimal(10, 2)
-
-  paymentMethod PaymentMethod
-
-  paymentStatus PaymentStatus @default(PENDING)
-
-  transactionRef String? @unique
-
-  paidAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Delivery {
-  id String @id @default(cuid())
-
-  orderId String @unique
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  logisticsPartnerId String?
-  logisticsPartner   LogisticsPartner? @relation(fields: [logisticsPartnerId], references: [id])
-
-  deliveryAddress String
-
-  deliveryStatus DeliveryStatus @default(PENDING)
-
-  trackingNumber String?
-
-  estimatedDelivery DateTime?
-
-  deliveredAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-//
-// LOGISTICS PARTNER
-//
-
-model LogisticsPartner {
-  id String @id @default(cuid())
-
-  companyName String
-
-  contactName String?
-
-  phoneNumber String
-
-  email String? @unique
-
-  deliveries Delivery[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Notification {
-  id String @id @default(cuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title String
-
-  message String
-
-  type NotificationType
-
-  isRead Boolean @default(false)
-
-  readAt DateTime?
-
-  createdAt DateTime @default(now())
-}
-
-model Review {
-  id String @id @default(cuid())
-
-  buyerId String
-  buyer   BuyerProfile @relation(fields: [buyerId], references: [id])
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-
-  rating Rating
-
-  comment String?
-
-  createdAt DateTime @default(now())
-
-  @@unique([buyerId, productId])
-}
-
-model Dispute {
-  id String @id @default(cuid())
-
-  orderId String
-  order   Order  @relation(fields: [orderId], references: [id])
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  title String
-
-  description String
-
-  status DisputeStatus @default(OPEN)
-
-  resolution String?
-
-  closedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
