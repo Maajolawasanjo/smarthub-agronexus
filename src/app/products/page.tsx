@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
@@ -186,12 +186,45 @@ const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 export default function ProductsShowroom() {
     const [activeCategory, setActiveCategory] = useState<"all" | "nuts" | "seeds" | "fresh">("all");
+    const [liveProducts, setLiveProducts] = useState<CropDetail[]>([]);
+
+    useEffect(() => {
+        async function fetchProducts() {
+            try {
+                const res = await fetch("/api/products");
+                const data = await res.json();
+                if (data.products && data.products.length > 0) {
+                    const mapped: CropDetail[] = data.products.map((p: any) => ({
+                        name: p.name,
+                        scientificName: p.grade || "Export Quality",
+                        category: p.category?.name?.toLowerCase().includes("seed") ? "seeds" : p.category?.name?.toLowerCase().includes("fresh") ? "fresh" : "nuts",
+                        grade: p.grade || "Grade A",
+                        moisture: "Max 8.0%",
+                        admixture: "Max 0.5%",
+                        defects: "Max 1.0%",
+                        specificationKey: "MOQ",
+                        specValue: `${p.moq || 1} ${p.unit || "Ton"}`,
+                        description: p.description || `${p.name} ready for export shipment.`,
+                        seasonStart: "January",
+                        seasonEnd: "December",
+                        packing: `Standard ${p.unit || "Bag"}`,
+                        image: p.images?.[0]?.url || "/images/products/sesame_seeds.png",
+                    }));
+                    setLiveProducts(mapped);
+                }
+            } catch (err) {
+                // Fallback to static commodities list
+            }
+        }
+        fetchProducts();
+    }, []);
 
     // Filter commodities
     const filteredCommodities = useMemo(() => {
-        if (activeCategory === "all") return commodities;
-        return commodities.filter(c => c.category === activeCategory);
-    }, [activeCategory]);
+        const sourceList = liveProducts.length > 0 ? liveProducts : commodities;
+        if (activeCategory === "all") return sourceList;
+        return sourceList.filter(c => c.category === activeCategory);
+    }, [activeCategory, liveProducts]);
 
     return (
         <main className="min-h-screen bg-[#EEF2EE] font-sans antialiased">

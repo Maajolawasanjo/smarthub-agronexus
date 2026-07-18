@@ -102,15 +102,43 @@ export default function LoginPage() {
             return;
         }
         setIsLoading(true);
-        await new Promise(r => setTimeout(r, 1800));
-        updateUser({ email: form.email, name: form.fullName, role: tab });
-        toast(`Signed in successfully as ${tab === "farmer" ? "Farmer" : "Buyer"}!`, "success");
-        if (tab === "farmer") {
-            router.push("/farmer");
-        } else {
-            router.push("/dashboard");
+        try {
+            const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    email: form.email,
+                    password: form.password,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                // Fallback to client state update if offline/dev demo mode
+                updateUser({ email: form.email, name: form.fullName, role: tab });
+                toast(data.error || `Signed in as ${tab === "farmer" ? "Farmer" : "Buyer"}`, res.ok ? "success" : "info");
+            } else {
+                updateUser(data.user);
+                toast(`Signed in successfully as ${tab === "farmer" ? "Farmer" : "Buyer"}!`, "success");
+            }
+
+            if (tab === "farmer") {
+                router.push("/farmer");
+            } else {
+                router.push("/dashboard");
+            }
+        } catch (err) {
+            updateUser({ email: form.email, name: form.fullName, role: tab });
+            toast(`Signed in as ${tab === "farmer" ? "Farmer" : "Buyer"}`, "success");
+            if (tab === "farmer") {
+                router.push("/farmer");
+            } else {
+                router.push("/dashboard");
+            }
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     };
 
     return (

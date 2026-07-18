@@ -27,6 +27,22 @@ const initialTasks = [
 export default function AdminOverviewPage() {
     const [tasks, setTasks] = useState(initialTasks);
     const [toastMessage, setToastMessage] = useState("");
+    const [analytics, setAnalytics] = useState<any>(null);
+
+    React.useEffect(() => {
+        async function fetchAnalytics() {
+            try {
+                const res = await fetch("/api/analytics");
+                const data = await res.json();
+                if (data.metrics) {
+                    setAnalytics(data.metrics);
+                }
+            } catch (err) {
+                // Fallback
+            }
+        }
+        fetchAnalytics();
+    }, []);
 
     const triggerToast = (msg: string) => {
         setToastMessage(msg);

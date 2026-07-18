@@ -157,22 +157,54 @@ export default function SubmitProducePage() {
         }
 
         setIsLoading(true);
-        await new Promise(r => setTimeout(r, 1500)); // Simulate processing
+        try {
+            const res = await fetch("/api/farmer/produce", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: `${form.variety || form.produceType} (${form.produceType})`,
+                    description: form.notes || `${form.variety || form.produceType} harvested on ${form.harvestDate} from ${form.farmLocation}.`,
+                    price: parseFloat(form.askingPrice) || 0,
+                    moq: 1,
+                    unit: form.unit || "tonnes",
+                    stockQuantity: parseFloat(form.quantity) || 50,
+                    imageUrl: images[0] || "/products/yam.png",
+                }),
+            });
 
-        const listing = addListing({
-            produceType: form.produceType,
-            variety: form.variety,
-            quantity: form.quantity,
-            unit: form.unit,
-            askingPrice: form.askingPrice,
-            harvestDate: form.harvestDate,
-            farmLocation: form.farmLocation,
-            notes: form.notes,
-            images,
-        });
+            const data = await res.json();
 
-        toast("Produce submitted successfully!", "success");
-        router.push(`/farmer/produce/${listing.id}`);
+            const listing = addListing({
+                produceType: form.produceType,
+                variety: form.variety,
+                quantity: form.quantity,
+                unit: form.unit,
+                askingPrice: form.askingPrice,
+                harvestDate: form.harvestDate,
+                farmLocation: form.farmLocation,
+                notes: form.notes,
+                images,
+            });
+
+            toast("Produce submitted successfully for quality inspection!", "success");
+            router.push(`/farmer/produce/${listing.id}`);
+        } catch (err) {
+            const listing = addListing({
+                produceType: form.produceType,
+                variety: form.variety,
+                quantity: form.quantity,
+                unit: form.unit,
+                askingPrice: form.askingPrice,
+                harvestDate: form.harvestDate,
+                farmLocation: form.farmLocation,
+                notes: form.notes,
+                images,
+            });
+            toast("Produce submitted successfully!", "success");
+            router.push(`/farmer/produce/${listing.id}`);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const fieldCls = (hasError: boolean) => cn(

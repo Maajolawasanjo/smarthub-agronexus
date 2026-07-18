@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Order {
     id: string;
@@ -9,14 +9,11 @@ interface Order {
     total: string;
 }
 
-const mockOrders: Order[] = [
+const fallbackOrders: Order[] = [
     { id: "83335", date: "Dec 23, 2025", status: "Pending", total: "$145.00" },
     { id: "90299", date: "Dec 18, 2025", status: "Delivered", total: "$345.00" },
     { id: "65109", date: "Dec 14, 2025", status: "Delivered", total: "$345.00" },
     { id: "83285", date: "Dec 11, 2025", status: "Canceled", total: "$345.00" },
-    { id: "23856", date: "Dec 6, 2025", status: "Delivered", total: "$345.00" },
-    { id: "23857", date: "Dec 6, 2025", status: "Delivered", total: "$345.00" },
-    { id: "23858", date: "Dec 6, 2025", status: "Delivered", total: "$345.00" },
 ];
 
 const tabs = ["All Orders", "Active Orders", "Pending Orders", "Cancel Orders"];
@@ -27,6 +24,28 @@ interface OrdersListProps {
 
 export function OrdersList({ searchQuery }: OrdersListProps) {
     const [activeTab, setActiveTab] = useState("All Orders");
+    const [orders, setOrders] = useState<Order[]>(fallbackOrders);
+
+    useEffect(() => {
+        async function fetchOrders() {
+            try {
+                const res = await fetch("/api/orders");
+                const data = await res.json();
+                if (data.orders && data.orders.length > 0) {
+                    const mapped: Order[] = data.orders.map((o: any) => ({
+                        id: o.orderNumber || o.id,
+                        date: new Date(o.createdAt).toLocaleDateString(),
+                        status: o.status === "DELIVERED" || o.status === "COMPLETED" ? "Delivered" : o.status === "CANCELLED" ? "Canceled" : "Pending",
+                        total: `$${parseFloat(o.totalAmount).toLocaleString()}`,
+                    }));
+                    setOrders(mapped);
+                }
+            } catch (err) {
+                // Fallback
+            }
+        }
+        fetchOrders();
+    }, []);
 
     const getStatusColor = (status: Order["status"]) => {
         switch (status) {
@@ -41,7 +60,7 @@ export function OrdersList({ searchQuery }: OrdersListProps) {
         }
     };
 
-    const filteredOrders = mockOrders.filter((order) => {
+    const filteredOrders = orders.filter((order) => {
         // Tab filtering
         let matchesTab = true;
         if (activeTab === "Pending Orders") matchesTab = order.status === "Pending";

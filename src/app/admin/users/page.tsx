@@ -19,6 +19,29 @@ export default function AdminUsersPage() {
     const [showModal, setShowModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
 
+    React.useEffect(() => {
+        async function fetchUsers() {
+            try {
+                const res = await fetch("/api/admin/users");
+                const data = await res.json();
+                if (data.users && data.users.length > 0) {
+                    const mapped = data.users.map((u: any) => ({
+                        id: u.id.slice(-6).toUpperCase(),
+                        email: u.email,
+                        name: u.fullName,
+                        role: u.role === "FARMER" ? "Farmer" : u.role === "BUYER" ? "Buyer" : "Agent",
+                        status: u.isActive ? "Active" : "Inactive",
+                        joined: new Date(u.createdAt).toLocaleDateString("en-GB"),
+                    }));
+                    setUsers(mapped);
+                }
+            } catch (err) {
+                // Fallback
+            }
+        }
+        fetchUsers();
+    }, []);
+
     // Form inputs for new user
     const [newUserName, setNewUserName] = useState("");
     const [newUserEmail, setNewUserEmail] = useState("");

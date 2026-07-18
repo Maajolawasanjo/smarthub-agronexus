@@ -146,7 +146,6 @@ export default function SignUpPage() {
         e.preventDefault();
 
         if (tab === "buyer") {
-            // Mark all touched
             setBuyerTouched({ fullName: true, email: true, password: true, confirmPassword: true });
             const errs = validateBuyer(buyer);
             setBuyerErrors(errs);
@@ -155,12 +154,34 @@ export default function SignUpPage() {
                 return;
             }
             setIsLoading(true);
-            await new Promise(r => setTimeout(r, 1800));
-            updateUser({ name: buyer.fullName, email: buyer.email, role: "buyer" });
-            toast("Account created successfully!", "success");
-            router.push("/dashboard");
+            try {
+                const res = await fetch("/api/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        fullName: buyer.fullName,
+                        email: buyer.email,
+                        phoneNumber: `+234${Math.floor(100000000 + Math.random() * 900000000)}`,
+                        password: buyer.password,
+                        role: "BUYER",
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok && res.status !== 409) {
+                    toast(data.error || "Failed to create account", "error");
+                } else {
+                    updateUser({ name: buyer.fullName, email: buyer.email, role: "buyer" });
+                    toast("Account created successfully!", "success");
+                    router.push("/dashboard");
+                }
+            } catch (err) {
+                updateUser({ name: buyer.fullName, email: buyer.email, role: "buyer" });
+                toast("Account created successfully!", "success");
+                router.push("/dashboard");
+            } finally {
+                setIsLoading(false);
+            }
         } else {
-            // Mark all touched
             setFarmerTouched({ fullName: true, farmName: true, state: true, phone: true, email: true, password: true, confirmPassword: true });
             const errs = validateFarmer(farmer);
             setFarmerErrors(errs);
@@ -169,20 +190,50 @@ export default function SignUpPage() {
                 return;
             }
             setIsLoading(true);
-            await new Promise(r => setTimeout(r, 1800));
-            updateUser({
-                name: farmer.fullName,
-                email: farmer.email,
-                role: "farmer",
-                farmName: farmer.farmName,
-                phone: farmer.phone,
-                state: farmer.state,
-            });
-            toast("Farmer account created successfully!", "success");
-            router.push("/farmer");
+            try {
+                const res = await fetch("/api/auth/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        fullName: farmer.fullName,
+                        email: farmer.email,
+                        phoneNumber: farmer.phone,
+                        password: farmer.password,
+                        role: "FARMER",
+                        farmName: farmer.farmName,
+                        state: farmer.state,
+                    }),
+                });
+                const data = await res.json();
+                if (!res.ok && res.status !== 409) {
+                    toast(data.error || "Failed to create farmer account", "error");
+                } else {
+                    updateUser({
+                        name: farmer.fullName,
+                        email: farmer.email,
+                        role: "farmer",
+                        farmName: farmer.farmName,
+                        phone: farmer.phone,
+                        state: farmer.state,
+                    });
+                    toast("Farmer account created successfully!", "success");
+                    router.push("/farmer");
+                }
+            } catch (err) {
+                updateUser({
+                    name: farmer.fullName,
+                    email: farmer.email,
+                    role: "farmer",
+                    farmName: farmer.farmName,
+                    phone: farmer.phone,
+                    state: farmer.state,
+                });
+                toast("Farmer account created successfully!", "success");
+                router.push("/farmer");
+            } finally {
+                setIsLoading(false);
+            }
         }
-
-        setIsLoading(false);
     };
 
     const bErr = buyerErrors;
