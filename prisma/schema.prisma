@@ -67,6 +67,8 @@ model Verification {
   updatedAt       DateTime      @updatedAt
   farmerProfile   FarmerProfile @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
   reviewedBy      User?         @relation("VerificationReviewer", fields: [reviewedById], references: [id])
+
+  @@index([reviewedById])
 }
 
 model Category {
@@ -96,6 +98,9 @@ model Product {
   farmerProfile   FarmerProfile  @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
   images          ProductImage[]
   reviews         Review[]
+
+  @@index([farmerProfileId])
+  @@index([categoryId])
 }
 
 model ProductImage {
@@ -104,6 +109,8 @@ model ProductImage {
   imageUrl  String
   createdAt DateTime @default(now())
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
 }
 
 model Inventory {
@@ -129,6 +136,8 @@ model Order {
   buyer       BuyerProfile @relation(fields: [buyerId], references: [id])
   orderItems  OrderItem[]
   payment     Payment?
+
+  @@index([buyerId])
 }
 
 model OrderItem {
@@ -141,6 +150,9 @@ model OrderItem {
   createdAt DateTime @default(now())
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product   Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model Payment {
@@ -169,6 +181,8 @@ model Delivery {
   updatedAt          DateTime          @updatedAt
   logisticsPartner   LogisticsPartner? @relation(fields: [logisticsPartnerId], references: [id])
   order              Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([logisticsPartnerId])
 }
 
 model LogisticsPartner {
@@ -192,6 +206,8 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime         @default(now())
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Review {
@@ -205,6 +221,7 @@ model Review {
   product   Product      @relation(fields: [productId], references: [id])
 
   @@unique([buyerId, productId])
+  @@index([productId])
 }
 
 model Dispute {
@@ -220,6 +237,9 @@ model Dispute {
   updatedAt   DateTime      @updatedAt
   order       Order         @relation(fields: [orderId], references: [id])
   user        User          @relation(fields: [userId], references: [id])
+
+  @@index([orderId])
+  @@index([userId])
 }
 
 enum Role {
