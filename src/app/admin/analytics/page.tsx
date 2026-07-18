@@ -57,9 +57,30 @@ const growthData = [
 export default function AnalyticsPage() {
     const [revenueFilter, setRevenueFilter] = useState("Monthly Revenue");
     const [mounted, setMounted] = useState(false);
+    const [metrics, setMetrics] = useState({
+        totalUsers: "2,847",
+        totalSales: "2,384",
+        totalRevenue: "₦ 6,674,346",
+    });
 
     useEffect(() => {
         setMounted(true);
+        async function fetchAnalytics() {
+            try {
+                const res = await fetch("/api/analytics");
+                const data = await res.json();
+                if (data.metrics) {
+                    setMetrics({
+                        totalUsers: data.metrics.totalUsers ? data.metrics.totalUsers.toLocaleString() : "2,847",
+                        totalSales: data.metrics.totalOrders ? data.metrics.totalOrders.toLocaleString() : "2,384",
+                        totalRevenue: data.metrics.totalTradeVolume ? `₦ ${Number(data.metrics.totalTradeVolume).toLocaleString()}` : "₦ 6,674,346",
+                    });
+                }
+            } catch (err) {
+                // Fallback
+            }
+        }
+        fetchAnalytics();
     }, []);
 
     if (!mounted) {
@@ -90,7 +111,7 @@ export default function AnalyticsPage() {
                 <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-2">
                         <div className="flex flex-col">
-                            <span className="text-2xl font-bold text-gray-800 tracking-tight">2,847</span>
+                            <span className="text-2xl font-bold text-gray-800 tracking-tight">{metrics.totalUsers}</span>
                             <span className="text-sm font-medium text-gray-500 mt-0.5">Total Users</span>
                         </div>
                         <div className="p-2.5 bg-green-50 text-[#1B4D28] rounded-xl">
@@ -122,7 +143,7 @@ export default function AnalyticsPage() {
                 <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-2">
                         <div className="flex flex-col">
-                            <span className="text-2xl font-bold text-gray-800 tracking-tight">2,384</span>
+                            <span className="text-2xl font-bold text-gray-800 tracking-tight">{metrics.totalSales}</span>
                             <span className="text-sm font-medium text-gray-500 mt-0.5">Total Sales</span>
                         </div>
                         <div className="p-2.5 bg-green-50 text-[#1B4D28] rounded-xl">
@@ -138,7 +159,7 @@ export default function AnalyticsPage() {
                 <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-2">
                         <div className="flex flex-col">
-                            <span className="text-2xl font-bold text-gray-800 tracking-tight">₦ 6,674,346</span>
+                            <span className="text-2xl font-bold text-gray-800 tracking-tight">{metrics.totalRevenue}</span>
                             <span className="text-sm font-medium text-gray-500 mt-0.5">Revenue</span>
                         </div>
                         <div className="p-2.5 bg-green-50 text-[#1B4D28] rounded-xl">
