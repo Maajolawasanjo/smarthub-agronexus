@@ -64,7 +64,7 @@ const CloseIcon = () => (
 
 const navItems = [
     { name: "Home", href: "/", icon: <HomeIcon /> },
-    { name: "Product", href: "/dashboard/products", icon: <ProductIcon /> },
+    { name: "Product", href: "/products", icon: <ProductIcon /> },
     { name: "How it work", href: "/how-it-works", icon: <GuideIcon /> },
     { name: "About Us", href: "/about", icon: <UsersIcon /> },
     { name: "Contact", href: "/contact", icon: <PhoneIcon /> },
@@ -143,7 +143,7 @@ export function Navbar() {
                 {/* Desktop Navigation */}
                 <div className="hidden md:flex items-center bg-white rounded-full px-1.5 py-1.5 shadow-xl">
                     {navItems.map((item) => {
-                        const targetHref = item.name === "Product" ? (user ? "/dashboard/products" : "/products") : item.href;
+                        const targetHref = item.href;
                         const isActive = pathname === targetHref;
 
                         return (
@@ -163,24 +163,21 @@ export function Navbar() {
                     })}
                 </div>
 
-                {/* Auth Actions & Cart */}
+                {/* Auth Actions */}
                 <div className="hidden md:flex items-center gap-4">
-
-                    <Link href="/login" className="px-8 py-2.5 text-white text-base font-normal border border-white/60 rounded-full hover:bg-white/10 transition-colors">
+                    <Link href="/login" className="px-7 py-2.5 text-white text-sm font-medium border border-white/60 rounded-full hover:bg-white/10 transition-colors">
                         Login
                     </Link>
-                    <Link href="/signup" className="px-8 py-2.5 bg-[#4CAF50] hover:bg-[#43A047] text-white text-base font-medium rounded-full transition-colors shadow-lg shadow-green-900/20">
+                    <Link href="/signup" className="px-7 py-2.5 bg-[#4CAF50] hover:bg-[#43A047] text-white text-sm font-semibold rounded-full transition-colors shadow-lg shadow-green-900/20">
                         Sign Up
                     </Link>
                 </div>
 
-                {/* Mobile Menu Trigger & Cart */}
-                <div className="md:hidden flex items-center gap-4 relative z-50">
-
-
+                {/* Mobile Menu Trigger */}
+                <div className="md:hidden flex items-center gap-3 relative z-50">
                     {!isMobileMenuOpen && (
                         <button
-                            className="text-white p-1"
+                            className="text-white p-1 ml-1"
                             onClick={() => setIsMobileMenuOpen(true)}
                             title="Open Menu"
                         >
@@ -234,7 +231,7 @@ export function Navbar() {
                 <div className="flex-1 overflow-y-auto pt-4 px-6">
                     <div className="space-y-1">
                         {navItems.map((item) => {
-                            const targetHref = item.name === "Product" ? (user ? "/dashboard/products" : "/products") : item.href;
+                            const targetHref = item.href;
                             const isActive = pathname === targetHref;
                             return (
                                 <Link
@@ -263,7 +260,7 @@ export function Navbar() {
                     <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center justify-center px-4 py-3 rounded-full border border-white/60 text-white font-medium hover:bg-white/10 transition-colors">
                         Login
                     </Link>
-                    <Link href="/dashboard/products" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center justify-center px-4 py-3 rounded-full bg-[#4CAF50] hover:bg-[#43A047] text-white font-medium transition-colors shadow-lg shadow-green-900/20">
+                    <Link href="/products" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center justify-center px-4 py-3 rounded-full bg-[#4CAF50] hover:bg-[#43A047] text-white font-medium transition-colors shadow-lg shadow-green-900/20">
                         Explore
                     </Link>
                 </div>

@@ -79,7 +79,7 @@ export function TargetMarket() {
                 </div>
 
                 <div className="mt-12">
-                    <Link href="/dashboard/products" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-lg font-medium rounded-full transition-shadow shadow-lg shadow-green-900/20 inline-block">
+                    <Link href="/products" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-lg font-medium rounded-full transition-shadow shadow-lg shadow-green-900/20 inline-block">
                         Explore Product
                     </Link>
                 </div>

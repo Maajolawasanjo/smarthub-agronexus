@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
     AreaChart,
     Area,
@@ -10,145 +9,111 @@ import {
     Tooltip,
     ResponsiveContainer,
 } from "recharts";
-import { ChevronDown } from "lucide-react";
+import { TrendingUp, BarChart2 } from "lucide-react";
 
-const weeklyData = [
-    { day: "Mon", value: 1000 },
-    { day: "Tue", value: 2000 },
-    { day: "Wed", value: 3000 },
-    { day: "Thur", value: 2000 },
-    { day: "Friday", value: 5500 },
-];
+export interface FarmerChartPoint {
+    day: string;
+    value: number;
+}
 
-const cropOptions = ["Rice/Tons", "Yam/Tons", "Pepper/Tons", "Cashew/Tons"];
-const periodOptions = ["Weekly Chart", "Monthly Chart", "Yearly Chart"];
+interface FarmerChartProps {
+    data?: FarmerChartPoint[];
+    loading?: boolean;
+}
 
-export function FarmerChart() {
-    const [selectedCrop, setSelectedCrop] = useState("Rice/Tons");
-    const [selectedPeriod, setSelectedPeriod] = useState("Weekly Chart");
-    const [showCropDropdown, setShowCropDropdown] = useState(false);
-    const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
+export function FarmerChart({ data = [], loading = false }: FarmerChartProps) {
+    const defaultData: FarmerChartPoint[] = [
+        { day: "Mon", value: 0 },
+        { day: "Tue", value: 0 },
+        { day: "Wed", value: 0 },
+        { day: "Thu", value: 0 },
+        { day: "Fri", value: 0 },
+    ];
+
+    const chartPoints = data.length > 0 ? data : defaultData;
+    const hasActiveVolume = data.some((d) => d.value > 0);
 
     return (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 h-full flex flex-col min-h-[320px]">
-            {/* Dropdowns row */}
-            <div className="flex items-center gap-3 mb-4">
-                {/* Crop selector */}
-                <div className="relative">
-                    <button
-                        onClick={() => {
-                            setShowCropDropdown(!showCropDropdown);
-                            setShowPeriodDropdown(false);
-                        }}
-                        className="flex items-center gap-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 bg-white"
-                    >
-                        {selectedCrop}
-                        <ChevronDown size={12} />
-                    </button>
-                    {showCropDropdown && (
-                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-lg shadow-lg z-20 min-w-[130px]">
-                            {cropOptions.map((o) => (
-                                <button
-                                    key={o}
-                                    onClick={() => {
-                                        setSelectedCrop(o);
-                                        setShowCropDropdown(false);
-                                    }}
-                                    className="block w-full text-left text-xs px-4 py-2 hover:bg-gray-50 text-gray-700 first:rounded-t-lg last:rounded-b-lg"
-                                >
-                                    {o}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 h-full flex flex-col min-h-[320px] justify-between font-sans">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h3 className="text-sm font-bold text-gray-800 tracking-tight">Farm Produce Sales Analytics</h3>
+                    <p className="text-xs text-gray-400 font-normal">Recorded fulfillment & payouts</p>
                 </div>
-
-                {/* Period selector */}
-                <div className="relative">
-                    <button
-                        onClick={() => {
-                            setShowPeriodDropdown(!showPeriodDropdown);
-                            setShowCropDropdown(false);
-                        }}
-                        className="flex items-center gap-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 bg-white"
-                    >
-                        {selectedPeriod}
-                        <ChevronDown size={12} />
-                    </button>
-                    {showPeriodDropdown && (
-                        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-lg shadow-lg z-20 min-w-[130px]">
-                            {periodOptions.map((o) => (
-                                <button
-                                    key={o}
-                                    onClick={() => {
-                                        setSelectedPeriod(o);
-                                        setShowPeriodDropdown(false);
-                                    }}
-                                    className="block w-full text-left text-xs px-4 py-2 hover:bg-gray-50 text-gray-700 first:rounded-t-lg last:rounded-b-lg"
-                                >
-                                    {o}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                <div className="p-2 bg-green-50 text-[#1B4D28] rounded-xl flex items-center gap-1.5 text-xs font-bold">
+                    <TrendingUp size={14} />
+                    <span>PostgreSQL</span>
                 </div>
             </div>
 
-            {/* Chart */}
-            <div className="flex-1 w-full min-h-[220px]">
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                        data={weeklyData}
-                        margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
-                    >
-                        <defs>
-                            <linearGradient id="farmerGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#22C55E" stopOpacity={0.15} />
-                                <stop offset="95%" stopColor="#22C55E" stopOpacity={0} />
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid
-                            vertical={false}
-                            strokeDasharray="3 3"
-                            stroke="#F0F0F0"
-                        />
-                        <XAxis
-                            dataKey="day"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: "#9CA3AF", fontSize: 11 }}
-                            dy={8}
-                        />
-                        <YAxis
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: "#6B7280", fontSize: 11 }}
-                            tickFormatter={(v) => `N${(v / 1000).toFixed(0)},000`}
-                            domain={[0, 6000]}
-                            ticks={[0, 1000, 2000, 3000, 4000, 5000, 6000]}
-                        />
-                        <Tooltip
-                            contentStyle={{
-                                borderRadius: "8px",
-                                border: "none",
-                                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                                fontSize: "12px",
-                            }}
-                            formatter={(value: number | undefined) => [`N${(value ?? 0).toLocaleString()}`, selectedCrop]}
-                        />
-                        <Area
-                            type="monotone"
-                            dataKey="value"
-                            stroke="#22C55E"
-                            strokeWidth={2}
-                            fillOpacity={1}
-                            fill="url(#farmerGradient)"
-                            dot={{ fill: "white", stroke: "#22C55E", strokeWidth: 2, r: 4 }}
-                            activeDot={{ r: 6, fill: "#1B4D28" }}
-                        />
-                    </AreaChart>
-                </ResponsiveContainer>
-            </div>
+            {/* Content / Loading / Empty */}
+            {loading ? (
+                <div className="flex-1 w-full min-h-[220px] bg-gray-100 animate-pulse rounded-xl flex items-center justify-center">
+                    <span className="text-xs text-gray-400">Loading sales chart...</span>
+                </div>
+            ) : !hasActiveVolume && data.length === 0 ? (
+                <div className="flex-1 w-full min-h-[220px] flex flex-col items-center justify-center text-center bg-gray-50/50 rounded-xl border border-dashed border-gray-200 p-6">
+                    <BarChart2 className="text-gray-300 mb-2" size={32} />
+                    <h4 className="text-xs font-bold text-gray-700">No Sales Volume Recorded</h4>
+                    <p className="text-[11px] text-gray-400 max-w-xs mt-1">
+                        Sales analytics will be generated automatically as buyers purchase your listed produce.
+                    </p>
+                </div>
+            ) : (
+                <div className="flex-1 w-full min-h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart
+                            data={chartPoints}
+                            margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+                        >
+                            <defs>
+                                <linearGradient id="farmerGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#1B4D28" stopOpacity={0.15} />
+                                    <stop offset="95%" stopColor="#1B4D28" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid
+                                vertical={false}
+                                strokeDasharray="3 3"
+                                stroke="#F0F0F0"
+                            />
+                            <XAxis
+                                dataKey="day"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                                dy={8}
+                            />
+                            <YAxis
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fill: "#6B7280", fontSize: 11 }}
+                                tickFormatter={(v) => `₦${v}`}
+                            />
+                            <Tooltip
+                                contentStyle={{
+                                    borderRadius: "8px",
+                                    border: "1px solid #f0f0f0",
+                                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                                    fontSize: "12px",
+                                }}
+                                formatter={(val: any) => [`₦${(Number(val) || 0).toLocaleString()}`, "Sales Volume"]}
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="value"
+                                stroke="#1B4D28"
+                                strokeWidth={2}
+                                fillOpacity={1}
+                                fill="url(#farmerGradient)"
+                                dot={{ fill: "white", stroke: "#1B4D28", strokeWidth: 2, r: 4 }}
+                                activeDot={{ r: 6, fill: "#1B4D28" }}
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
         </div>
     );
 }

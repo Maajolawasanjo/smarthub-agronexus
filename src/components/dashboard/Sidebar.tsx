@@ -7,12 +7,17 @@ import {
     LayoutDashboard,
     Wallet,
     ShoppingCart,
-    Truck,
     Bell,
     Settings,
     Box,
     LogOut,
-    X
+    X,
+    PlusCircle,
+    ListFilter,
+    ShieldCheck,
+    Users,
+    AlertTriangle,
+    BarChart3
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -24,11 +29,10 @@ interface SidebarProps {
 
 const menuItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Wallet", href: "/dashboard/wallet", icon: Wallet },
-    { name: "Product", href: "/dashboard/products", icon: Box },
+    { name: "Marketplace", href: "/dashboard/products", icon: Box },
     { name: "Orders", href: "/dashboard/orders", icon: ShoppingCart },
-    { name: "Tracking", href: "/dashboard/tracking", icon: Truck },
-    { name: "Notification", href: "/dashboard/notifications", icon: Bell },
+    { name: "Wallet", href: "/dashboard/wallet", icon: Wallet },
+    { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -37,9 +41,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     const { logout } = useUser();
     const router = useRouter();
 
-    const handleLogout = () => {
-        logout();
-        router.push("/");
+    const handleLogout = async () => {
+        await logout();
+        router.push("/login");
     };
 
     return (
@@ -88,10 +92,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                                 <Link
                                     key={item.name}
                                     href={item.href}
+                                    onClick={onClose}
                                     className={cn(
                                         "flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ease-in-out",
                                         isActive
-                                            ? "bg-white text-[#1B4D28] shadow-sm"
+                                            ? "bg-white text-[#1B4D28] shadow-sm font-semibold"
                                             : "text-gray-300 hover:bg-white/10 hover:text-white"
                                     )}
                                 >
@@ -106,7 +111,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <div className="p-4 border-t border-[#2C5E39]">
                         <button
                             onClick={handleLogout}
-                            className="flex items-center gap-3 px-4 py-3 w-full text-red-400 hover:bg-white/5 rounded-lg text-sm font-medium transition-colors"
+                            className="flex items-center gap-3 px-4 py-3 w-full text-red-300 hover:bg-white/10 hover:text-white rounded-lg text-sm font-medium transition-colors"
                         >
                             <LogOut size={20} />
                             Logout

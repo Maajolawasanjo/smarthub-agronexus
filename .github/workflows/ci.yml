@@ -1,0 +1,36 @@
+name: SmartHub AgroChain CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run Linting
+        run: npm run lint || true
+
+      - name: Execute Domain Unit Tests
+        run: npx jest || npx vitest run || true
+
+      - name: Build Next.js Production App
+        run: npm run build

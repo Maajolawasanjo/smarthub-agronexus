@@ -166,15 +166,26 @@ export default function SubmitProducePage() {
                     description: form.notes || `${form.variety || form.produceType} harvested on ${form.harvestDate} from ${form.farmLocation}.`,
                     price: parseFloat(form.askingPrice) || 0,
                     moq: 1,
-                    unit: form.unit || "tonnes",
+                    unit: form.unit || "pieces",
                     stockQuantity: parseFloat(form.quantity) || 50,
                     imageUrl: images[0] || "/products/yam.png",
+                    images: images.length > 0 ? images : undefined,
+                    farmLocation: form.farmLocation,
                 }),
             });
 
             const data = await res.json();
 
-            const listing = addListing({
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to submit produce listing to server.");
+            }
+
+            if (!data?.product?.id) {
+                throw new Error("Invalid response from produce server.");
+            }
+
+            // Also keep local ProduceContext in sync for fast farmer view
+            addListing({
                 produceType: form.produceType,
                 variety: form.variety,
                 quantity: form.quantity,
@@ -187,21 +198,10 @@ export default function SubmitProducePage() {
             });
 
             toast("Produce submitted successfully for quality inspection!", "success");
-            router.push(`/farmer/produce/${listing.id}`);
-        } catch (err) {
-            const listing = addListing({
-                produceType: form.produceType,
-                variety: form.variety,
-                quantity: form.quantity,
-                unit: form.unit,
-                askingPrice: form.askingPrice,
-                harvestDate: form.harvestDate,
-                farmLocation: form.farmLocation,
-                notes: form.notes,
-                images,
-            });
-            toast("Produce submitted successfully!", "success");
-            router.push(`/farmer/produce/${listing.id}`);
+            router.push(`/farmer/produce/${data.product.id}`);
+        } catch (err: any) {
+            console.error("Produce submission error:", err);
+            toast(err?.message || "Produce submission failed. Please try again.", "error");
         } finally {
             setIsLoading(false);
         }

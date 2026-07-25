@@ -1,36 +1,27 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
-    Users as UsersIcon,
     RefreshCw,
-    CheckCircle,
-    XCircle,
     Download,
     CheckCircle2,
     X,
     ExternalLink,
     Truck,
-    ShieldAlert
+    ShieldAlert,
+    PackageX
 } from "lucide-react";
-import Image from "next/image";
-
-// Initial mock data matching Image 4
-const initialOrders = [
-    { id: "83335", product: "Fresh Tomatoes", customer: "John Deo", status: "Pending", price: "$145.00", quantity: "60kg", date: "23-06-2026", container: "SH-Tom83", carrier: "MSC Logistics", departure: "Port of Kano, NG", destination: "Port of Rotterdam, NL", contract: "0x39a1...fa88" },
-    { id: "90299", product: "Organic Maize", customer: "Jane Smith", status: "Pending", price: "$345.00", quantity: "130kg", date: "23-06-2026", container: "SH-Maiz90", carrier: "Maersk Line", departure: "Port of Lagos, NG", destination: "Port of Hamburg, DE", contract: "0x8fa3...c22b" },
-    { id: "90298", product: "Organic Maize", customer: "Jane Smith", status: "Pending", price: "$345.00", quantity: "420kg", date: "23-06-2026", container: "SH-Maiz91", carrier: "Maersk Line", departure: "Port of Lagos, NG", destination: "Port of Antwerp, BE", contract: "0x9ab2...44f9" },
-    { id: "65109", product: "Foreign Rice", customer: "Ahmed Buba", status: "Approved", price: "$345.00", quantity: "180kg", date: "23-06-2026", container: "SH-Rice65", carrier: "CMA CGM", departure: "Port of Lagos, NG", destination: "Port of London, UK", contract: "0x12d3...32a1" },
-    { id: "65108", product: "Foreign Rice", customer: "Ahmed Buba", status: "Rejected", price: "$345.00", quantity: "220kg", date: "23-06-2026", container: "None", carrier: "None", departure: "N/A", destination: "N/A", contract: "Cancelled" },
-];
+import { OrdersPageDTO, OrderSummaryItemDTO } from "@/dto";
 
 export default function AdminOrdersPage() {
-    const [orders, setOrders] = useState(initialOrders);
+    const [dto, setDto] = useState<OrdersPageDTO | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("All Orders");
 
     // Modal & Toast states
-    const [selectedOrder, setSelectedOrder] = useState<any>(null);
+    const [selectedOrder, setSelectedOrder] = useState<OrderSummaryItemDTO | null>(null);
     const [toastMessage, setToastMessage] = useState("");
+    const [isUpdating, setIsUpdating] = useState(false);
 
     const triggerToast = (msg: string) => {
         setToastMessage(msg);
@@ -39,121 +30,159 @@ export default function AdminOrdersPage() {
         }, 3500);
     };
 
-    // Force release of escrow funds
-    const handleReleaseEscrow = (id: string) => {
-        setOrders(prev =>
-            prev.map(order => order.id === id ? { ...order, status: "Approved" } : order)
-        );
-        triggerToast(`Escrow funds for Order #${id} successfully cleared & wired to farmer!`);
+    const fetchAdminOrders = async () => {
+        setIsLoading(true);
+        try {
+            const res = await fetch("/api/orders");
+            if (res.ok) {
+                const data: OrdersPageDTO = await res.json();
+                setDto(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch admin orders", err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchAdminOrders();
+    }, []);
+
+    // Force release of escrow funds or change order status
+    const handleUpdateStatus = async (id: string, newStatus: string) => {
+        setIsUpdating(true);
+        try {
+            const res = await fetch(`/api/orders/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: newStatus }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                triggerToast(`Order #${data.order?.orderNumber || id} updated to ${newStatus}!`);
+                fetchAdminOrders();
+                setSelectedOrder(null);
+            } else {
+                triggerToast(`Failed to update status: ${data.error}`);
+            }
+        } catch (err) {
+            triggerToast("Network error updating order status.");
+        } finally {
+            setIsUpdating(false);
+        }
     };
 
     const handleExport = () => {
         triggerToast("B2B orders log successfully exported to CSV!");
     };
 
+    const orders = dto?.orders || [];
+
     // Filter orders by active tab
     const filteredOrders = orders.filter(order => {
-        if (activeTab === "Active Orders") return order.status === "Approved";
-        if (activeTab === "Pending Orders") return order.status === "Pending";
-        if (activeTab === "Cancel Orders") return order.status === "Rejected";
+        if (activeTab === "Active Orders") return ["CONFIRMED", "PROCESSING", "READY_FOR_PICKUP", "IN_TRANSIT", "DELIVERED", "COMPLETED"].includes(order.status);
+        if (activeTab === "Pending Orders") return order.status === "PENDING";
+        if (activeTab === "Cancel Orders") return order.status === "CANCELLED";
         return true; // All Orders
     });
 
+    const formatStatusBadge = (status: string) => {
+        switch (status) {
+            case "COMPLETED":
+            case "DELIVERED":
+            case "CONFIRMED":
+                return <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700">{status}</span>;
+            case "CANCELLED":
+                return <span className="px-3 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700">CANCELLED</span>;
+            case "PENDING":
+                return <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700">PENDING</span>;
+            default:
+                return <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700">{status}</span>;
+        }
+    };
+
     return (
-        <div className="space-y-6 animate-fadeIn font-sans">
-            {/* Success Toast */}
+        <div className="space-y-8 pb-12">
+            {/* Top Toast Banner */}
             {toastMessage && (
-                <div className="fixed bottom-6 right-6 z-50 bg-[#1B4D28] text-white px-6 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-[#2C5E39] animate-slideIn">
-                    <CheckCircle2 size={20} className="text-[#4CAF50] flex-shrink-0" />
+                <div className="fixed top-6 right-6 z-50 bg-[#1B4D28] text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+                    <CheckCircle2 size={18} className="text-emerald-400" />
                     <span className="text-sm font-semibold">{toastMessage}</span>
                 </div>
             )}
 
-            {/* Header row with controls */}
-            <div className="-mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <p className="text-gray-500 text-sm">
-                    Welcome Back, OLAK! Here's your admin overview for today.
-                </p>
+            {/* Header & Stats Cards */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <button
-                        onClick={handleExport}
-                        className="flex items-center gap-2 bg-[#1B4D28] text-white text-xs font-semibold px-4 py-2.5 rounded-xl hover:bg-[#143d20] shadow-sm transition-colors cursor-pointer"
-                    >
-                        <Download size={14} />
-                        Export Orders Log
-                    </button>
+                    <h1 className="text-2xl font-bold text-gray-800">B2B Commerce & Order Management</h1>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Monitor live transactions, escrow holdings, and logistics transitions across PostgreSQL.
+                    </p>
                 </div>
+                <button
+                    onClick={handleExport}
+                    className="flex items-center justify-center gap-2 bg-[#1B4D28] text-white px-5 py-2.5 rounded-xl font-medium hover:bg-[#153b1e] transition-colors shadow-sm text-sm"
+                >
+                    <Download size={16} />
+                    Export Log (CSV)
+                </button>
             </div>
 
-            {/* ─── ORDERS METRICS ROW (Image 4) ─── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Total Users */}
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-                    <div className="p-3 bg-green-50 text-[#1B4D28] rounded-xl flex-shrink-0">
-                        <UsersIcon size={22} />
+            {/* Metrics Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Orders</p>
+                        <h3 className="text-2xl font-extrabold text-gray-900 mt-1">{dto?.statistics?.totalOrders || 0}</h3>
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-2xl font-bold text-gray-800 tracking-tight leading-none">2,847</span>
-                        <span className="text-xs font-semibold text-gray-400 mt-1.5 uppercase tracking-wider">Total Users</span>
-                    </div>
-                </div>
-
-                {/* Pending Orders */}
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-                    <div className="p-3 bg-green-50 text-[#1B4D28] rounded-xl flex-shrink-0">
+                    <div className="p-3 bg-emerald-50 text-[#1B4D28] rounded-xl">
                         <RefreshCw size={22} />
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-2xl font-bold text-gray-800 tracking-tight leading-none">013</span>
-                        <span className="text-xs font-semibold text-gray-400 mt-1.5 uppercase tracking-wider">Pending Orders</span>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pending Orders</p>
+                        <h3 className="text-2xl font-extrabold text-amber-600 mt-1">{dto?.statusSummary?.pending || 0}</h3>
+                    </div>
+                    <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                        <ShieldAlert size={22} />
                     </div>
                 </div>
-
-                {/* Completed */}
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-                    <div className="p-3 bg-green-50 text-[#1B4D28] rounded-xl flex-shrink-0">
-                        <CheckCircle size={22} />
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Delivered / Completed</p>
+                        <h3 className="text-2xl font-extrabold text-emerald-600 mt-1">
+                            {(dto?.statusSummary?.delivered || 0) + (dto?.statusSummary?.completed || 0)}
+                        </h3>
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-2xl font-bold text-gray-800 tracking-tight leading-none">384</span>
-                        <span className="text-xs font-semibold text-gray-400 mt-1.5 uppercase tracking-wider">Completed</span>
-                    </div>
-                </div>
-
-                {/* Cancel */}
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
-                    <div className="p-3 bg-green-50 text-[#1B4D28] rounded-xl flex-shrink-0">
-                        <XCircle size={22} />
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-2xl font-bold text-gray-800 tracking-tight leading-none">5265</span>
-                        <span className="text-xs font-semibold text-gray-400 mt-1.5 uppercase tracking-wider">Cancel</span>
+                    <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                        <CheckCircle2 size={22} />
                     </div>
                 </div>
-            </div>
-
-            {/* Banner (Produce graphic matching Image 4) */}
-            <div className="relative h-44 md:h-52 w-full rounded-2xl overflow-hidden shadow-sm border border-gray-200">
-                <Image
-                    src="/agrochain-logistics.png"
-                    alt="Agricultural Produce and Veggies banner"
-                    fill
-                    className="object-cover"
-                    priority
-                />
-                <div className="absolute inset-0 bg-black/10 backdrop-brightness-[0.95]" />
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Gross Spend</p>
+                        <h3 className="text-2xl font-extrabold text-gray-900 mt-1">
+                            ${(dto?.statistics?.totalSpent || 0).toLocaleString()}
+                        </h3>
+                    </div>
+                    <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                        <Truck size={22} />
+                    </div>
+                </div>
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex border-b border-gray-200 overflow-x-auto whitespace-nowrap scrollbar-none gap-6 text-sm font-medium">
-                {["All Orders", "Active Orders", "Pending Orders", "Cancel Orders"].map(tab => (
+            <div className="bg-white p-2 rounded-2xl border border-gray-100 shadow-sm flex gap-2 overflow-x-auto">
+                {["All Orders", "Active Orders", "Pending Orders", "Cancel Orders"].map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`pb-3.5 px-1 relative transition-colors font-semibold cursor-pointer ${
+                        className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
                             activeTab === tab
-                                ? "text-[#1B4D28] border-b-2 border-[#1B4D28]"
-                                : "text-gray-400 hover:text-gray-600"
+                                ? "bg-[#1B4D28] text-white shadow-sm"
+                                : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
                         }`}
                     >
                         {tab}
@@ -162,136 +191,169 @@ export default function AdminOrdersPage() {
             </div>
 
             {/* Orders Table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden font-sans">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="border-b border-gray-100 bg-gray-50/50">
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Product</th>
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Customer</th>
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Price</th>
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Quantity</th>
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 text-sm font-medium">
-                            {filteredOrders.length > 0 ? (
-                                filteredOrders.map(item => (
-                                    <tr
-                                        key={item.id}
-                                        onClick={() => setSelectedOrder(item)}
-                                        className="hover:bg-gray-50/50 transition-colors cursor-pointer"
-                                    >
-                                        <td className="py-4.5 px-6 text-gray-800 font-bold">{item.id}</td>
-                                        <td className="py-4.5 px-6 text-gray-600 font-semibold">{item.product}</td>
-                                        <td className="py-4.5 px-6 text-gray-500">{item.customer}</td>
-                                        <td className="py-4.5 px-6">
-                                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-bold tracking-tight shadow-sm border ${
-                                                item.status === "Pending"
-                                                    ? "bg-amber-50 text-amber-600 border-amber-100"
-                                                    : item.status === "Approved"
-                                                    ? "bg-green-50 text-green-600 border-green-100"
-                                                    : "bg-red-50 text-red-500 border-red-100"
-                                            }`}>
-                                                {item.status}
+                    {isLoading ? (
+                        <div className="p-12 text-center text-gray-400 flex flex-col items-center justify-center">
+                            <div className="w-8 h-8 border-4 border-[#1B4D28]/20 border-t-[#1B4D28] rounded-full animate-spin mb-3" />
+                            <p className="text-sm font-medium">Loading live order logs...</p>
+                        </div>
+                    ) : filteredOrders.length === 0 ? (
+                        <div className="p-12 text-center text-gray-400 flex flex-col items-center justify-center">
+                            <PackageX size={48} className="text-gray-300 mb-3" />
+                            <p className="text-base font-bold text-gray-700">No orders found</p>
+                            <p className="text-sm text-gray-400 mt-1">There are no orders matching "{activeTab}".</p>
+                        </div>
+                    ) : (
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-gray-100 bg-gray-50/50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    <th className="px-6 py-4">Order ID</th>
+                                    <th className="px-6 py-4">Product</th>
+                                    <th className="px-6 py-4">Customer</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Payment</th>
+                                    <th className="px-6 py-4">Total</th>
+                                    <th className="px-6 py-4">Date</th>
+                                    <th className="px-6 py-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-sm">
+                                {filteredOrders.map((order) => (
+                                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
+                                        <td className="px-6 py-4 font-bold text-gray-800">{order.orderNumber}</td>
+                                        <td className="px-6 py-4 font-medium text-gray-700">{order.primaryProductName}</td>
+                                        <td className="px-6 py-4 text-gray-600">{order.buyerName}</td>
+                                        <td className="px-6 py-4">{formatStatusBadge(order.status)}</td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-xs font-semibold px-2.5 py-1 bg-gray-100 text-gray-700 rounded-md">
+                                                {order.paymentStatus}
                                             </span>
                                         </td>
-                                        <td className="py-4.5 px-6 text-gray-700 font-semibold">{item.price}</td>
-                                        <td className="py-4.5 px-6 text-gray-600">{item.quantity}</td>
-                                        <td className="py-4.5 px-6">
-                                            <button className="text-xs text-[#1B4D28] font-bold hover:underline">
-                                                Inspect
+                                        <td className="px-6 py-4 font-bold text-gray-900">${order.totalAmount.toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-gray-500 text-xs">{new Date(order.createdAt).toLocaleDateString()}</td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button
+                                                onClick={() => setSelectedOrder(order)}
+                                                className="text-xs font-bold text-[#1B4D28] hover:underline bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100"
+                                            >
+                                                Manage
                                             </button>
                                         </td>
                                     </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={7} className="py-10 text-center text-gray-400 font-semibold">
-                                        No orders match this status filter.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
             </div>
 
-            {/* ─── SHIPPING & ESCROW AUDIT DETAIL MODAL ─── */}
+            {/* Manage Order Modal */}
             {selectedOrder && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-scaleIn">
-                        <div className="flex items-center justify-between bg-gray-50 px-6 py-4 border-b border-gray-100">
-                            <div className="flex items-center gap-2">
-                                <Truck size={18} className="text-[#1B4D28]" />
-                                <h3 className="font-bold text-gray-800 text-base">Escrow & Cargo Audit</h3>
-                            </div>
-                            <button
-                                onClick={() => setSelectedOrder(null)}
-                                className="text-gray-400 hover:text-gray-600 transition-colors p-1 cursor-pointer"
-                            >
-                                <X size={18} />
-                            </button>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl relative space-y-6">
+                        <button
+                            onClick={() => setSelectedOrder(null)}
+                            className="absolute top-5 right-5 text-gray-400 hover:text-gray-600"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-800">Order Management: #{selectedOrder.orderNumber}</h3>
+                            <p className="text-xs text-gray-400 mt-1">Review live details and trigger status state transitions.</p>
                         </div>
-                        <div className="p-6 space-y-4">
-                            <div className="flex justify-between items-center bg-gray-50 p-3.5 rounded-xl border border-gray-100">
-                                <div>
-                                    <span className="block text-[10px] text-gray-400 font-bold uppercase tracking-wider">Order Reference</span>
-                                    <span className="block font-bold text-gray-800 mt-0.5">#{selectedOrder.id}</span>
-                                </div>
-                                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                                    selectedOrder.status === "Pending"
-                                        ? "bg-amber-50 text-amber-600 border-amber-100"
-                                        : selectedOrder.status === "Approved"
-                                        ? "bg-green-50 text-green-600 border-green-100"
-                                        : "bg-red-50 text-red-500 border-red-100"
-                                }`}>
-                                    {selectedOrder.status}
-                                </span>
-                            </div>
 
-                            <div className="space-y-2 text-sm">
-                                <div className="flex justify-between py-1.5 border-b border-gray-50">
-                                    <span className="text-gray-400 font-semibold">Commodity Item</span>
-                                    <span className="text-gray-700 font-bold">{selectedOrder.product}</span>
-                                </div>
-                                <div className="flex justify-between py-1.5 border-b border-gray-50">
-                                    <span className="text-gray-400 font-semibold">Buyer Customer</span>
-                                    <span className="text-gray-700 font-bold">{selectedOrder.customer}</span>
-                                </div>
-                                <div className="flex justify-between py-1.5 border-b border-gray-50">
-                                    <span className="text-gray-400 font-semibold">Carrier / Container</span>
-                                    <span className="text-gray-700 font-bold">{selectedOrder.carrier} ({selectedOrder.container})</span>
-                                </div>
-                                <div className="flex justify-between py-1.5 border-b border-gray-50">
-                                    <span className="text-gray-400 font-semibold">Transit Ports</span>
-                                    <span className="text-gray-700 font-bold text-xs truncate max-w-[200px]" title={`${selectedOrder.departure} → ${selectedOrder.destination}`}>
-                                        {selectedOrder.departure} → {selectedOrder.destination}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between py-1.5 border-b border-gray-50">
-                                    <span className="text-gray-400 font-semibold">Escrow Smart Contract</span>
-                                    <span className="text-green-600 font-bold flex items-center gap-1 text-xs">
-                                        {selectedOrder.contract}
-                                        <ExternalLink size={10} className="mt-0.5" />
-                                    </span>
-                                </div>
+                        <div className="bg-gray-50 p-4 rounded-2xl space-y-2 text-sm text-gray-700 border border-gray-100">
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">Buyer</span>
+                                <span className="font-semibold">{selectedOrder.buyerName}</span>
                             </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">Primary Product</span>
+                                <span className="font-semibold">{selectedOrder.primaryProductName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">Current Status</span>
+                                <span className="font-bold text-[#1B4D28]">{selectedOrder.status}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-400">Total Amount</span>
+                                <span className="font-bold text-gray-900">${selectedOrder.totalAmount.toLocaleString()}</span>
+                            </div>
+                        </div>
 
-                            {selectedOrder.status === "Pending" && (
-                                <div className="pt-4 flex gap-3">
-                                    <button
-                                        onClick={() => {
-                                            handleReleaseEscrow(selectedOrder.id);
-                                            setSelectedOrder(null);
-                                        }}
-                                        className="w-full text-center font-bold text-white bg-[#1B4D28] hover:bg-[#143d20] py-2.5 rounded-xl text-xs shadow-sm transition-colors cursor-pointer"
-                                    >
-                                        Authorize Escrow Release (Wire Payment)
-                                    </button>
-                                </div>
+                        <div className="space-y-3 pt-2">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Trigger State Transition</p>
+
+                            {selectedOrder.status === "PENDING" && (
+                                <button
+                                    disabled={isUpdating}
+                                    onClick={() => handleUpdateStatus(selectedOrder.id, "CONFIRMED")}
+                                    className="w-full bg-[#1B4D28] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#153b1e] transition-colors disabled:opacity-50"
+                                >
+                                    Confirm Order (Lock Payment & Notify Farmer)
+                                </button>
+                            )}
+
+                            {selectedOrder.status === "CONFIRMED" && (
+                                <button
+                                    disabled={isUpdating}
+                                    onClick={() => handleUpdateStatus(selectedOrder.id, "PROCESSING")}
+                                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                >
+                                    Mark Processing & Packaging
+                                </button>
+                            )}
+
+                            {selectedOrder.status === "PROCESSING" && (
+                                <button
+                                    disabled={isUpdating}
+                                    onClick={() => handleUpdateStatus(selectedOrder.id, "READY_FOR_PICKUP")}
+                                    className="w-full bg-amber-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-amber-700 transition-colors disabled:opacity-50"
+                                >
+                                    Mark Ready for Pickup
+                                </button>
+                            )}
+
+                            {selectedOrder.status === "READY_FOR_PICKUP" && (
+                                <button
+                                    disabled={isUpdating}
+                                    onClick={() => handleUpdateStatus(selectedOrder.id, "IN_TRANSIT")}
+                                    className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                                >
+                                    Mark In Transit (Logistics Dispatched)
+                                </button>
+                            )}
+
+                            {selectedOrder.status === "IN_TRANSIT" && (
+                                <button
+                                    disabled={isUpdating}
+                                    onClick={() => handleUpdateStatus(selectedOrder.id, "DELIVERED")}
+                                    className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                >
+                                    Confirm Delivery
+                                </button>
+                            )}
+
+                            {selectedOrder.status === "DELIVERED" && (
+                                <button
+                                    disabled={isUpdating}
+                                    onClick={() => handleUpdateStatus(selectedOrder.id, "COMPLETED")}
+                                    className="w-full bg-[#1B4D28] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#153b1e] transition-colors disabled:opacity-50"
+                                >
+                                    Complete Order & Release Escrow to Farmer
+                                </button>
+                            )}
+
+                            {selectedOrder.status !== "CANCELLED" && selectedOrder.status !== "COMPLETED" && (
+                                <button
+                                    disabled={isUpdating}
+                                    onClick={() => handleUpdateStatus(selectedOrder.id, "CANCELLED")}
+                                    className="w-full bg-red-50 text-red-600 border border-red-200 py-3 rounded-xl font-bold text-sm hover:bg-red-100 transition-colors disabled:opacity-50"
+                                >
+                                    Cancel Order (Release Reserved Inventory & Refund)
+                                </button>
                             )}
                         </div>
                     </div>

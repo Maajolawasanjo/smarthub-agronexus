@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Trash2, Plus, Minus, ChevronDown, ChevronUp, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Trash2, Plus, Minus, ChevronDown, ChevronUp, ShoppingBag, Lock } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { PaymentModal } from "@/components/cart/PaymentModal";
 
@@ -11,6 +11,51 @@ export default function CartPage() {
     const { cartItems, updateQuantity, removeFromCart, cartTotal } = useCart();
     const [isMobileSummaryOpen, setIsMobileSummaryOpen] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
+    const [validationError, setValidationError] = useState<string | null>(null);
+
+    const handleCheckout = async () => {
+        setIsValidating(true);
+        setValidationError(null);
+        try {
+            // Strict Boundary Check: Surface clean error if any cart item has an invalid/missing Product ID
+            const invalidItem = cartItems.find(item => 
+                !item || 
+                item.id === null || 
+                item.id === undefined || 
+                String(item.id).trim() === "" || 
+                String(item.id) === "NaN" || 
+                String(item.id) === "null"
+            );
+
+            if (invalidItem) {
+                setValidationError(`Item "${invalidItem.name || 'Produce'}" has an invalid product reference. Please remove it and add it again from the marketplace.`);
+                setIsValidating(false);
+                return;
+            }
+
+            const itemsPayload = cartItems.map(item => ({
+                productId: String(item.id).trim(),
+                quantity: Number(item.quantity) || 1
+            }));
+
+            const res = await fetch("/api/orders/validate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ items: itemsPayload })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.isValid) {
+                setValidationError(data.errors?.[0] || data.error || "Some items in your cart are no longer available.");
+                return;
+            }
+            setIsPaymentModalOpen(true);
+        } catch (error) {
+            setValidationError("Network error during validation. Please try again.");
+        } finally {
+            setIsValidating(false);
+        }
+    };
 
     const itemTotal = cartTotal;
     const shipping = cartItems.length > 0 ? 400 : 0;
@@ -158,16 +203,28 @@ export default function CartPage() {
                                         </div>
 
                                         <div className="flex flex-col gap-6">
+                                            {validationError && (
+                                                <div className="bg-red-50 text-red-600 text-sm font-medium p-3 rounded-xl border border-red-100 mt-2">
+                                                    {validationError}
+                                                </div>
+                                            )}
                                             <button
-                                                onClick={() => setIsPaymentModalOpen(true)}
-                                                className="w-full bg-white text-[#1B4D28] font-bold text-center py-4 rounded-xl shadow-md hover:bg-gray-50 transition-colors disabled:opacity-50"
-                                                disabled={cartItems.length === 0}
+                                                onClick={handleCheckout}
+                                                className="w-full bg-gradient-to-r from-[#FFB800] via-[#F59E0B] to-[#D97706] text-gray-950 font-black text-base tracking-wide text-center py-4 rounded-2xl shadow-xl shadow-amber-500/30 hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 flex justify-center items-center gap-2.5 cursor-pointer"
+                                                disabled={cartItems.length === 0 || isValidating}
                                             >
-                                                Checkout (${total.toLocaleString()})
+                                                {isValidating ? (
+                                                    <div className="w-5 h-5 border-2 border-gray-950/30 border-t-gray-950 rounded-full animate-spin" />
+                                                ) : (
+                                                    <>
+                                                        <Lock size={18} className="text-gray-950 shrink-0" />
+                                                        <span>Proceed to Checkout (₦{total.toLocaleString()})</span>
+                                                    </>
+                                                )}
                                             </button>
 
-                                            <Link href="/dashboard/products" className="text-left text-white/80 text-sm font-medium hover:text-white transition-colors pb-4 inline-block">
-                                                Cancel & Return
+                                            <Link href="/dashboard/products" className="text-center text-white/80 text-sm font-medium hover:text-white transition-colors pb-4 inline-block">
+                                                ← Continue Shopping
                                             </Link>
                                         </div>
                                     </div>
@@ -177,12 +234,20 @@ export default function CartPage() {
                     </main>
 
                     {/* Mobile Checkout Bar */}
-                    <div className={`fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] lg:hidden z-50 transition-transform duration-300 ${isMobileSummaryOpen || cartItems.length === 0 ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
+                    <div className={`fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] lg:hidden z-50 transition-transform duration-300 ${isMobileSummaryOpen || cartItems.length === 0 ? 'translate-y-full opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
                         <button
-                            onClick={() => setIsPaymentModalOpen(true)}
-                            className="w-full bg-[#1B4D28] text-white font-bold text-center py-4 rounded-xl shadow-md active:scale-[0.98] transition-all"
+                            onClick={handleCheckout}
+                            className="w-full bg-gradient-to-r from-[#FFB800] via-[#F59E0B] to-[#D97706] text-gray-950 font-black text-base py-4 rounded-2xl shadow-lg shadow-amber-500/30 active:scale-[0.98] transition-all flex justify-center items-center gap-2 disabled:opacity-60 cursor-pointer"
+                            disabled={isValidating}
                         >
-                            Checkout (${total.toLocaleString()})
+                            {isValidating ? (
+                                <div className="w-5 h-5 border-2 border-gray-950/30 border-t-gray-950 rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <Lock size={18} />
+                                    <span>Proceed to Checkout (₦{total.toLocaleString()})</span>
+                                </>
+                            )}
                         </button>
                     </div>
                 </>

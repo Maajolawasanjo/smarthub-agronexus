@@ -30,7 +30,7 @@ export function Hero() {
                     A decentralized agro-ecosystem connecting farmers, investors, and consumers with full transparency.
                 </p>
 
-                <Link href="/dashboard/products" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-base md:text-lg font-medium rounded-full transition-all shadow-xl shadow-green-900/30 transform hover:scale-105 inline-block">
+                <Link href="/products" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-base md:text-lg font-medium rounded-full transition-all shadow-xl shadow-green-900/30 transform hover:scale-105 inline-block">
                     Explore Product
                 </Link>
             </div>

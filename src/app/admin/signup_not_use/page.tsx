@@ -17,7 +17,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 export default function AdminSignupPage() {
-  const { updateUser } = useUser();
+  const { setUserFromAuth } = useUser();
   const router = useRouter();
 
   const [name, setName] = useState("");
@@ -25,13 +25,12 @@ export default function AdminSignupPage() {
   const [password, setPassword] = useState("");
   const [country, setCountry] = useState("Nigeria");
   const [address, setAddress] = useState("");
-  const [selectedAvatar, setSelectedAvatar] = useState("/avatar-1.png");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [successToast, setSuccessToast] = useState("");
 
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -42,58 +41,42 @@ export default function AdminSignupPage() {
 
     setLoading(true);
 
-    setTimeout(() => {
-      // Check if email already registered in smarthub_admins array
-      const storedAdmins = localStorage.getItem("smarthub_admins");
-      let adminsList = [];
-      if (storedAdmins) {
-        try {
-          adminsList = JSON.parse(storedAdmins);
-          if (!Array.isArray(adminsList)) {
-            adminsList = [];
-          }
-        } catch (err) {
-          adminsList = [];
-        }
-      }
-
-      const emailExists = adminsList.some(
-        (adm: any) => adm.email.toLowerCase() === email.toLowerCase(),
-      );
-
-      if (emailExists) {
-        setError(
-          "This email address is already registered as an administrator.",
-        );
-        setLoading(false);
-        return;
-      }
-
-      // Register and log in admin
-      updateUser({
-        name,
-        email,
-        password,
-        role: "admin",
-        profileImage: selectedAvatar,
-        currency: "NGN",
-        country,
-        address,
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: name,
+          email,
+          password,
+          phoneNumber: "08000000000",
+          role: "ADMIN",
+        }),
       });
 
-      setSuccessToast(
-        "Registration successful! Initializing secure Admin space...",
-      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Registration failed.");
+      }
+
+      if (data.user) {
+        setUserFromAuth(data.user);
+      }
+
+      setSuccessToast("Registration successful! Initializing Admin portal...");
       setTimeout(() => {
         router.replace("/admin/overview");
       }, 1500);
-    }, 1000);
+    } catch (err: any) {
+      setError(err.message || "An error occurred during registration.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#EEF2EE] px-4 py-12 font-sans">
       <div className="w-full max-w-md relative">
-        {/* Success Toast */}
         {successToast && (
           <div className="fixed top-6 right-6 z-50 bg-[#1B4D28] text-white px-6 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-[#2C5E39] animate-slideIn">
             <CheckCircle2 size={20} className="text-[#4CAF50] flex-shrink-0" />
@@ -101,9 +84,7 @@ export default function AdminSignupPage() {
           </div>
         )}
 
-        {/* Emerald dark green styled registration card */}
         <div className="bg-[#1B4D28] p-8 rounded-3xl border border-white/5 shadow-2xl space-y-6 animate-fadeIn">
-          {/* Logo & Branding */}
           <div className="flex flex-col items-center text-center space-y-3">
             <div className="relative h-14 w-14 bg-white rounded-2xl overflow-hidden p-1 flex-shrink-0 shadow-lg ring-4 ring-white/5">
               <Image
@@ -123,7 +104,6 @@ export default function AdminSignupPage() {
             </div>
           </div>
 
-          {/* Error Banner */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3.5 flex items-start gap-2.5 text-xs font-semibold text-red-400">
               <ShieldCheck
@@ -134,9 +114,7 @@ export default function AdminSignupPage() {
             </div>
           )}
 
-          {/* Signup Form */}
           <form onSubmit={handleSignupSubmit} className="space-y-4">
-            {/* Name field */}
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-emerald-200/90 uppercase tracking-wider">
                 Full Name
@@ -157,7 +135,6 @@ export default function AdminSignupPage() {
               </div>
             </div>
 
-            {/* Email field */}
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-emerald-200/90 uppercase tracking-wider">
                 Email Address
@@ -178,7 +155,6 @@ export default function AdminSignupPage() {
               </div>
             </div>
 
-            {/* Password field */}
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-emerald-200/90 uppercase tracking-wider">
                 Access Key (Password)
@@ -200,7 +176,6 @@ export default function AdminSignupPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Country */}
               <div className="space-y-1.5">
                 <label className="block text-[10px] font-bold text-emerald-200/90 uppercase tracking-wider">
                   Country
@@ -221,7 +196,6 @@ export default function AdminSignupPage() {
                 </div>
               </div>
 
-              {/* Physical Address */}
               <div className="space-y-1.5">
                 <label className="block text-[10px] font-bold text-emerald-200/90 uppercase tracking-wider">
                   HQ Address
@@ -243,7 +217,6 @@ export default function AdminSignupPage() {
               </div>
             </div>
 
-            {/* Submit button */}
             <button
               type="submit"
               disabled={loading}
@@ -260,7 +233,6 @@ export default function AdminSignupPage() {
             </button>
           </form>
 
-          {/* Footer Switch Link */}
           <div className="text-center pt-2">
             <span className="text-xs text-emerald-100/70">
               Already registered?{" "}

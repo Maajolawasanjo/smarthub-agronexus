@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-    X, CreditCard, Wallet, CircleDollarSign, ShieldCheck,
-    Eye, EyeOff, Check, AlertCircle
+    X, CreditCard, Wallet, ShieldCheck,
+    Eye, EyeOff, Check, AlertCircle, Zap, ArrowRight, RefreshCw, Lock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
@@ -228,7 +228,7 @@ interface PaymentModalProps {
     total: number;
 }
 
-type PaymentMethod = "card" | "wallet" | "others";
+export type PaymentMethod = "card" | "flutterwave" | "wallet";
 
 interface CardForm {
     name: string;
@@ -298,8 +298,7 @@ function validateExpiry(v: string) {
     if (!v) return "Expiry date is required";
     if (!/^\d{2}\/\d{2}$/.test(v)) return "Use MM/YY format";
     const [mm] = v.split("/").map(Number);
-    // Only validate month range — no past-date check so testers can use any card
-    if (mm < 1 || mm > 12) return "Invalid month (01\u201312)";
+    if (mm < 1 || mm > 12) return "Invalid month (01–12)";
     return "";
 }
 
@@ -312,10 +311,10 @@ function validateCvv(v: string, type: CardType) {
 }
 
 export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
+    // ── ALL REACT HOOKS DECLARED UNCONDITIONALLY AT TOP LEVEL ──
     const { clearCart } = useCart();
     const [method, setMethod] = useState<PaymentMethod>("card");
     const [showCvv, setShowCvv] = useState(false);
-    const [selectedWallet, setSelectedWallet] = useState<string | null>(null);
     const [isSuccess, setIsSuccess] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -324,9 +323,35 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
     const [errors, setErrors] = useState<CardErrors>({});
     const [touched, setTouched] = useState<Partial<Record<keyof CardForm, boolean>>>({});
 
+    const [submitError, setSubmitError] = useState<string | null>(null);
+    const [orderNumber, setOrderNumber] = useState<string>("");
+
+    // Live Wallet Balance State
+    const [walletBalance, setWalletBalance] = useState<number | null>(null);
+    const [isFetchingWallet, setIsFetchingWallet] = useState<boolean>(false);
+
+    // Fetch user's live wallet balance whenever modal opens or wallet tab is selected
+    useEffect(() => {
+        if (isOpen && method === "wallet") {
+            setIsFetchingWallet(true);
+            fetch("/api/wallet")
+                .then(res => res.json())
+                .then(data => {
+                    const balance =
+                        data?.data?.balances?.availableBalance ??
+                        data?.availableBalance ??
+                        0;
+                    setWalletBalance(Number(balance));
+                })
+                .catch(() => setWalletBalance(0))
+                .finally(() => setIsFetchingWallet(false));
+        }
+    }, [isOpen, method]);
+
     const detectedType = detectCardType(card.number);
     const cardInfo = CARD_TYPES[detectedType];
 
+    // Unconditional Early Return ONLY AFTER all Hooks are defined
     if (!isOpen) return null;
 
     const getErrors = (): CardErrors => ({
@@ -380,6 +405,9 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
         if (touched.name) setErrors(prev => ({ ...prev, name: validateName(v) }));
     };
 
+    const isWalletSufficient = walletBalance !== null && walletBalance >= total;
+    const walletShortfall = walletBalance !== null ? Math.max(0, total - walletBalance) : 0;
+
     const handleSubmit = async (): Promise<void> => {
         if (method === "card") {
             setTouched({ name: true, number: true, expiry: true, cvv: true });
@@ -387,32 +415,82 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
             setErrors(e);
             if (!isCardValid()) return;
         }
-        if (method === "wallet" && !selectedWallet) return;
+
+        if (method === "wallet") {
+            if (walletBalance !== null && walletBalance < total) {
+                setSubmitError(
+                    `Insufficient AgroChain Wallet balance. Available: ₦${walletBalance.toLocaleString("en-NG", { minimumFractionDigits: 2 })}, Required: ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })}. Shortfall: ₦${walletShortfall.toLocaleString("en-NG", { minimumFractionDigits: 2 })}.`
+                );
+                return;
+            }
+        }
 
         setIsSubmitting(true);
+        setSubmitError(null);
         try {
-            await fetch("/api/orders", {
+            const cartItems = JSON.parse(localStorage.getItem("smarthub_cart") || "[]");
+            const orderItems = cartItems.map((item: any) => ({
+                productId: item && item.id ? String(item.id).trim() : undefined,
+                quantity: Number(item.quantity) || 1,
+            })).filter((i: any) => i.productId && i.productId !== "NaN" && i.productId !== "null");
+
+            if (orderItems.length === 0) {
+                setSubmitError("No valid products in cart. Please re-add items from the marketplace.");
+                setIsSubmitting(false);
+                return;
+            }
+
+            // Handle Flutterwave Checkout Gateway
+            if (method === "flutterwave") {
+                const flwRes = await fetch("/api/payments/flutterwave/initialize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        items: orderItems,
+                        totalAmount: total,
+                    }),
+                });
+
+                const flwData = await flwRes.json();
+                if (flwRes.ok && flwData.link) {
+                    // Redirect customer directly to Flutterwave Payment Gateway
+                    window.location.href = flwData.link;
+                    return;
+                } else {
+                    setSubmitError(flwData.error || "Failed to launch Flutterwave checkout session.");
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
+            const apiPaymentMethod = method === "card" ? "CARD" : "WALLET";
+
+            const res = await fetch("/api/orders", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    items: [
-                        {
-                            productId: "demo-prod-1",
-                            quantity: 1,
-                            unitPrice: total,
-                        },
-                    ],
+                    items: orderItems,
                     shippingAddress: "Lagos Port Terminal, Nigeria",
                     incoterm: "FOB",
-                    paymentMethod: method,
+                    paymentMethod: apiPaymentMethod,
                 }),
             });
-        } catch (err) {
-            // Fail silent fallback
-        } finally {
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                setSubmitError(data.error || "Order placement failed. Please try again.");
+                setIsSubmitting(false);
+                return;
+            }
+
+            setOrderNumber(data.order?.orderNumber || "");
             setIsSubmitting(false);
             setIsSuccess(true);
             clearCart();
+        } catch (err) {
+            setSubmitError("Network error. Please check your connection and try again.");
+            setIsSubmitting(false);
         }
     };
 
@@ -437,9 +515,15 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                             </div>
                         </div>
                         <h2 className="relative z-10 text-2xl font-bold text-gray-900 mb-3">Payment Successful! 🎉</h2>
-                        <p className="relative z-10 text-gray-500 text-sm max-w-[260px] leading-relaxed mb-10">
+                        <p className="relative z-10 text-gray-500 text-sm max-w-[280px] leading-relaxed mb-6">
                             Your order has been confirmed and payment processed securely through Smarthub Agrochain.
                         </p>
+                        {orderNumber && (
+                            <div className="relative z-10 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100 mb-10 inline-flex items-center gap-2">
+                                <span className="text-xs text-gray-500 uppercase tracking-widest font-bold">Order No</span>
+                                <span className="text-sm font-bold text-[#1B4D28]">{orderNumber}</span>
+                            </div>
+                        )}
                         <button
                             onClick={onClose}
                             className="relative z-10 w-full bg-[#1B4D28] hover:bg-[#153b1e] text-white py-4 rounded-2xl font-bold transition-all active:scale-[0.98] shadow-lg shadow-green-900/20"
@@ -451,7 +535,11 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                     /* ── Payment View ── */
                     <>
                         {/* Header */}
-                        <div className="flex items-center justify-end p-5 pb-0 shrink-0">
+                        <div className="flex items-center justify-between p-6 pb-2 shrink-0">
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-900">Choose Payment Method</h2>
+                                <p className="text-xs text-gray-400">Total payable: <span className="font-bold text-[#1B4D28]">₦{total.toLocaleString("en-NG", { minimumFractionDigits: 2 })}</span></p>
+                            </div>
                             <button
                                 onClick={onClose}
                                 disabled={isSubmitting}
@@ -462,46 +550,48 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                         </div>
 
                         {/* Scrollable Content */}
-                        <div className="px-7 pb-8 overflow-y-auto">
-                            <h2 className="text-center text-lg font-semibold text-gray-800 mb-6">Choose a payment method</h2>
+                        <div className="px-6 pb-8 overflow-y-auto pt-4">
 
                             {/* Method Selector */}
-                            <div className="grid grid-cols-3 gap-3 mb-8">
-                                {(["card", "wallet", "others"] as PaymentMethod[]).map(m => (
+                            <div className="grid grid-cols-3 gap-3 mb-6">
+                                {[
+                                    { id: "card", label: "Credit Card", icon: <CreditCard size={18} />, color: "bg-[#1B4D28]" },
+                                    { id: "flutterwave", label: "Flutterwave", icon: <Zap size={18} />, color: "bg-[#FB923C]" },
+                                    { id: "wallet", label: "Agro Wallet", icon: <Wallet size={18} />, color: "bg-[#FFB800]" },
+                                ].map((m) => (
                                     <button
-                                        key={m}
-                                        onClick={() => setMethod(m)}
+                                        key={m.id}
+                                        onClick={() => {
+                                            setMethod(m.id as PaymentMethod);
+                                            setSubmitError(null);
+                                        }}
                                         disabled={isSubmitting}
                                         className={cn(
-                                            "flex flex-col items-center justify-center gap-2.5 p-3.5 rounded-2xl border-2 transition-all group disabled:opacity-50",
-                                            method === m ? "border-[#1B4D28] bg-green-50/30" : "border-gray-100 bg-white hover:border-gray-200"
+                                            "flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl border-2 transition-all group disabled:opacity-50",
+                                            method === m.id
+                                                ? "border-[#1B4D28] bg-green-50/40 shadow-sm"
+                                                : "border-gray-100 bg-white hover:border-gray-200"
                                         )}
                                     >
                                         <div className={cn(
-                                            "w-9 h-9 rounded-full flex items-center justify-center transition-colors",
-                                            m === "card" && method === "card" ? "bg-[#1B4D28] text-white" :
-                                                m === "wallet" && method === "wallet" ? "bg-[#FFB800] text-white" :
-                                                    m === "others" && method === "others" ? "bg-black text-white" :
-                                                        "bg-gray-100 text-gray-400 group-hover:bg-gray-200"
+                                            "w-9 h-9 rounded-full flex items-center justify-center transition-colors text-white",
+                                            method === m.id ? m.color : "bg-gray-100 text-gray-400 group-hover:bg-gray-200"
                                         )}>
-                                            {m === "card" && <CreditCard size={18} />}
-                                            {m === "wallet" && <Wallet size={18} />}
-                                            {m === "others" && <CircleDollarSign size={18} />}
+                                            {m.icon}
                                         </div>
                                         <span className={cn(
                                             "text-[11px] font-bold transition-colors",
-                                            method === m ? "text-gray-900" : "text-gray-400"
+                                            method === m.id ? "text-gray-900" : "text-gray-500"
                                         )}>
-                                            {m === "card" ? "Credit Card" : m === "wallet" ? "Connect Wallet" : "Others"}
+                                            {m.label}
                                         </span>
                                     </button>
                                 ))}
                             </div>
 
-                            {/* ── Card Form ── */}
+                            {/* ── 1. Credit Card Form ── */}
                             {method === "card" && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-
                                     {/* Detected Card Type Badge */}
                                     <div className={cn(
                                         "flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all",
@@ -517,7 +607,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                             <p className="text-[10px] text-gray-400">
                                                 {detectedType !== "unknown"
                                                     ? `${cardInfo.maxLength} digits · CVV: ${cardInfo.cvvLength} digits`
-                                                    : "Supports Visa, Mastercard, Amex, Discover"}
+                                                    : "Supports Visa, Mastercard, Verve, Amex, Discover"}
                                             </p>
                                         </div>
                                         {detectedType !== "unknown" && (
@@ -536,7 +626,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                             onChange={e => handleName(e.target.value)}
                                             onBlur={() => handleBlur("name")}
                                             disabled={isSubmitting}
-                                            autoComplete="cc-name"
+                                            autoComplete="off"
                                             className={getInputClass("name", touched, errors, card.name)}
                                         />
                                     </FieldWrapper>
@@ -552,7 +642,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                                 onChange={e => handleCardNumber(e.target.value)}
                                                 onBlur={() => handleBlur("number")}
                                                 disabled={isSubmitting}
-                                                autoComplete="cc-number"
+                                                autoComplete="off"
                                                 maxLength={detectedType === "amex" ? 17 : 19}
                                                 className={cn(getInputClass("number", touched, errors, card.number), "pr-14 font-mono tracking-widest")}
                                             />
@@ -573,7 +663,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                                 onChange={e => handleExpiry(e.target.value)}
                                                 onBlur={() => handleBlur("expiry")}
                                                 disabled={isSubmitting}
-                                                autoComplete="cc-exp"
+                                                autoComplete="off"
                                                 maxLength={5}
                                                 className={getInputClass("expiry", touched, errors, card.expiry)}
                                             />
@@ -592,7 +682,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                                     onChange={e => handleCvv(e.target.value)}
                                                     onBlur={() => handleBlur("cvv")}
                                                     disabled={isSubmitting}
-                                                    autoComplete="cc-csc"
+                                                    autoComplete="off"
                                                     maxLength={cardInfo.cvvLength}
                                                     className={cn(getInputClass("cvv", touched, errors, card.cvv), "pr-10 font-mono tracking-widest")}
                                                 />
@@ -607,94 +697,149 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                             </div>
                                         </FieldWrapper>
                                     </div>
-
-                                    {/* CVV hint for Amex */}
-                                    {detectedType === "amex" && (
-                                        <p className="text-[11px] text-amber-600 bg-amber-50 rounded-xl px-3 py-2 border border-amber-100">
-                                            ℹ️ American Express uses a <strong>4-digit CVV</strong> printed on the <strong>front</strong> of the card.
-                                        </p>
-                                    )}
                                 </div>
                             )}
 
-                            {/* ── Wallet Method ── */}
+                            {/* ── 2. Flutterwave Integration View ── */}
+                            {method === "flutterwave" && (
+                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="p-5 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-amber-500/10 border-2 border-amber-500/30 rounded-3xl text-center">
+                                        <div className="w-14 h-14 bg-gradient-to-tr from-orange-500 to-amber-400 rounded-2xl flex items-center justify-center text-white shadow-lg mx-auto mb-3">
+                                            <Zap size={28} />
+                                        </div>
+                                        <h3 className="text-base font-bold text-gray-900 mb-1">Flutterwave Online Checkout</h3>
+                                        <p className="text-xs text-gray-500 max-w-[320px] mx-auto leading-relaxed mb-4">
+                                            Pay instantly via Cards, Bank Transfer, USSD, or Mobile Money using Flutterwave secure gateway.
+                                        </p>
+                                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-100/60 rounded-full border border-amber-200 text-amber-900 text-xs font-semibold">
+                                            <ShieldCheck size={14} className="text-amber-700" />
+                                            <span>256-Bit SSL Encrypted Payment</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── 3. SmartHub AgroChain Wallet View (With Balance Verification) ── */}
                             {method === "wallet" && (
-                                <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <h3 className="text-center text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Select Wallet</h3>
-                                    {[
-                                        { name: "Metamask", color: "#F6851B", desc: "Browser extension & mobile" },
-                                        { name: "Phantom", color: "#AB9FF2", desc: "Solana & multi-chain" },
-                                        { name: "Trust Wallet", color: "#3375BB", desc: "Mobile & Web3" },
-                                        { name: "Coinbase Wallet", color: "#0052FF", desc: "Easy crypto access" },
-                                    ].map((wallet) => (
-                                        <button
-                                            key={wallet.name}
-                                            onClick={() => setSelectedWallet(wallet.name)}
-                                            disabled={isSubmitting}
-                                            className={cn(
-                                                "flex items-center justify-between w-full p-4 bg-white border rounded-2xl transition-all group disabled:opacity-60",
-                                                selectedWallet === wallet.name
-                                                    ? "border-[#1B4D28] bg-green-50/20"
-                                                    : "border-gray-100 hover:border-gray-200"
-                                            )}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div
-                                                    className="w-9 h-9 rounded-full flex items-center justify-center"
-                                                    style={{ backgroundColor: wallet.color + "22" }}
-                                                >
-                                                    <div className="w-5 h-5 rounded-full" style={{ backgroundColor: wallet.color }} />
+                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="p-5 bg-emerald-900 text-white rounded-3xl shadow-xl relative overflow-hidden">
+                                        <div className="absolute right-[-20px] bottom-[-20px] opacity-10 pointer-events-none">
+                                            <Wallet size={160} />
+                                        </div>
+
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <Wallet className="text-emerald-400" size={20} />
+                                                <span className="text-xs font-bold uppercase tracking-wider text-emerald-200">SmartHub Agro Wallet</span>
+                                            </div>
+                                            {isFetchingWallet && (
+                                                <div className="flex items-center gap-1 text-xs text-emerald-300">
+                                                    <RefreshCw size={12} className="animate-spin" />
+                                                    <span>Syncing balance...</span>
                                                 </div>
-                                                <div className="text-left">
-                                                    <p className="text-sm font-semibold text-gray-800">{wallet.name}</p>
-                                                    <p className="text-[10px] text-gray-400">{wallet.desc}</p>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4 pt-1">
+                                            <div>
+                                                <p className="text-[11px] text-emerald-300/80 font-medium uppercase tracking-wider">Available Balance</p>
+                                                <p className="text-2xl font-extrabold tracking-tight mt-0.5">
+                                                    {walletBalance !== null
+                                                        ? `₦${walletBalance.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`
+                                                        : "₦0.00"}
+                                                </p>
+                                            </div>
+
+                                            <div className="text-right border-l border-emerald-700/50 pl-4">
+                                                <p className="text-[11px] text-emerald-300/80 font-medium uppercase tracking-wider">Order Total</p>
+                                                <p className="text-xl font-bold text-emerald-100 mt-0.5">
+                                                    ₦{total.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Balance Status Banners */}
+                                    {walletBalance !== null && (
+                                        isWalletSufficient ? (
+                                            <div className="p-4 bg-green-50 border border-green-200 rounded-2xl flex items-start gap-3 text-green-900">
+                                                <div className="w-7 h-7 rounded-full bg-green-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                                                    <Check size={16} strokeWidth={3} />
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-bold text-green-900">Sufficient Wallet Balance Available</p>
+                                                    <p className="text-[11px] text-green-700 mt-0.5">
+                                                        Your wallet has enough funds. Clicking pay will instantly debit ₦{total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} into Escrow Protection.
+                                                    </p>
                                                 </div>
                                             </div>
-                                            {selectedWallet === wallet.name && (
-                                                <div className="w-5 h-5 rounded-full bg-[#1B4D28] flex items-center justify-center text-white">
-                                                    <ShieldCheck size={12} />
+                                        ) : (
+                                            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-amber-900">
+                                                <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                                                <div>
+                                                    <p className="text-xs font-bold text-amber-900">Insufficient Wallet Balance</p>
+                                                    <p className="text-[11px] text-amber-700 mt-0.5">
+                                                        You need <strong className="text-amber-900">₦{walletShortfall.toLocaleString("en-NG", { minimumFractionDigits: 2 })}</strong> more to complete this purchase using your wallet.
+                                                    </p>
+                                                    <a
+                                                        href="/dashboard/wallet"
+                                                        target="_blank"
+                                                        className="inline-flex items-center gap-1 text-xs font-bold text-[#1B4D28] hover:underline mt-2"
+                                                    >
+                                                        <span>Top up wallet in dashboard</span>
+                                                        <ArrowRight size={12} />
+                                                    </a>
                                                 </div>
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* ── Others Method ── */}
-                            {method === "others" && (
-                                <div className="py-10 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 border border-gray-100">
-                                        <CircleDollarSign className="text-gray-300" size={32} />
-                                    </div>
-                                    <h3 className="text-base font-bold text-gray-800 mb-1">Other Payment Methods</h3>
-                                    <p className="text-xs text-gray-400">Bank Transfer, PayPal, and more coming soon.</p>
-                                </div>
-                            )}
-
-                            {/* ── Submit ── */}
-                            <div className="mt-7 space-y-3">
-                                <button
-                                    onClick={handleSubmit}
-                                    disabled={isSubmitting || (method === "wallet" && !selectedWallet)}
-                                    className="w-full bg-[#1B4D28] hover:bg-[#153b1e] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-green-900/10 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    {isSubmitting ? (
-                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    ) : (
-                                        <>
-                                            <span className="text-base">$ {total.toLocaleString()}</span>
-                                            <span className="text-[16px]">Pay Now</span>
-                                        </>
+                                            </div>
+                                        )
                                     )}
-                                </button>
-
-                                <div className="flex items-center justify-center gap-2 pt-1">
-                                    <ShieldCheck size={16} className="text-[#1B4D28]" />
-                                    <div className="text-left">
-                                        <p className="text-[10px] font-bold text-gray-700">256-bit SSL Encrypted · Secure payment</p>
-                                        <p className="text-[10px] text-gray-400">Protected by Smarthub Agrochain</p>
-                                    </div>
                                 </div>
+                            )}
+
+                            {/* Error Banner */}
+                            {submitError && (
+                                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-700 animate-in fade-in">
+                                    <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
+                                    <p className="text-xs font-semibold leading-relaxed">{submitError}</p>
+                                </div>
+                            )}
+
+                            {/* Submit Button */}
+                            <button
+                                onClick={handleSubmit}
+                                disabled={isSubmitting || (method === "wallet" && walletBalance !== null && !isWalletSufficient)}
+                                className={cn(
+                                    "w-full mt-6 py-4 px-6 rounded-2xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed",
+                                    method === "card"
+                                        ? "bg-[#1B4D28] hover:bg-[#153b1e] shadow-green-900/20"
+                                        : method === "flutterwave"
+                                            ? "bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-700 hover:to-orange-600 shadow-orange-500/20"
+                                            : "bg-[#1B4D28] hover:bg-[#153b1e] shadow-green-900/20"
+                                )}
+                            >
+                                {isSubmitting ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <span>Processing Order...</span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <Lock size={16} />
+                                        <span>
+                                            {method === "card"
+                                                ? `Pay ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} with Card`
+                                                : method === "flutterwave"
+                                                    ? `Pay ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} with Flutterwave`
+                                                    : `Pay ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} from Wallet`}
+                                        </span>
+                                    </>
+                                )}
+                            </button>
+
+                            {/* Trust Badge Footer */}
+                            <div className="mt-4 flex items-center justify-center gap-2 text-[11px] text-gray-400 font-medium">
+                                <ShieldCheck size={14} className="text-[#1B4D28]" />
+                                <span>Escrow Protection Enabled · SmartHub Agronexus</span>
                             </div>
                         </div>
                     </>

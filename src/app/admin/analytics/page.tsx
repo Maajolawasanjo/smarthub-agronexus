@@ -67,13 +67,14 @@ export default function AnalyticsPage() {
         setMounted(true);
         async function fetchAnalytics() {
             try {
-                const res = await fetch("/api/analytics");
+                const res = await fetch("/api/admin/overview");
                 const data = await res.json();
-                if (data.metrics) {
+                if (data.statistics) {
+                    const stats = data.statistics;
                     setMetrics({
-                        totalUsers: data.metrics.totalUsers ? data.metrics.totalUsers.toLocaleString() : "2,847",
-                        totalSales: data.metrics.totalOrders ? data.metrics.totalOrders.toLocaleString() : "2,384",
-                        totalRevenue: data.metrics.totalTradeVolume ? `₦ ${Number(data.metrics.totalTradeVolume).toLocaleString()}` : "₦ 6,674,346",
+                        totalUsers: (stats.totalFarmers + stats.totalBuyers).toLocaleString(),
+                        totalSales: stats.completedOrdersCount ? stats.completedOrdersCount.toLocaleString() : "0",
+                        totalRevenue: stats.totalTradeVolume ? `₦ ${Number(stats.totalTradeVolume).toLocaleString()}` : "₦ 0",
                     });
                 }
             } catch (err) {

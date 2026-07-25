@@ -2,39 +2,32 @@
 
 import React, { useState, useEffect } from "react";
 import {
-    Settings,
-    ShieldCheck,
-    Save,
+    Sliders,
     Percent,
     Server,
     Shield,
-    Users,
     Mail,
-    Sliders,
     CheckCircle2,
     ToggleLeft,
     ToggleRight,
     User as UserIcon,
     Globe,
     Home,
-    Upload
+    Upload,
+    Save
 } from "lucide-react";
 import { useUser } from "@/context/UserContext";
 import Image from "next/image";
 
-// Initial admin roster data
 const initialAdmins = [
-    { name: "OLAK", email: "olak@debridger.com", role: "Super Admin", status: "Active" },
-    { name: "Sarah Connor", email: "sarah@debridger.com", role: "Moderator", status: "Active" },
-    { name: "Ahmed Buba", email: "ahmed@debridger.com", role: "Auditor", status: "Inactive" },
+    { name: "System Admin", email: "admin@smarthub.com", role: "Super Admin", status: "Active" },
 ];
 
 export default function AdminSettingsPage() {
-    const { user, updateUser } = useUser();
+    const { user, refreshUser } = useUser();
     const [activeTab, setActiveTab] = useState("Platform Fees");
-    const [admins, setAdmins] = useState(initialAdmins);
+    const [admins] = useState(initialAdmins);
 
-    // Platform Settings (State driven for testing)
     const [commission, setCommission] = useState(5.0);
     const [escrowClearHours, setEscrowClearHours] = useState(24);
     const [autoRelease, setAutoRelease] = useState(true);
@@ -43,25 +36,22 @@ export default function AdminSettingsPage() {
     const [siteName, setSiteName] = useState("Smarthub Agrochain");
     const [supportEmail, setSupportEmail] = useState("support@smarthub.com");
 
-    // Profile Settings (Bound directly to UserContext)
     const [profileName, setProfileName] = useState("");
     const [profileEmail, setProfileEmail] = useState("");
-    const [profileCountry, setProfileCountry] = useState("");
+    const [profileCountry, setProfileCountry] = useState("Nigeria");
     const [profileAddress, setProfileAddress] = useState("");
-    const [profileAvatar, setProfileAvatar] = useState("/avatar-1.png");
+    const [profileAvatar, setProfileAvatar] = useState("");
 
-    // Prepopulate profile inputs from active UserContext
     useEffect(() => {
         if (user) {
-            setProfileName(user.name || "");
+            setProfileName(user.fullName || user.name || "");
             setProfileEmail(user.email || "");
-            setProfileCountry(user.country || "Nigeria");
-            setProfileAddress(user.address || "");
-            setProfileAvatar(user.profileImage || "/avatar-1.png");
+            setProfileCountry("Nigeria");
+            setProfileAddress("");
+            setProfileAvatar(user.profileImage || "");
         }
     }, [user]);
 
-    // Success Toast simulation
     const [toastMessage, setToastMessage] = useState("");
 
     const triggerToast = (msg: string) => {
@@ -93,34 +83,24 @@ export default function AdminSettingsPage() {
         }
     };
 
-    const handleSave = (e: React.FormEvent) => {
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        
         if (activeTab === "Admin Profile") {
-            // Update profile in UserContext / localStorage
-            updateUser({
-                name: profileName,
-                email: profileEmail,
-                country: profileCountry,
-                address: profileAddress,
-                profileImage: profileAvatar
-            });
-            triggerToast("Profile successfully updated and synced across workspace!");
+            await refreshUser();
+            triggerToast("Profile updated!");
         } else {
-            triggerToast("Settings successfully saved to local system storage!");
+            triggerToast("Settings successfully saved!");
         }
     };
 
     return (
         <div className="space-y-6 animate-fadeIn relative font-sans">
-            {/* Header info */}
             <div className="-mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <p className="text-gray-500 text-sm">
                     Configure B2B platform commissions, automatic escrow releases, security access, and personal administrator profiles.
                 </p>
             </div>
 
-            {/* Simulated Toast Notification */}
             {toastMessage && (
                 <div className="fixed bottom-6 right-6 z-50 bg-[#1B4D28] text-white px-6 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-[#2C5E39] animate-slideIn">
                     <CheckCircle2 size={20} className="text-[#4CAF50] flex-shrink-0" />
@@ -128,7 +108,6 @@ export default function AdminSettingsPage() {
                 </div>
             )}
 
-            {/* Filter Tabs */}
             <div className="flex border-b border-gray-200 overflow-x-auto whitespace-nowrap scrollbar-none gap-6 text-sm font-medium">
                 {["Platform Fees", "General Configuration", "Security & Team", "Admin Profile"].map(tab => (
                     <button
@@ -148,7 +127,6 @@ export default function AdminSettingsPage() {
             <div className="max-w-4xl mx-auto">
                 <form onSubmit={handleSave} className="space-y-6">
 
-                    {/* ─── TAB 1: PLATFORM FEES ─── */}
                     {activeTab === "Platform Fees" && (
                         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6 animate-fadeIn">
                             <div className="flex items-center gap-2 pb-4 border-b border-gray-50">
@@ -156,7 +134,6 @@ export default function AdminSettingsPage() {
                                 <h3 className="font-bold text-gray-800 text-base">Fee Structure & Escrow Clearances</h3>
                             </div>
 
-                            {/* Commission Input Slider */}
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center text-sm font-semibold">
                                     <label className="text-gray-600 flex items-center gap-1.5">
@@ -181,7 +158,6 @@ export default function AdminSettingsPage() {
 
                             <hr className="border-gray-50" />
 
-                            {/* Escrow Release Timeline */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -196,7 +172,7 @@ export default function AdminSettingsPage() {
                                         className="w-full bg-gray-50 border border-gray-200 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#1B4D28] text-gray-700 font-semibold"
                                     />
                                     <span className="block text-[10px] text-gray-400 font-medium">
-                                        Funds release autonomously if buyer doesn't file a dispute within this timeframe.
+                                        Funds release autonomously if buyer doesn&apos;t file a dispute within this timeframe.
                                     </span>
                                 </div>
 
@@ -219,7 +195,6 @@ export default function AdminSettingsPage() {
 
                             <hr className="border-gray-50" />
 
-                            {/* Verification toggles */}
                             <div className="space-y-2">
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">
                                     Listing Verification Mandate
@@ -241,7 +216,6 @@ export default function AdminSettingsPage() {
                         </div>
                     )}
 
-                    {/* ─── TAB 2: GENERAL CONFIG ─── */}
                     {activeTab === "General Configuration" && (
                         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6 animate-fadeIn">
                             <div className="flex items-center gap-2 pb-4 border-b border-gray-50">
@@ -280,7 +254,6 @@ export default function AdminSettingsPage() {
                         </div>
                     )}
 
-                    {/* ─── TAB 3: SECURITY & TEAM ─── */}
                     {activeTab === "Security & Team" && (
                         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6 animate-fadeIn">
                             <div className="flex items-center gap-2 pb-4 border-b border-gray-50">
@@ -288,7 +261,6 @@ export default function AdminSettingsPage() {
                                 <h3 className="font-bold text-gray-800 text-base">Authorized Administrative Roster</h3>
                             </div>
 
-                            {/* Admins Table */}
                             <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
                                 <table className="w-full text-left border-collapse text-xs">
                                     <thead>
@@ -326,7 +298,6 @@ export default function AdminSettingsPage() {
                         </div>
                     )}
 
-                    {/* ─── TAB 4: MY ADMIN PROFILE (New!) ─── */}
                     {activeTab === "Admin Profile" && (
                         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6 animate-fadeIn">
                             <div className="flex items-center gap-2 pb-4 border-b border-gray-50">
@@ -334,13 +305,11 @@ export default function AdminSettingsPage() {
                                 <h3 className="font-bold text-gray-800 text-base">My Administrator Account Profile</h3>
                             </div>
 
-                            {/* Avatar / Profile Picture Upload from Device */}
                             <div className="space-y-4">
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider text-center">
                                     Administrative Profile Picture
                                 </label>
                                 <div className="flex flex-col sm:flex-row items-center justify-center gap-6 p-6 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                                    {/* Preview container */}
                                     <div className="relative w-20 h-20 rounded-full overflow-hidden border-4 border-[#1B4D28]/10 bg-white shadow-inner flex-shrink-0">
                                         {profileAvatar ? (
                                             <Image
@@ -355,9 +324,8 @@ export default function AdminSettingsPage() {
                                             </div>
                                         )}
                                     </div>
-                                    {/* File Input Controls */}
                                     <div className="space-y-2.5 text-center sm:text-left">
-                                        <p className="text-sm font-bold text-gray-700">Upload profile image from your laptop or device</p>
+                                        <p className="text-sm font-bold text-gray-700">Upload profile image from your device</p>
                                         <p className="text-xs text-gray-400 font-semibold">Supports PNG, JPG, or GIF (Max 2MB)</p>
                                         <div className="relative flex justify-center sm:justify-start">
                                             <input
@@ -382,7 +350,6 @@ export default function AdminSettingsPage() {
                             <hr className="border-gray-50" />
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Name input */}
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">
                                         Display Name / Handler
@@ -396,7 +363,6 @@ export default function AdminSettingsPage() {
                                     />
                                 </div>
 
-                                {/* Email input */}
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">
                                         Email Contact Address
@@ -410,7 +376,6 @@ export default function AdminSettingsPage() {
                                     />
                                 </div>
 
-                                {/* Country */}
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
                                         <Globe size={12} className="text-gray-400" />
@@ -425,7 +390,6 @@ export default function AdminSettingsPage() {
                                     />
                                 </div>
 
-                                {/* HQ Address */}
                                 <div className="space-y-2">
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1">
                                         <Home size={12} className="text-gray-400" />
@@ -443,11 +407,10 @@ export default function AdminSettingsPage() {
                         </div>
                     )}
 
-                    {/* Form Submission Button */}
                     <div className="flex items-center justify-end pt-4 border-t border-gray-100">
                         <button
                             type="submit"
-                            className="flex items-center gap-2 bg-[#1B4D28] text-white text-xs font-bold px-6 py-3 rounded-xl hover:bg-[#143d20] shadow-sm hover:shadow-md transition-all active:scale-98 cursor-pointer"
+                            className="flex items-center gap-2 bg-[#1B4D28] text-white text-xs font-bold px-6 py-3 rounded-xl hover:bg-[#143d20] shadow-sm hover:shadow-md transition-all cursor-pointer"
                         >
                             <Save size={16} />
                             Save Config Changes

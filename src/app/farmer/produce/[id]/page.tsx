@@ -5,7 +5,6 @@ import {
     ChevronLeft,
     Calendar,
     MapPin,
-    Package,
     Tag,
     Scale,
     Clock,
@@ -18,7 +17,6 @@ import {
     Printer,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useProduce, ProduceListing } from "@/context/ProduceContext";
 import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
@@ -133,7 +131,7 @@ function StatCard({
 
 function NotFound() {
     return (
-        <div className="max-w-5xl mx-auto pb-12 flex flex-col items-center justify-center min-h-[60vh] text-center gap-4">
+        <div className="max-w-5xl mx-auto pb-12 flex flex-col items-center justify-center min-h-[60vh] text-center gap-4 font-sans">
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center">
                 <Leaf size={36} className="text-gray-300" />
             </div>
@@ -155,7 +153,6 @@ function NotFound() {
 
 export default function ProduceDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const router = useRouter();
     const { getListingById } = useProduce();
     const { user } = useUser();
 
@@ -164,15 +161,46 @@ export default function ProduceDetailPage({ params }: { params: Promise<{ id: st
     const [activeImg, setActiveImg] = useState(0);
 
     useEffect(() => {
-        // Give context time to rehydrate from localStorage
+        let isMounted = true;
         const found = getListingById(id);
-        setListing(found);
-        setLoaded(true);
+        if (found) {
+            setListing(found);
+            setLoaded(true);
+        } else {
+            fetch(`/api/products/${id}`)
+                .then((res) => (res.ok ? res.json() : null))
+                .then((data) => {
+                    if (!isMounted) return;
+                    if (data && data.id) {
+                        setListing({
+                            id: data.id,
+                            produceType: data.name,
+                            variety: data.name,
+                            quantity: String(data.inventory?.availableQty || 0),
+                            unit: data.unit || "KG",
+                            askingPrice: String(data.price),
+                            harvestDate: data.harvestDate || new Date().toISOString(),
+                            farmLocation: data.farmer?.state || "Nigeria",
+                            notes: data.description || "",
+                            images: data.images?.map((img: any) => img.imageUrl) || [data.primaryImage].filter(Boolean),
+                            status: data.isAvailable ? "Active" : "Pending",
+                            submittedAt: data.createdAt || new Date().toISOString(),
+                        });
+                    }
+                })
+                .catch(() => {})
+                .finally(() => {
+                    if (isMounted) setLoaded(true);
+                });
+        }
+        return () => {
+            isMounted = false;
+        };
     }, [id, getListingById]);
 
     if (!loaded) {
         return (
-            <div className="max-w-5xl mx-auto pb-12 flex items-center justify-center min-h-[60vh]">
+            <div className="max-w-5xl mx-auto pb-12 flex items-center justify-center min-h-[60vh] font-sans">
                 <div className="flex flex-col items-center gap-3 text-gray-400">
                     <div className="w-8 h-8 border-2 border-[#1B4D28] border-t-transparent rounded-full animate-spin" />
                     <p className="text-sm font-medium">Loading produce details…</p>
@@ -186,11 +214,11 @@ export default function ProduceDetailPage({ params }: { params: Promise<{ id: st
     const displayImages = listing.images.length > 0 ? listing.images : [];
     const submittedDate = formatDate(listing.submittedAt);
     const harvestDate = formatDate(listing.harvestDate);
-    const farmerName = user?.name || "—";
-    const farmName = user?.farmName || "—";
+    const farmerName = user?.fullName || user?.name || "—";
+    const farmName = user?.farmerProfile?.farmName || "—";
 
     return (
-        <div className="max-w-5xl mx-auto pb-12">
+        <div className="max-w-5xl mx-auto pb-12 font-sans">
 
             {/* ── Back & Actions Header ── */}
             <div className="mb-6 flex items-center justify-between">
@@ -204,7 +232,7 @@ export default function ProduceDetailPage({ params }: { params: Promise<{ id: st
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => window.print()}
-                        className="p-2 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+                        className="p-2 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer"
                         title="Print"
                     >
                         <Printer size={16} />
@@ -214,7 +242,7 @@ export default function ProduceDetailPage({ params }: { params: Promise<{ id: st
                             navigator.clipboard?.writeText(window.location.href);
                             alert("Link copied!");
                         }}
-                        className="p-2 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
+                        className="p-2 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors cursor-pointer"
                         title="Share"
                     >
                         <Share2 size={16} />
@@ -336,7 +364,7 @@ export default function ProduceDetailPage({ params }: { params: Promise<{ id: st
                                                 key={i}
                                                 onClick={() => setActiveImg(i)}
                                                 className={cn(
-                                                    "w-14 h-14 rounded-lg overflow-hidden border-2 transition-all",
+                                                    "w-14 h-14 rounded-lg overflow-hidden border-2 transition-all cursor-pointer",
                                                     i === activeImg ? "border-[#1B4D28]" : "border-transparent hover:border-gray-300"
                                                 )}
                                             >
@@ -377,22 +405,22 @@ export default function ProduceDetailPage({ params }: { params: Promise<{ id: st
                                     <span className="text-gray-400 font-medium">Name</span>
                                     <span className="text-gray-800 font-semibold">{farmerName}</span>
                                 </div>
-                                {user?.farmName && (
+                                {user?.farmerProfile?.farmName && (
                                     <div className="flex justify-between text-xs">
                                         <span className="text-gray-400 font-medium">Farm</span>
-                                        <span className="text-gray-800 font-semibold">{user.farmName}</span>
+                                        <span className="text-gray-800 font-semibold">{user.farmerProfile.farmName}</span>
                                     </div>
                                 )}
-                                {user?.state && (
+                                {user?.farmerProfile?.state && (
                                     <div className="flex justify-between text-xs">
                                         <span className="text-gray-400 font-medium">State</span>
-                                        <span className="text-gray-800 font-semibold">{user.state}</span>
+                                        <span className="text-gray-800 font-semibold">{user.farmerProfile.state}</span>
                                     </div>
                                 )}
-                                {user?.phone && (
+                                {(user?.phoneNumber || user?.phone) && (
                                     <div className="flex justify-between text-xs">
                                         <span className="text-gray-400 font-medium">Phone</span>
-                                        <span className="text-gray-800 font-semibold">{user.phone}</span>
+                                        <span className="text-gray-800 font-semibold">{user.phoneNumber || user.phone}</span>
                                     </div>
                                 )}
                             </div>
@@ -442,22 +470,55 @@ export default function ProduceDetailPage({ params }: { params: Promise<{ id: st
                     </div>
                 </div>
 
-                {/* ── CTA BUTTONS ── */}
+                {/* ── CTA BUTTONS & STATUS CONTROLS ── */}
                 <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                    <button
+                        onClick={async () => {
+                            try {
+                                const newStatus = listing.status === "Active" ? "PAUSED" : "ACTIVE";
+                                const res = await fetch(`/api/farmer/produce/${listing.id}/status`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ status: newStatus }),
+                                });
+                                if (res.ok) {
+                                    window.location.reload();
+                                }
+                            } catch (err) {
+                                console.error("Failed to update status", err);
+                            }
+                        }}
+                        className="flex-1 text-center bg-amber-50 text-amber-700 border border-amber-200 py-3.5 rounded-full text-xs font-bold hover:bg-amber-100 transition-all cursor-pointer"
+                    >
+                        {listing.status === "Active" ? "Pause Produce Listing" : "Activate Produce Listing"}
+                    </button>
+                    <button
+                        onClick={async () => {
+                            if (!confirm("Are you sure you want to archive this produce listing?")) return;
+                            try {
+                                const res = await fetch(`/api/farmer/produce/${listing.id}/status`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ status: "ARCHIVED" }),
+                                });
+                                if (res.ok) {
+                                    window.location.reload();
+                                }
+                            } catch (err) {
+                                console.error("Failed to archive produce", err);
+                            }
+                        }}
+                        className="text-center bg-rose-50 text-rose-700 border border-rose-200 px-6 py-3.5 rounded-full text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+                    >
+                        Archive Listing
+                    </button>
                     <Link
                         href="/farmer/sell"
-                        className="flex-1 text-center bg-[#1B4D28] text-white py-4 rounded-full text-sm font-bold hover:bg-[#153a1e] transition-all active:scale-[0.99] shadow-lg shadow-green-900/10"
+                        className="flex-1 text-center bg-[#1B4D28] text-white py-3.5 rounded-full text-xs font-bold hover:bg-[#153a1e] transition-all active:scale-[0.99] shadow-lg shadow-green-900/10"
                     >
                         Submit Another Produce
                     </Link>
-                    <Link
-                        href="/farmer"
-                        className="flex-1 text-center border-2 border-gray-200 text-gray-700 py-4 rounded-full text-sm font-bold hover:border-[#1B4D28] hover:text-[#1B4D28] transition-all"
-                    >
-                        Back to Dashboard
-                    </Link>
                 </div>
-
             </div>
         </div>
     );

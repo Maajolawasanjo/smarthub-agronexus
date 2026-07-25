@@ -71,6 +71,31 @@ export default function AdminNotificationsPage() {
     const [notifications, setNotifications] = useState(initialNotifications);
     const [filter, setFilter] = useState("All");
 
+    React.useEffect(() => {
+        async function fetchLiveNotifications() {
+            try {
+                const res = await fetch("/api/admin/overview");
+                const data = await res.json();
+                if (data.moderationQueue && data.moderationQueue.length > 0) {
+                    const liveItems = data.moderationQueue.map((item: any) => ({
+                        id: item.id,
+                        title: item.title || "Pending Moderation Action",
+                        description: `Submitted by ${item.submittedBy}. Review required for publication.`,
+                        time: item.date || "Just now",
+                        priority: "High",
+                        type: "verification",
+                        read: false,
+                        link: "/admin/products"
+                    }));
+                    setNotifications(prev => [...liveItems, ...prev]);
+                }
+            } catch (err) {
+                // Fallback
+            }
+        }
+        fetchLiveNotifications();
+    }, []);
+
     // Toggle single notification read status
     const toggleRead = (id: string) => {
         setNotifications(prev =>

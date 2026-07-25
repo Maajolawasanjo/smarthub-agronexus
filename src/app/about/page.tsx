@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/Button";
@@ -156,9 +157,11 @@ export default function AboutPage() {
                         AgroChain connects international buyers with premium-quality agricultural goods sourced and verified by our team in Nigeria.
                     </p>
                     <div className="mb-4">
-                        <Button className="bg-[#4CAF50] hover:bg-[#43A047] px-8 py-3 text-base md:text-lg font-medium shadow-2xl rounded-full">
-                            Explore Product
-                        </Button>
+                        <Link href="/products">
+                            <Button className="bg-[#4CAF50] hover:bg-[#43A047] px-8 py-3 text-base md:text-lg font-medium shadow-2xl rounded-full">
+                                Explore Product
+                            </Button>
+                        </Link>
                     </div>
                 </div>
                 {/* Partner Logos */}

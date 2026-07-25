@@ -13,7 +13,8 @@ import {
     Bell,
     Settings,
     LogOut,
-    X
+    X,
+    Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -25,6 +26,7 @@ interface AdminSidebarProps {
 
 const menuItems = [
     { name: "Overview", href: "/admin/overview", icon: LayoutDashboard },
+    { name: "Treasury & Finance", href: "/admin/finance", icon: Wallet },
     { name: "Product Listings", href: "/admin/products", icon: Box },
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
     { name: "Users", href: "/admin/users", icon: Users },
@@ -39,8 +41,8 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     const { logout } = useUser();
     const router = useRouter();
 
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        await logout();
         router.push("/admin/login");
     };
 
@@ -67,7 +69,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                         <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg bg-white p-1">
                             <Image
                                 src="/LOGO.jpg"
-                                alt="Debridger Logo"
+                                alt="Smarthub Agrochain Logo"
                                 fill
                                 className="object-cover rounded-md"
                             />
@@ -113,10 +115,10 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
                     <div className="p-4 border-t border-[#2C5E39]">
                         <button
                             onClick={handleLogout}
-                            className="flex items-center gap-3 px-4 py-3 w-full text-red-400 hover:bg-white/5 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+                            className="flex items-center gap-3 px-4 py-3 w-full text-red-300 hover:bg-white/10 hover:text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer"
                         >
                             <LogOut size={20} />
-                            Log Out [→
+                            Logout
                         </button>
                     </div>
                 </div>

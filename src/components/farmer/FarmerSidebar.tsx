@@ -2,39 +2,52 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useUser } from "@/context/UserContext";
 import {
     LayoutDashboard,
-    ShoppingBag,
-    List,
+    PlusCircle,
+    ListFilter,
+    ShoppingCart,
     Wallet,
-    Bell,
+    ShieldCheck,
     Settings,
     LogOut,
     X,
+    Users,
+    Star,
+    BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
 interface FarmerSidebarProps {
-    isOpen: boolean;
-    onClose: () => void;
+    isOpen?: boolean;
+    onClose?: () => void;
+    activeTab?: string;
 }
 
 const menuItems = [
-    { name: "Overview", href: "/farmer", icon: LayoutDashboard },
-    { name: "Sell Product", href: "/farmer/sell", icon: ShoppingBag },
-    { name: "My Listings", href: "/farmer/listings", icon: List },
-    { name: "Wallet", href: "/farmer/wallet", icon: Wallet },
-    { name: "Notification", href: "/farmer/notifications", icon: Bell },
+    { name: "Dashboard", href: "/farmer", icon: LayoutDashboard },
+    { name: "Sell Produce", href: "/farmer/sell", icon: PlusCircle },
+    { name: "Listings & Approval", href: "/farmer/listings", icon: ListFilter },
+    { name: "Orders", href: "/farmer/orders", icon: ShoppingCart },
+    { name: "Payouts & Wallet", href: "/farmer/wallet", icon: Wallet },
+    { name: "Customers", href: "/farmer/customers", icon: Users },
+    { name: "Reviews", href: "/farmer/reviews", icon: Star },
+    { name: "Analytics", href: "/farmer/analytics", icon: BarChart3 },
+    { name: "KYC Verification", href: "/farmer/kyc", icon: ShieldCheck },
     { name: "Settings", href: "/farmer/settings", icon: Settings },
 ];
+
 
 export function FarmerSidebar({ isOpen, onClose }: FarmerSidebarProps) {
     const pathname = usePathname();
     const router = useRouter();
+    const { logout } = useUser();
 
-    const handleLogout = () => {
-        router.push("/");
+    const handleLogout = async () => {
+        await logout();
+        router.push("/login");
     };
 
     return (
@@ -50,14 +63,14 @@ export function FarmerSidebar({ isOpen, onClose }: FarmerSidebarProps) {
             {/* Sidebar Container */}
             <aside
                 className={cn(
-                    "fixed top-0 left-0 h-full w-56 bg-[#1B4D28] z-50 transition-transform duration-300 ease-in-out md:translate-x-0 flex flex-col",
+                    "fixed top-0 left-0 h-full w-64 bg-[#1B4D28] z-50 transition-transform duration-300 ease-in-out md:translate-x-0 flex flex-col",
                     isOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >
                 {/* Logo / Brand */}
-                <div className="flex items-center justify-between px-5 py-5 border-b border-[#2C5E39]">
-                    <div className="flex items-center gap-2.5">
-                        <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-md bg-white p-0.5">
+                <div className="flex items-center justify-between px-6 py-6 border-b border-[#2C5E39]">
+                    <div className="flex items-center gap-3">
+                        <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg bg-white p-1">
                             <Image
                                 src="/LOGO.jpg"
                                 alt="Smarthub Agrochain Logo"
@@ -69,23 +82,16 @@ export function FarmerSidebar({ isOpen, onClose }: FarmerSidebarProps) {
                             Smarthub <br /> Agrochain
                         </span>
                     </div>
-                    {/* Notification dot */}
-                    <div className="flex items-center gap-2">
-                        <div className="relative">
-                            <Bell size={16} className="text-white" />
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-[#1B4D28]" />
-                        </div>
-                        <button
-                            onClick={onClose}
-                            className="md:hidden text-gray-300 hover:text-white"
-                        >
-                            <X size={18} />
-                        </button>
-                    </div>
+                    <button
+                        onClick={onClose}
+                        className="md:hidden text-gray-300 hover:text-white"
+                    >
+                        <X size={20} />
+                    </button>
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+                <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
                     {menuItems.map((item) => {
                         const isActive =
                             item.href === "/farmer"
@@ -100,7 +106,7 @@ export function FarmerSidebar({ isOpen, onClose }: FarmerSidebarProps) {
                                 className={cn(
                                     "flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
                                     isActive
-                                        ? "bg-white text-[#1B4D28] shadow-sm"
+                                        ? "bg-white text-[#1B4D28] font-semibold shadow-sm"
                                         : "text-gray-300 hover:bg-white/10 hover:text-white"
                                 )}
                             >
@@ -112,13 +118,13 @@ export function FarmerSidebar({ isOpen, onClose }: FarmerSidebarProps) {
                 </nav>
 
                 {/* Logout */}
-                <div className="px-3 pb-5 border-t border-[#2C5E39] pt-3">
+                <div className="px-4 pb-5 border-t border-[#2C5E39] pt-3">
                     <button
                         onClick={handleLogout}
-                        className="flex items-center gap-3 px-4 py-2.5 w-full text-gray-300 hover:bg-white/5 rounded-lg text-sm font-medium transition-colors hover:text-white"
+                        className="flex items-center gap-3 px-4 py-2.5 w-full text-red-300 hover:bg-white/10 hover:text-white rounded-lg text-sm font-medium transition-colors"
                     >
                         <LogOut size={18} />
-                        Log Out
+                        Logout
                     </button>
                 </div>
             </aside>

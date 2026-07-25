@@ -111,9 +111,10 @@ export default function HowItWorks() {
             <Navbar />
 
             {/* ─── Premium Glassmorphic Hero ─── */}
-            <section className="relative min-h-[96vh] w-full flex flex-col items-center justify-center overflow-hidden">
+            <section className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden font-sans">
                 <div className="absolute inset-0 z-0">
-                    <div className="absolute inset-0 bg-black/60 z-10" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-black/80 z-10" />
+                    <div className="absolute inset-0 bg-black/20 z-10" />
                     <Image
                         src="/how-it-works-hero.jpg"
                         alt="Creative workspace desk flatlay with plants and laptop"
@@ -122,38 +123,49 @@ export default function HowItWorks() {
                         priority
                     />
                 </div>
-                <div className="relative z-20 text-center px-6 max-w-4xl mx-auto flex flex-col items-center pt-44 pb-28">
-                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white mb-6 drop-shadow-2xl leading-tight">
+                <div className="relative z-20 text-center px-6 max-w-5xl mx-auto flex flex-col items-center pt-24 pb-28 md:pb-24">
+                    <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-light text-white tracking-tight leading-[1.1] mb-6 md:mb-8 drop-shadow-2xl">
                         Transparent Sourcing. <br />
-                        <span className="text-[#81C784]">
-                            Globally Verified Sourcing.
-                        </span>
+                        <span className="block mt-1 md:mt-2 text-[#4CAF50] font-normal">Globally Verified Sourcing</span>
                     </h1>
-                    <p className="text-base sm:text-lg md:text-xl text-gray-200 max-w-2xl mx-auto leading-relaxed drop-shadow-lg mb-10 font-light">
+                    <p className="text-base sm:text-lg md:text-2xl text-gray-100 max-w-3xl mx-auto leading-relaxed drop-shadow-lg font-light mb-8 md:mb-12">
                         Agrochain connects international grain, nut, and oilseed importers directly to verified farms in Nigeria. Explore our visual workflow below.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <a href="#workflow">
-                            <Button className="bg-[#1B4D28] hover:bg-[#143d20] border border-[#2C5E39] text-white px-8 py-3.5 rounded-full text-base font-semibold shadow-2xl transition-all hover:scale-105">
-                                Explore Workflow
-                            </Button>
+                        <a href="#workflow" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-base md:text-lg font-medium rounded-full transition-all shadow-xl shadow-green-900/30 transform hover:scale-105 inline-block">
+                            Explore Workflow
                         </a>
-                        <a href="#estimator">
-                            <Button className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-8 py-3.5 rounded-full text-base font-medium shadow-xl backdrop-blur-sm transition-all hover:scale-105">
-                                Cost Estimator
-                            </Button>
+                        <a href="#estimator" className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-base md:text-lg font-medium rounded-full backdrop-blur-sm transition-all hover:scale-105 inline-block">
+                            Cost Estimator
                         </a>
+                    </div>
+                </div>
+
+                {/* Partner Logos Banner */}
+                <div className="absolute bottom-5 z-20 w-full flex justify-center items-center px-4">
+                    <div className="flex items-center justify-center gap-6 md:gap-14 flex-wrap max-w-xs sm:max-w-none">
+                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
+                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={65} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
+                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
+                        <Image src="/logos/VISTA.png" alt="Vista" width={70} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
+                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={90} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
                     </div>
                 </div>
             </section>
 
             {/* ─── Interactive Role Perspective Switcher ─── */}
-            <section id="workflow" className="py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto scroll-mt-20">
+            <section id="workflow" className="py-32 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto scroll-mt-20">
                 <div className="text-center mb-16">
-                    <h2 className="text-[#1B4D28] text-3xl md:text-4xl font-extrabold tracking-tight mb-4">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                        <span className="font-handwriting text-[#4CAF50] text-2xl md:text-3xl italic">
+                            Seamless Export Lifecycle
+                        </span>
+                        <span className="text-2xl">⚡</span>
+                    </div>
+                    <h2 className="text-4xl md:text-5xl font-bold text-[#1a1a1a] tracking-tight mb-4">
                         Choose Your Perspective
                     </h2>
-                    <p className="text-gray-500 text-base sm:text-lg max-w-xl mx-auto">
+                    <p className="text-gray-600 text-lg max-w-xl mx-auto leading-relaxed">
                         Toggle between roles to see how Smarthub Agrochain optimizes the export lifecycle tailored to your operational needs.
                     </p>
                     
@@ -367,16 +379,16 @@ export default function HowItWorks() {
             </section>
 
             {/* ─── Immersive Loop Timeline ─── */}
-            <section className="py-24 bg-[#1B4D28] text-white">
+            <section className="py-32 bg-[#1B4D28] text-white">
                 <div className="max-w-7xl mx-auto px-6 md:px-12">
                     <div className="text-center mb-16">
-                        <span className="bg-white/10 text-[#81C784] px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
-                            Secure Logistics Cycle
+                        <span className="font-handwriting text-[#81C784] text-2xl md:text-3xl italic block mb-2">
+                            Integrated Cargo Network
                         </span>
-                        <h2 className="text-3xl md:text-5xl font-extrabold mt-4 mb-4">
+                        <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
                             The Smarthub Agrochain Loop
                         </h2>
-                        <p className="text-gray-300 text-base md:text-lg max-w-xl mx-auto font-light">
+                        <p className="text-gray-200 text-lg max-w-xl mx-auto font-light leading-relaxed">
                             How we maintain a 100% successful export record through our integrated cargo network.
                         </p>
                     </div>
@@ -442,15 +454,15 @@ export default function HowItWorks() {
             </section>
 
             {/* ─── Interactive Cost & Commission Estimator ─── */}
-            <section id="estimator" className="py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto scroll-mt-20">
+            <section id="estimator" className="py-32 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto scroll-mt-20">
                 <div className="text-center mb-16">
-                    <span className="bg-[#1B4D28]/10 text-[#1B4D28] px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
-                        Cost Transparent Estimator
+                    <span className="font-handwriting text-[#4CAF50] text-2xl md:text-3xl italic block mb-2">
+                        Real-Time Cost Calculator
                     </span>
-                    <h2 className="text-[#1B4D28] text-3xl md:text-5xl font-extrabold tracking-tight mt-4 mb-4">
+                    <h2 className="text-4xl md:text-5xl font-bold text-[#1a1a1a] tracking-tight mb-4">
                         Calculate Your Export Budget
                     </h2>
-                    <p className="text-gray-500 text-base sm:text-lg max-w-2xl mx-auto">
+                    <p className="text-gray-600 text-lg max-w-2xl mx-auto leading-relaxed">
                         Estimate your total cargo budget instantly. Select crop baseline types, destination regions, and adjust quantities to see pricing real-time.
                     </p>
                 </div>
@@ -589,16 +601,16 @@ export default function HowItWorks() {
             </section>
 
             {/* ─── Elegant FAQ Accordion ─── */}
-            <section className="py-24 bg-white px-4 sm:px-6 md:px-12">
+            <section className="py-32 bg-white px-4 sm:px-6 md:px-12">
                 <div className="max-w-4xl mx-auto">
                     <div className="text-center mb-16">
-                        <span className="bg-[#1B4D28]/10 text-[#1B4D28] px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest">
-                            Customer FAQ Helpdesk
+                        <span className="font-handwriting text-[#4CAF50] text-2xl md:text-3xl italic block mb-2">
+                            Help & Support
                         </span>
-                        <h2 className="text-[#1B4D28] text-3xl md:text-4xl font-extrabold tracking-tight mt-4 mb-4">
+                        <h2 className="text-4xl md:text-5xl font-bold text-[#1a1a1a] tracking-tight mb-4">
                             Frequently Asked Questions
                         </h2>
-                        <p className="text-gray-500 text-sm sm:text-base max-w-xl mx-auto">
+                        <p className="text-gray-600 text-lg max-w-xl mx-auto leading-relaxed">
                             Got questions about laboratory tests, shipping logistics, payment terms, or crop grades? We have the answers.
                         </p>
                     </div>

@@ -12,20 +12,18 @@ export default function AdminLayout({
     children: React.ReactNode;
 }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const { user } = useUser();
+    const { user, loading } = useUser();
     const pathname = usePathname();
     const router = useRouter();
 
     const isAuthPage = pathname === "/admin/login" || pathname === "/admin/signup";
 
     useEffect(() => {
-        // Guard check: Redirect to admin login if not logged in as admin
-        if (!isAuthPage && (!user || user.role !== "admin")) {
+        if (!loading && !isAuthPage && (!user || user.role?.toUpperCase() !== "ADMIN")) {
             router.replace("/admin/login");
         }
-    }, [user, isAuthPage, router]);
+    }, [user, loading, isAuthPage, router]);
 
-    // If it's the login or signup page, render clean without sidebar/header/guards
     if (isAuthPage) {
         return (
             <div className="min-h-screen bg-[#EEF2EE] w-full flex items-center justify-center font-sans">
@@ -34,8 +32,7 @@ export default function AdminLayout({
         );
     }
 
-    // While checking authentication, show a premium spinner
-    if (!user || user.role !== "admin") {
+    if (loading || !user || user.role?.toUpperCase() !== "ADMIN") {
         return (
             <div className="min-h-screen bg-[#EEF2EE] w-full flex items-center justify-center font-sans">
                 <div className="flex flex-col items-center gap-3">

@@ -92,7 +92,7 @@ export function Connectivity() {
 
                     </div>
 
-                    <Link href="/dashboard/products" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-lg font-medium rounded-full transition-shadow shadow-lg shadow-green-900/20 w-fit block text-center">
+                    <Link href="/products" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-lg font-medium rounded-full transition-shadow shadow-lg shadow-green-900/20 w-fit block text-center">
                         Explore Product
                     </Link>
 

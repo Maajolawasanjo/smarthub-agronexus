@@ -1,47 +1,51 @@
 "use client";
 
-import React, { useState } from "react";
-import { Download, Plus, Check, X, ArrowRight, Eye, CheckCircle2, ShieldCheck, HelpCircle } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Download, Plus, Check, X, ArrowRight, Eye, CheckCircle2, ShieldCheck, HelpCircle, RefreshCw } from "lucide-react";
 import Image from "next/image";
 
-// Initial mock data matching Image 3
-const initialListings = [
-    { id: "83335", product: "Fresh Tomatoes", farmer: "John Deo", status: "Pending", price: "$145.00", moisture: "12%", origin: "Kano, Nigeria", organic: "Yes", certificate: "FDA-98213" },
-    { id: "90299", product: "Organic Maize", farmer: "Jane Smith", status: "Pending", price: "$345.00", moisture: "8%", origin: "Oyo, Nigeria", organic: "Yes", certificate: "USDA-Org" },
-    { id: "90298", product: "Organic Maize", farmer: "Jane Smith", status: "Pending", price: "$345.00", moisture: "9%", origin: "Oyo, Nigeria", organic: "Yes", certificate: "USDA-Org" },
-    { id: "65109", product: "Foreign Rice", farmer: "Ahmed Buba", status: "Approved", price: "$345.00", moisture: "14%", origin: "Kebbi, Nigeria", organic: "No", certificate: "SON-8812" },
-    { id: "65108", product: "Foreign Rice", farmer: "Ahmed Buba", status: "Rejected", price: "$345.00", moisture: "18%", origin: "Kebbi, Nigeria", organic: "No", certificate: "Expired" },
-];
-
 export default function AdminProductsPage() {
-    const [listings, setListings] = useState(initialListings);
-    const [activeTab, setActiveTab] = useState("All Orders");
+    const [listings, setListings] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState("All Listings");
 
-    React.useEffect(() => {
-        async function fetchSubmissions() {
-            try {
-                const res = await fetch("/api/farmer/produce");
-                const data = await res.json();
-                if (data.products && data.products.length > 0) {
-                    const mapped = data.products.map((p: any) => ({
-                        id: p.id,
-                        product: p.name,
-                        farmer: p.farmerProfile?.user?.fullName || p.farmerProfile?.farmName || "Verified Farmer",
-                        status: p.isAvailable ? "Approved" : "Pending",
-                        price: `$${parseFloat(p.price).toLocaleString()}`,
-                        moisture: "8.5%",
-                        origin: `${p.farmerProfile?.state || "Kano"}, Nigeria`,
-                        organic: "Yes",
-                        certificate: "CERT-9018",
-                    }));
-                    setListings(mapped);
-                }
-            } catch (err) {
-                // Fallback
+    const fetchSubmissions = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const res = await fetch("/api/admin/products");
+            if (!res.ok) {
+                console.warn("Failed to fetch admin products status:", res.status);
+                setIsLoading(false);
+                return;
             }
+            const data = await res.json();
+            const list = data.products || data.produce || [];
+            const mapped = list.map((p: any) => ({
+                id: p.id,
+                product: p.name,
+                farmer: p.farmerProfile?.user?.fullName || p.farmerProfile?.farmName || "Verified Farmer",
+                farmerEmail: p.farmerProfile?.user?.email || "N/A",
+                status: p.isAvailable ? "Approved" : "Pending",
+                price: `₦${parseFloat(p.price).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`,
+                moisture: "8.5%",
+                origin: `${p.farmerProfile?.state || "Taraba"}, Nigeria`,
+                organic: "Yes",
+                certificate: "CERT-9018",
+                rawProduct: p,
+            }));
+            setListings(mapped);
+        } catch (err) {
+            console.error("Fetch submissions error:", err);
+        } finally {
+            setIsLoading(false);
         }
-        fetchSubmissions();
     }, []);
+
+    useEffect(() => {
+        fetchSubmissions();
+        const interval = setInterval(fetchSubmissions, 10000); // Polling every 10s for new produce submissions
+        return () => clearInterval(interval);
+    }, [fetchSubmissions]);
 
     // Modal states
     const [showAddModal, setShowAddModal] = useState(false);
@@ -73,8 +77,9 @@ export default function AdminProductsPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ isApproved: true }),
             });
+            fetchSubmissions();
         } catch (err) {
-            // Fail silent/fallback to state
+            console.error("Approve error:", err);
         }
         triggerToast(`Listing #${id} has been approved and published!`);
     };
@@ -89,8 +94,9 @@ export default function AdminProductsPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ isApproved: false }),
             });
+            fetchSubmissions();
         } catch (err) {
-            // Fail silent/fallback to state
+            console.error("Reject error:", err);
         }
         triggerToast(`Listing #${id} has been rejected.`);
     };
@@ -127,10 +133,10 @@ export default function AdminProductsPage() {
 
     // Tabs filter mappings
     const filteredListings = listings.filter(item => {
-        if (activeTab === "Active Orders") return item.status === "Approved";
-        if (activeTab === "Pending Orders") return item.status === "Pending";
-        if (activeTab === "Cancel Orders") return item.status === "Rejected";
-        return true; // "All Orders"
+        if (activeTab === "Approved Listings" || activeTab === "Active Orders") return item.status === "Approved";
+        if (activeTab === "Pending Approval" || activeTab === "Pending Orders") return item.status === "Pending";
+        if (activeTab === "Rejected Listings" || activeTab === "Cancel Orders") return item.status === "Rejected";
+        return true; // "All Listings"
     });
 
     return (
@@ -149,6 +155,13 @@ export default function AdminProductsPage() {
                     Manage all product listings from farmers
                 </p>
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={fetchSubmissions}
+                        className="flex items-center gap-2 bg-gray-100 text-gray-700 text-xs font-semibold px-4 py-2.5 rounded-xl hover:bg-gray-200 shadow-sm transition-colors cursor-pointer"
+                    >
+                        <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+                        Refresh
+                    </button>
                     <button
                         onClick={handleExport}
                         className="flex items-center gap-2 bg-[#1B4D28] text-white text-xs font-semibold px-4 py-2.5 rounded-xl hover:bg-[#143d20] shadow-sm transition-colors cursor-pointer"
@@ -180,7 +193,7 @@ export default function AdminProductsPage() {
 
             {/* Filter Tabs */}
             <div className="flex border-b border-gray-200 overflow-x-auto whitespace-nowrap scrollbar-none gap-6 text-sm font-medium">
-                {["All Orders", "Active Orders", "Pending Orders", "Cancel Orders"].map(tab => (
+                {["All Listings", "Pending Approval", "Approved Listings", "Rejected Listings"].map(tab => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -201,7 +214,7 @@ export default function AdminProductsPage() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="border-b border-gray-100 bg-gray-50/50">
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
+                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Listing ID</th>
                                 <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Product</th>
                                 <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Farmer</th>
                                 <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>

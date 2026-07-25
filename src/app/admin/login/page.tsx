@@ -15,7 +15,7 @@ import {
 import Image from "next/image";
 
 export default function AdminLoginPage() {
-  const { updateUser } = useUser();
+  const { setUserFromAuth } = useUser();
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -23,13 +23,10 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Toast success simulation
   const [successToast, setSuccessToast] = useState("");
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     setError("");
 
     if (!email || !password) {
@@ -40,13 +37,11 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/admin/login", {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
           email,
           password,
@@ -56,50 +51,28 @@ export default function AdminLoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.message);
+        setError(data.error || "Authentication failed.");
         return;
       }
 
-      updateUser(data.admin);
+      if (data.user?.role?.toUpperCase() !== "ADMIN") {
+        setError("Unauthorized access. Admin privileges required.");
+        return;
+      }
 
+      setUserFromAuth(data.user);
       setSuccessToast("Access authorized! Initializing Admin Dashboard...");
 
       setTimeout(() => {
         router.replace("/admin/overview");
-        console.log("Admin logged in successfully:", data.admin);
-      }, 1500);
-    } catch (error) {
-      setError("Unable to login. Try again.");
+      }, 1000);
+    } catch (err) {
+      console.error("Admin login error:", err);
+      setError("Unable to authenticate. Connection error.");
     } finally {
       setLoading(false);
     }
   };
-
-  // Quick Admin Demo Trigger (extremely satisfying for quick testing)
-  // const handleQuickLogin = () => {
-  //   setLoading(true);
-  //   setError("");
-
-  //   setTimeout(() => {
-  //     updateUser({
-  //       name: "OLAK",
-  //       email: "admin@smarthub.com",
-  //       password: "admin",
-  //       role: "ADMIN",
-  //       profileImage: "/avatar-1.png",
-  //       currency: "NGN",
-  //       country: "Nigeria",
-  //       address: "Smarthub Operations Headquarters, Lagos",
-  //     });
-
-  //     setSuccessToast(
-  //       "Quick authorization granted! Entering Command Center...",
-  //     );
-  //     setTimeout(() => {
-  //       router.replace("/admin/overview");
-  //     }, 1200);
-  //   }, 500);
-  // };
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#EEF2EE] px-4 py-12 font-sans">
@@ -113,7 +86,7 @@ export default function AdminLoginPage() {
         )}
 
         {/* Emerald dark green styled login card */}
-        <div className="bg-[#1B4D28] p-8 rounded-3xl border border-white/5 shadow-2xl space-y-6 animate-fadeIn">
+        <div className="bg-[#1B4D28] p-8 rounded-3xl border border-white/5 shadow-2xl space-y-6">
           {/* Logo & Branding */}
           <div className="flex flex-col items-center text-center space-y-3">
             <div className="relative h-14 w-14 bg-white rounded-2xl overflow-hidden p-1 flex-shrink-0 shadow-lg ring-4 ring-white/5">
@@ -129,10 +102,11 @@ export default function AdminLoginPage() {
                 Smarthub Agrochain
               </h2>
               <span className="inline-flex px-2.5 py-0.5 rounded-full bg-[#1B4D28] text-white text-[9px] font-bold uppercase tracking-wider">
-                Internal Portal
+                Internal Admin Portal
               </span>
             </div>
           </div>
+
           {/* Error Banner */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3.5 flex items-start gap-2.5 text-xs font-semibold text-red-400">
@@ -143,6 +117,7 @@ export default function AdminLoginPage() {
               <span>{error}</span>
             </div>
           )}
+
           {/* Login Form */}
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             {/* Email field */}
@@ -156,12 +131,12 @@ export default function AdminLoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. admin@smarthub.com"
+                  placeholder="admin@smarthub.com"
                   className="w-full bg-white/5 border border-white/10 text-white placeholder:text-white/35 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-[#4CAF50] focus:ring-1 focus:ring-[#4CAF50]"
                 />
                 <Mail
                   size={18}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black"
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/50"
                 />
               </div>
             </div>
@@ -182,12 +157,12 @@ export default function AdminLoginPage() {
                 />
                 <Lock
                   size={18}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black"
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/50"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-black hover:text-emerald-100 cursor-pointer"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/50 hover:text-white cursor-pointer"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -198,7 +173,7 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-white hover:bg-gray-50 text-[#1B4D28] py-3 px-4 rounded-xl text-xs font-bold shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 mt-20"
+              className="w-full bg-white hover:bg-gray-50 text-[#1B4D28] py-3 px-4 rounded-xl text-xs font-bold shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 mt-6"
             >
               {loading ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#1B4D28]"></div>
@@ -210,35 +185,6 @@ export default function AdminLoginPage() {
               )}
             </button>
           </form>
-          {/* Divider */}
-          {/* <div className="relative flex py-2 items-center">
-            <div className="flex-grow border-t border-white/10"></div>
-            <span className="flex-shrink mx-4 text-[10px] font-bold text-emerald-200/50 uppercase tracking-widest">
-              Or
-            </span>
-            <div className="flex-grow border-t border-white/10"></div>
-          </div> */}
-          {/* Quick Demo Admin Login Button (Super premium addition) */}
-          {/* <button */}
-          // type="button" // disabled={loading}
-          // className="w-full bg-white/5 border border-white/10
-          hover:bg-white/10 text-white py-3 px-4 rounded-xl text-xs font-bold
-          transition-all active:scale-[0.98] cursor-pointer flex items-center
-          justify-center gap-2"
-          {/* > */}
-          {/* <ShieldCheck size={16} className="text-[#81C784] animate-pulse" />
-            Bypass Auth (Demo) */}
-          {/* </button> */}
-          {/* Footer Switch Link */}
-          {/* <div className="text-center pt-2">
-            <span className="text-xs text-emerald-100/70">New? </span>
-            <Link
-              href="/admin/signup"
-              className="text-xs font-bold text-emerald-300 hover:text-emerald-200 hover:underline transition-colors"
-            >
-              Register here
-            </Link>
-          </div> */}
         </div>
       </div>
     </div>

@@ -1,56 +1,31 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
-import { prisma } from "@/lib/prisma";
+import { processWebhookPaymentEvent } from "@/services/payment.service";
 
 export async function POST(req: Request) {
   try {
-    const secret = process.env.PAYSTACK_SECRET_KEY || "demo_secret_key";
-    const bodyText = await req.text();
+    const rawBody = await req.text();
+    const signature = req.headers.get("x-paystack-signature") || req.headers.get("x-webhook-signature");
+    const payload = JSON.parse(rawBody);
 
-    // Verify Paystack HMAC Signature
-    const signature = req.headers.get("x-paystack-signature");
-    if (signature && process.env.NODE_ENV === "production") {
-      const hash = crypto
-        .createHmac("sha512", secret)
-        .update(bodyText)
-        .digest("hex");
+    const eventType = payload.event || "charge.success";
+    const transactionRef = payload.data?.reference || payload.reference || `TX-${Date.now()}`;
+    const amount = (payload.data?.amount ? payload.data.amount / 100 : payload.amount) || 1000;
+    const orderId = payload.data?.metadata?.orderId || payload.orderId;
 
-      if (hash !== signature) {
-        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-      }
+    if (!orderId) {
+      return NextResponse.json({ error: "Missing orderId in webhook metadata." }, { status: 400 });
     }
 
-    const event = JSON.parse(bodyText);
+    const result = await processWebhookPaymentEvent(rawBody, signature, {
+      eventType,
+      transactionRef,
+      amount,
+      orderId,
+    });
 
-    // Handle charge success
-    if (event.event === "charge.success") {
-      const { reference, amount, customer } = event.data;
-
-      // Find matching payment record by transaction reference
-      const payment = await prisma.payment.findFirst({
-        where: { transactionRef: reference },
-      });
-
-      if (payment) {
-        await prisma.$transaction([
-          prisma.payment.update({
-            where: { id: payment.id },
-            data: { status: "COMPLETED" },
-          }),
-          prisma.order.update({
-            where: { id: payment.orderId },
-            data: { status: "PROCESSING" },
-          }),
-        ]);
-      }
-    }
-
-    return NextResponse.json({ received: true }, { status: 200 });
+    return NextResponse.json(result, { status: 200 });
   } catch (error: any) {
-    console.error("Error handling payment webhook:", error);
-    return NextResponse.json(
-      { error: "Webhook handler failed." },
-      { status: 500 }
-    );
+    console.error("Error processing payment webhook controller:", error);
+    return NextResponse.json({ error: error.message || "Webhook processing failed." }, { status: 400 });
   }
 }

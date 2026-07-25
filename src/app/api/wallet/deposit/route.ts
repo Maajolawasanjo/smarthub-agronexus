@@ -1,59 +1,70 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
+import { WalletService } from "@/services/wallet.service";
+import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
+import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 
+// POST /api/wallet/deposit — Multi-Option Funding Instructions & Deposit Trigger
 export async function POST(req: Request) {
+  const traceCtx = createTraceContext(req);
   try {
-    const body = await req.json();
-    const { amount, email, currency = "NGN" } = body;
+    const session = await getSession();
+    if (!session?.userId) {
+      const res = NextResponse.json(
+        createErrorResponse("UNAUTHORIZED", "Authentication required to fund wallet."),
+        { status: 401 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
 
-    if (!amount || amount <= 0) {
-      return NextResponse.json(
-        { error: "A valid deposit amount is required." },
+    const body = await req.json();
+    const { amount, method = "VIRTUAL_ACCOUNT", simulateWebhook = false } = body;
+    const numAmount = parseFloat(amount);
+
+    if (isNaN(numAmount) || numAmount <= 0) {
+      const res = NextResponse.json(
+        createErrorResponse("INVALID_AMOUNT", "Deposit amount must be greater than zero"),
         { status: 400 }
       );
+      return attachTraceHeaders(res, traceCtx);
     }
 
-    const reference = `WAL-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    // Direct simulated instant deposit completion (for testing/demo)
+    if (simulateWebhook) {
+      const txRef = `DEP-SIM-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const result = await WalletService.executeDeposit(session.userId, numAmount, txRef);
 
-    // In production: call Paystack API `https://api.paystack.co/transaction/initialize` or Stripe Checkout Session
-    const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
-
-    if (paystackSecretKey) {
-      const response = await fetch("https://api.paystack.co/transaction/initialize", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${paystackSecretKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          amount: Math.round(parseFloat(amount) * 100), // Kobo / cents conversion
-          email: email || "buyer@smarthubagro.com",
-          currency,
-          reference,
-          callback_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/wallet?status=success`,
-        }),
-      });
-
-      const data = await response.json();
-      if (data.status) {
-        return NextResponse.json({
-          authorizationUrl: data.data.authorization_url,
-          accessCode: data.data.access_code,
-          reference,
-        });
-      }
+      const res = NextResponse.json(
+        createSuccessResponse({
+          status: "SUCCESS",
+          transactionRef: txRef,
+          amountCredited: numAmount,
+          newBalance: Number(result.updatedWallet.balance),
+          message: `Wallet successfully credited with ${WalletService.formatNGN(numAmount)}`,
+        })
+      );
+      return attachTraceHeaders(res, traceCtx);
     }
 
-    // Fallback simulation URL for development
-    return NextResponse.json({
-      authorizationUrl: `/dashboard/wallet?deposit_success=true&ref=${reference}&amount=${amount}`,
-      reference,
-      simulated: true,
-    });
-  } catch (error: any) {
-    console.error("Error initializing wallet deposit API:", error);
-    return NextResponse.json(
-      { error: "Internal server error initializing payment deposit." },
+    // Return Multi-Option Funding Instructions
+    const walletPageData = await WalletService.getWalletPageData(session.userId);
+    const fundingInstructions = walletPageData.fundingInstructions;
+
+    const res = NextResponse.json(
+      createSuccessResponse({
+        requestedAmount: numAmount,
+        formattedAmount: WalletService.formatNGN(numAmount),
+        method,
+        fundingInstructions,
+      })
+    );
+    return attachTraceHeaders(res, traceCtx);
+  } catch (err: any) {
+    console.error("Error in POST /api/wallet/deposit:", err);
+    const res = NextResponse.json(
+      createErrorResponse("DEPOSIT_FAILED", err.message || "Failed to initialize deposit instructions"),
       { status: 500 }
     );
+    return attachTraceHeaders(res, traceCtx);
   }
 }
