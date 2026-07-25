@@ -1,682 +1,295 @@
-# Smarthub Agrochain
+# 🌾 Smarthub Agrochain (AgroNexus)
 
-> A premium B2B agricultural export marketplace connecting international buyers with verified Nigerian farm produce — with full transparency, laboratory-grade quality verification, and real-time shipment tracking.
+> **Enterprise-Grade B2B Agricultural Export & Sourcing Marketplace**
+> 
+> *Architected for high-concurrency agricultural commodity trading, automated escrow verification, multi-tenant farmer onboarding, real-time shipment telemetry, and cross-border settlement across sub-Saharan Africa.*
 
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
-[![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org)
-[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4-38bdf8?logo=tailwindcss)](https://tailwindcss.com)
-[![Framer Motion](https://img.shields.io/badge/Framer_Motion-12-pink?logo=framer)](https://www.framer.com/motion)
-
----
-
-## Table of Contents
-
-1. [Project Overview](#1-project-overview)
-2. [Tech Stack](#2-tech-stack)
-3. [Getting Started](#3-getting-started)
-4. [Project Structure](#4-project-structure)
-5. [Pages & Routes](#5-pages--routes)
-6. [Context / State Management](#6-context--state-management)
-7. [Design System](#7-design-system)
-8. [Page Transitions](#8-page-transitions)
-9. [User Roles & Access](#9-user-roles--access)
-10. [Product Catalogue](#10-product-catalogue)
-11. [Public Assets](#11-public-assets)
-12. [Key Components](#12-key-components)
-13. [localStorage Keys](#13-localstorage-keys)
-14. [Configuration Files](#14-configuration-files)
-15. [Deployment](#15-deployment)
-16. [Known Limitations (Demo Build)](#16-known-limitations-demo-build)
-17. [Roadmap](#17-roadmap)
-18. [Contributing](#18-contributing)
+[![Next.js](https://img.shields.io/badge/Next.js-16.x_(App_Router)-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x_Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16.x-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Prisma](https://img.shields.io/badge/Prisma_ORM-6.x-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-4.x-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Vitest](https://img.shields.io/badge/Vitest-3.x-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev)
 
 ---
 
-## 1. Project Overview
+## 📋 Table of Contents
 
-**Smarthub Agrochain** is a full-stack-ready Next.js frontend for a B2B agricultural export platform. It provides:
-
-- A **public-facing marketing site** (landing page, products showroom, how-it-works, about, contact)
-- A **buyer dashboard** for registered importers to manage orders, track shipments, and view wallet transactions
-- A **farmer portal** for local producers to submit produce listings, view field agent reports, and receive payouts
-- An **admin panel** for platform operators to verify listings, moderate users, and monitor analytics
-- A dual-view **product strategy**: public visitors see the curated export showroom (`/products`); authenticated buyers see their personalised sourcing dashboard (`/dashboard/products`)
-
-The entire UI is locked to **light mode only** and uses a consistent **forest-green brand palette** throughout.
-
----
-
-## 2. Tech Stack
-
-| Technology | Version | Purpose |
-|---|---|---|
-| **Next.js** | 16.x (Turbopack) | App Router, SSR, file-based routing |
-| **React** | 19.x | UI rendering and component model |
-| **TypeScript** | 5.x | Full type safety across all files |
-| **Tailwind CSS** | 4.x | Utility-first styling with custom design tokens |
-| **Framer Motion** | 12.x | Smooth page transitions and micro-animations |
-| **Recharts** | 3.x | Revenue and analytics charts in dashboards |
-| **Lucide React** | 0.563 | Consistent icon library |
-| **clsx** | 2.x | Conditional className merging |
-| **tailwind-merge** | 3.x | Prevents Tailwind class conflicts |
-| **Geist Sans / Mono** | Google Fonts | Primary sans-serif and monospace typefaces |
-| **Caveat** | Google Fonts | Handwriting-style accent font (used for decorative elements) |
+1. [Architectural Overview](#1-architectural-overview)
+2. [Core Domain & Business Capabilities](#2-core-domain--business-capabilities)
+3. [Technology Stack & System Topology](#3-technology-stack--system-topology)
+4. [Database Schema & Entity-Relationship Architecture](#4-database-schema--entity-relationship-architecture)
+5. [API Specification & Data Flow Pipelines](#5-api-specification--data-flow-pipelines)
+6. [Security, Session Management & RBAC](#6-security-session-management--rbac)
+7. [Installation & Operational Guide](#7-installation--operational-guide)
+8. [Directory Structure](#8-directory-structure)
+9. [Financial Ledger & Escrow Settlement Engine](#9-financial-ledger--escrow-settlement-engine)
+10. [Automated Quality Control & Trust Policies](#10-automated-quality-control--trust-policies)
+11. [Testing & Quality Assurance](#11-testing--quality-assurance)
+12. [Deployment & Infrastructure Topology](#12-deployment--infrastructure-topology)
+13. [Maintainers & Licensing](#13-maintainers--licensing)
 
 ---
 
-## 3. Getting Started
+## 1. Architectural Overview
+
+**Smarthub Agrochain** (AgroNexus) is a production-grade, distributed B2B platform designed to eliminate friction, opaque intermediary pricing, and quality risk in international agricultural exports. Built upon Next.js 16 App Router, PostgreSQL, Prisma ORM, and modern event-driven design patterns, the system bridges the gap between rural smallholder farmers, licensed logistics aggregators, quality control laboratories, and institutional global commodity buyers.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                 PRESENTATION LAYER                               │
+│  ┌───────────────────────┐  ┌───────────────────────┐  ┌──────────────────────┐  │
+│  │    Public Showroom    │  │    Farmer Dashboard   │  │   Admin Control HQ   │  │
+│  │     (/products)       │  │       (/farmer)       │  │       (/admin)       │  │
+│  └───────────┬───────────┘  └───────────┬───────────┘  └──────────┬───────────┘  │
+└──────────────┼──────────────────────────┼─────────────────────────┼──────────────┘
+               │                          │                         │
+┌──────────────▼──────────────────────────▼─────────────────────────▼──────────────┐
+│                              API & CONTROLLER LAYER                              │
+│  ┌───────────────────────┐  ┌───────────────────────┐  ┌──────────────────────┐  │
+│  │ /api/farmer/produce   │  │  /api/admin/products  │  │  /api/wallet/escrow  │  │
+│  └───────────┬───────────┘  └───────────┬───────────┘  └──────────┬───────────┘  │
+└──────────────┼──────────────────────────┼─────────────────────────┼──────────────┘
+               │                          │                         │
+┌──────────────▼──────────────────────────▼─────────────────────────▼──────────────┐
+│                             SERVICE & REPOSITORY LAYER                           │
+│  ┌───────────────────────┐  ┌───────────────────────┐  ┌──────────────────────┐  │
+│  │ WalletService / Escrow│  │ Trust & Policy Engine │  │ Fulfillment Engine   │  │
+│  └───────────┬───────────┘  └───────────┬───────────┘  └──────────┬───────────┘  │
+└──────────────┼──────────────────────────┼─────────────────────────┼──────────────┘
+               │                          │                         │
+┌──────────────▼──────────────────────────▼─────────────────────────▼──────────────┐
+│                             PERSISTENCE & STORAGE                                │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │               PostgreSQL (Prisma ORM with Connection Pooling)               │  │
+│  └────────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Core Domain & Business Capabilities
+
+### 🌾 1. Multi-Farmer Competition ("Supermarket Engine")
+- **Independent Listing Autonomy**: Multiple verified farmers can list identical commodities (e.g. *Cleaned Natural Sesame Seeds* or *Single-Origin Cocoa Beans*) with distinct asking prices, stock quantities, minimum order quantities (MOQ), moisture levels, and farm locations.
+- **Fair Marketplace Competition**: The storefront catalog surfaces listings side-by-side without artificial deduplication, displaying producer provenance, origin state, and trust ratings.
+
+### 🔍 2. Quality Assurance & Moderation Workflow
+- **Pending Review Pipeline**: Every new produce submission defaults to `isAvailable = false` (Pending Approval).
+- **Admin Audit Queue**: Platform operators evaluate moisture content, admixture, packaging specifications, and farm origin before toggling items to `Approved`.
+- **Multi-Image Persistence**: Supports up to 5 high-resolution inspection photos per batch, stored and mapped via the `ProductImage` database entity.
+
+### 💰 3. Escrow-Protected Financial Ledger
+- **Buyer Escrow Lock**: Funds are securely locked in an escrow account upon order placement.
+- **Automated Settlement**: Escrow is released to the seller's wallet only after digital Proof-of-Delivery (POD) is confirmed by the buyer or system inspector.
+- **Double-Entry Ledger Integrity**: Every balance adjustment (Deposit, Escrow Lock, Release, Payout Withdrawal) is recorded in immutable `WalletTransaction` ledgers.
+
+---
+
+## 3. Technology Stack & System Topology
+
+| Tier | Component | Technology | Rationale |
+|---|---|---|---|
+| **Framework** | Core Application | **Next.js 16.x (App Router)** | Server Components, Turbopack bundling, streaming SSR |
+| **Language** | Runtime | **TypeScript 5.x (Strict)** | Static safety, DTO validation, strict null checks |
+| **Database** | Database Engine | **PostgreSQL 16.x** | ACIDO compliance, JSONB support, relational integrity |
+| **ORM** | Database Adapter | **Prisma ORM 6.x** | Type-safe queries, migration control, schema safety |
+| **Styling** | Presentation | **Tailwind CSS 4.x & Vanilla CSS** | Custom design tokens, zero runtime CSS-in-JS |
+| **Animations** | Motion Engine | **Framer Motion 12.x** | Hardware-accelerated cubic-bezier transitions |
+| **Telemetry** | Observability | **Custom Tracing / W3C TraceContext** | Distributed trace headers, latency tracking |
+| **Testing** | QA | **Vitest 3.x** | High-speed unit & integration test runner |
+
+---
+
+## 4. Database Schema & Entity-Relationship Architecture
+
+The relational model (`prisma/schema.prisma`) enforces strict referential integrity across users, produce catalog, orders, and financial transactions.
+
+```mermaid
+erDiagram
+    User ||--o| FarmerProfile : owns
+    User ||--o| BuyerProfile : owns
+    User ||--o| Wallet : owns
+    FarmerProfile ||--o{ Product : produces
+    Category ||--o{ Product : categorizes
+    Product ||--o{ ProductImage : contains
+    Product ||--o1 Inventory : tracks
+    Product ||--o{ OrderItem : included_in
+    Order ||--o{ OrderItem : consists_of
+    User ||--o{ Order : places
+    Order ||--o1 Delivery : tracked_by
+    Order ||--o1 Payment : settled_by
+    Wallet ||--o{ WalletTransaction : records
+```
+
+### Key Models Overview:
+- **`User`**: Central identity with `Role` enum (`ADMIN`, `FARMER`, `BUYER`).
+- **`FarmerProfile`**: Verified farm metadata, state, LGA, and KYC status (`PENDING`, `VERIFIED`, `APPROVED`).
+- **`BuyerProfile`**: Shipping addresses, tax identification, import licenses.
+- **`Product`**: Commodity details, asking price, normalized `unit` (`KG`, `BAG`, `TON`, `CRATE`, `PIECE`), and approval state (`isAvailable`).
+- **`ProductImage`**: Linked image gallery URLs per product batch.
+- **`Inventory`**: Stock tracking with `availableQty` and `reservedQty`.
+- **`Wallet` & `WalletTransaction`**: Financial ledger tracking `BALANCE`, `ESCROW_LOCKED`, `PAYOUT_PENDING`.
+
+---
+
+## 5. API Specification & Data Flow Pipelines
+
+### Key Endpoints
+
+| HTTP Method | Route Endpoint | Role Required | Description |
+|---|---|---|---|
+| `POST` | `/api/farmer/produce` | `FARMER` | Ingests produce batch with dynamic category resolution & unit normalization |
+| `GET` | `/api/products` | `PUBLIC` | Fetches active approved market catalog |
+| `GET` | `/api/products/[id]` | `ALL` | Fetches specific produce details (supports pending review view for submitter) |
+| `GET` | `/api/admin/products` | `ADMIN` | Fetches moderation queue filtered by status (`Pending`, `Approved`, `Rejected`) |
+| `PUT` | `/api/admin/products/[id]/approve` | `ADMIN` | Approves or rejects a produce submission |
+| `POST` | `/api/wallet/deposit` | `BUYER` | Credits buyer digital wallet |
+| `POST` | `/api/wallet/withdraw` | `FARMER` | Initiates bank transfer payout from cleared balance |
+
+---
+
+## 6. Security, Session Management & RBAC
+
+1. **Role-Based Access Control (RBAC)**:
+   - `ADMIN`: Platform moderation, verification approvals, system fee configuration, global analytics.
+   - `FARMER`: Produce management, field inspection reports, wallet payout withdrawals.
+   - `BUYER`: Procurement showroom, cart management, escrow checkout, shipment tracking.
+2. **Cryptographic Sessions**:
+   - Encrypted session tokens with expiry verification (`src/lib/session.ts`).
+3. **Audit Logging & Tracing**:
+   - `W3C TraceContext` standard tracing headers (`x-trace-id`) injected into requests for API observability.
+
+---
+
+## 7. Installation & Operational Guide
 
 ### Prerequisites
+- **Node.js**: v18.x or v20.x LTS
+- **npm**: v9.x+
+- **PostgreSQL**: v15.x or v16.x
 
-- **Node.js** v18 or higher
-- **npm** v9 or higher
+### Step-by-Step Environment Setup
 
-### Installation
+1. **Clone Repository**:
+   ```bash
+   git clone https://github.com/Maajolawasanjo/smarthub-agronexus.git
+   cd smarthub-agronexus
+   ```
 
-```bash
-git clone https://github.com/your-org/smarthub-agrochain.git
-cd smarthub-agrochain
-npm install
+2. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Configure Environment Variables**:
+   Create a `.env` file in the project root:
+   ```env
+   DATABASE_URL="postgresql://user:password@localhost:5432/smarthub_agronexus?schema=public"
+   SESSION_SECRET="super-secret-32-character-minimum-key"
+   NODE_ENV="development"
+   ```
+
+4. **Initialize Database Schema & Seeds**:
+   ```bash
+   npx prisma db push
+   npx prisma generate
+   ```
+
+5. **Start Development Server**:
+   ```bash
+   npm run dev
+   ```
+   Navigate to `http://localhost:3000`.
+
+---
+
+## 8. Directory Structure
+
+```
+smarthub-agronexus/
+├── docs/                            # OpenAPI specs, audit logs, architecture diagrams
+├── prisma/                          # Database schema definition & migration scripts
+│   └── schema.prisma
+├── public/                          # Optimized static imagery & public brand assets
+├── src/
+│   ├── app/                         # Next.js 16 App Router hierarchy
+│   │   ├── admin/                   # Platform operator panel (/admin/*)
+│   │   ├── api/                     # REST API handlers & endpoints
+│   │   ├── dashboard/               # Buyer sourcing dashboard (/dashboard/*)
+│   │   ├── farmer/                  # Producer portal (/farmer/*)
+│   │   ├── products/                # Public export showroom (/products/*)
+│   │   ├── globals.css              # Custom styling tokens & theme definitions
+│   │   └── layout.tsx               # Root layout wrapper
+│   ├── components/                  # Enterprise React components
+│   │   ├── admin/                   # Admin moderation controls
+│   │   ├── dashboard/               # Buyer procurement widgets
+│   │   ├── farmer/                  # Produce submission & status components
+│   │   ├── layout/                  # Navigation bars, footers
+│   │   └── ui/                      # Reusable primitives (Buttons, Modals, Toasts)
+│   ├── context/                     # Application state providers
+│   ├── dto/                         # Data Transfer Object interfaces & validators
+│   ├── lib/                         # Core utilities, Prisma client, session security
+│   ├── repositories/                # Repository pattern implementation for data access
+│   └── services/                    # Business logic services (Wallet, Settlement, Trust)
+├── vitest.config.ts                 # Vitest test framework configuration
+└── next.config.ts                   # Next.js build configuration
 ```
 
-### Run Development Server
+---
+
+## 9. Financial Ledger & Escrow Settlement Engine
+
+The financial core (`src/services/wallet.service.ts`) ensures atomic updates to financial balances:
+
+1. **Deposit**: Buyer funds wallet via bank transfer / gateway -> Status: `CLEARED`.
+2. **Escrow Lock**: When an order is created, funds transfer from `availableBalance` -> `escrowBalance`.
+3. **Escrow Release**: Upon buyer POD confirmation, funds transfer from `escrowBalance` -> Farmer `availableBalance`.
+4. **Payout**: Farmer requests withdrawal to local bank account (`src/app/api/wallet/withdraw/route.ts`).
+
+---
+
+## 10. Automated Quality Control & Trust Policies
+
+- **Commodity Category Resolution**: Submissions automatically route to verified agricultural categories (e.g. *Tubers & Roots*, *Seeds & Grains*, *Nuts & Cocoa*, *Fresh & Processed*).
+- **Unit Normalization**: Automatically converts input metrics to standard export units (`KG`, `BAG`, `TON`, `CRATE`, `PIECE`).
+- **Tier 1 Listing Limits**: Unverified accounts are limited to listing a maximum number of active items until identity verification is completed.
+
+---
+
+## 11. Testing & Quality Assurance
+
+Run static analysis and unit test suites:
 
 ```bash
-npm run dev
-```
+# Type check TypeScript codebase
+npx tsc --noEmit
 
-Open [http://localhost:3000](http://localhost:3000) in your browser. The server uses **Turbopack** by default for fast HMR.
+# Execute unit and integration tests with Vitest
+npx vitest run
 
-> ⚠️ If you see stale images after replacing files in `/public`, delete the `.next` folder and restart:
-> ```bash
-> rm -rf .next && npm run dev
-> ```
-
-### Build for Production
-
-```bash
-npm run build
-npm run start
-```
-
-### Lint
-
-```bash
+# Run linter
 npm run lint
 ```
 
 ---
 
-## 4. Project Structure
+## 12. Deployment & Infrastructure Topology
 
-```
-smarthub-agrochain/
-├── public/                          # Static assets served at root URL
-│   ├── LOGO.jpg                     # Brand logo used in Navbar
-│   ├── hero-bg.jpg                  # Landing page hero background image
-│   ├── how-it-works-hero.jpg        # How It Works page hero background
-│   ├── landing-hero-drone.jpg       # Products page hero background
-│   ├── contact-hero.jpg             # Contact page hero background
-│   ├── agrochain-farmers.png        # Farmers imagery (used in about/connectivity sections)
-│   ├── agrochain-logistics.png      # Logistics imagery
-│   ├── target-bg.png                # Target market section background
-│   ├── target-buyer.png             # Target market — Buyer card image
-│   ├── target-importer.png          # Target market — Importer card image
-│   ├── target-processor.png         # Target market — Processor card image
-│   ├── vegetable-container.png      # Decorative produce container
-│   ├── brush-border.svg             # Decorative brush stroke SVG
-│   ├── avatar-1.png → avatar-5.png  # Testimonial user avatars
-│   ├── logos/                       # Partner/certification logos
-│   ├── about/                       # About page specific images
-│   └── images/
-│       └── products/                # Product card images (9 products)
-│           ├── sesame_seeds.png     # Cleaned Natural Sesame Seeds
-│           ├── dates.jpg            # Premium Sweet Dried Dates (Debino)
-│           ├── flour.png            # High-Grade Processed Cassava Flour
-│           ├── cashew_nut.png       # Premium Raw Cashew Nuts (RCN)
-│           ├── cocoa_beans.png      # Organic Single-Origin Cocoa Beans
-│           ├── ginger_spices.png    # Premium Split Dried Ginger
-│           ├── peanuts.png          # Export-Grade Hand-Selected Groundnuts
-│           ├── cabbage.jpg          # Fresh Premium Green Cabbages
-│           └── watermelon.jpg       # Sweet Organic Seedless Watermelons
-│
-├── src/
-│   ├── app/                         # Next.js App Router — all page routes
-│   │   ├── layout.tsx               # Root layout: fonts, providers, metadata
-│   │   ├── template.tsx             # Page transition wrapper (Framer Motion)
-│   │   ├── globals.css              # Global styles, Tailwind imports, design tokens
-│   │   ├── page.tsx                 # Landing page (/)
-│   │   ├── about/page.tsx           # About page (/about)
-│   │   ├── contact/page.tsx         # Contact page (/contact)
-│   │   ├── products/page.tsx        # Public products showroom (/products)
-│   │   ├── how-it-works/page.tsx    # How It Works + Cost Estimator (/how-it-works)
-│   │   ├── login/page.tsx           # Login page (/login)
-│   │   ├── signup/page.tsx          # Sign-up page (/signup)
-│   │   ├── cart/page.tsx            # Shopping cart (/cart)
-│   │   ├── dashboard/               # Buyer dashboard (protected area)
-│   │   │   ├── layout.tsx           # Dashboard shell: Sidebar + Header
-│   │   │   ├── template.tsx         # Dashboard-specific page transitions
-│   │   │   ├── page.tsx             # Dashboard home: StatsCards + Charts
-│   │   │   ├── products/            # Buyer's sourcing catalogue
-│   │   │   │   ├── page.tsx         # Product grid with search + filters
-│   │   │   │   └── [id]/page.tsx    # Individual product detail view
-│   │   │   ├── orders/page.tsx      # Order management with status tracking
-│   │   │   ├── tracking/page.tsx    # Shipment tracking with map-style UI
-│   │   │   ├── wallet/page.tsx      # Wallet: balance, deposits, transactions
-│   │   │   ├── notifications/page.tsx  # In-app notification centre
-│   │   │   └── settings/page.tsx    # Account & profile settings
-│   │   ├── farmer/                  # Farmer portal (separate role area)
-│   │   │   ├── layout.tsx           # Farmer shell: FarmerSidebar + Header
-│   │   │   ├── template.tsx         # Farmer-specific page transitions
-│   │   │   ├── page.tsx             # Farmer dashboard home
-│   │   │   ├── sell/page.tsx        # Submit produce for sale
-│   │   │   ├── listings/page.tsx    # View submitted produce listings
-│   │   │   ├── produce/[id]/page.tsx  # Individual produce detail
-│   │   │   ├── produce/detail/page.tsx
-│   │   │   ├── wallet/page.tsx      # Farmer payout wallet
-│   │   │   ├── notifications/page.tsx
-│   │   │   └── settings/page.tsx
-│   │   └── admin/                   # Admin panel (platform operators)
-│   │       ├── layout.tsx           # Admin shell layout
-│   │       ├── template.tsx         # Admin page transitions
-│   │       ├── page.tsx             # Redirects to /admin/overview
-│   │       ├── login/page.tsx       # Admin login gate
-│   │       ├── signup/page.tsx      # Admin account creation
-│   │       ├── overview/page.tsx    # Platform health + moderation tasks
-│   │       ├── products/page.tsx    # Listing moderation & approval queue
-│   │       ├── orders/page.tsx      # All platform orders view
-│   │       ├── users/page.tsx       # User management (Buyers & Farmers)
-│   │       ├── analytics/page.tsx   # Revenue charts and platform metrics
-│   │       ├── content/page.tsx     # Content management
-│   │       ├── notifications/page.tsx
-│   │       └── settings/page.tsx
-│   │
-│   ├── components/
-│   │   ├── layout/
-│   │   │   ├── Navbar.tsx           # Responsive top nav with auth-aware links
-│   │   │   └── Footer.tsx           # Global site footer
-│   │   ├── ui/                      # Shared primitive components
-│   │   │   ├── Button.tsx           # Styled button with variant support
-│   │   │   ├── Input.tsx            # Form input with label support
-│   │   │   ├── Select.tsx           # Styled dropdown select
-│   │   │   ├── Switch.tsx           # Toggle switch component
-│   │   │   ├── Toast.tsx            # Global toast notification system
-│   │   │   ├── Hero.tsx             # Landing page hero section
-│   │   │   ├── Connectivity.tsx     # "How We Connect" section on landing
-│   │   │   ├── TargetMarket.tsx     # Target market cards on landing
-│   │   │   └── Testimonials.tsx     # Customer testimonials with marquee
-│   │   ├── dashboard/               # Buyer dashboard components
-│   │   │   ├── Header.tsx           # Dashboard top header bar
-│   │   │   ├── Sidebar.tsx          # Collapsible left navigation sidebar
-│   │   │   ├── StatsCards.tsx       # KPI metric cards (revenue, orders, etc.)
-│   │   │   ├── RevenueChart.tsx     # Line/bar chart (Recharts)
-│   │   │   ├── RecentOffers.tsx     # Recent sourcing offers panel
-│   │   │   ├── notifications/       # Notification list components
-│   │   │   ├── orders/OrdersList.tsx
-│   │   │   ├── tracking/            # Tracking step timeline components
-│   │   │   └── wallet/              # Balance card, transaction list, add-wallet modal
-│   │   └── farmer/                  # Farmer portal components
-│   │       ├── FarmerHeader.tsx
-│   │       ├── FarmerSidebar.tsx
-│   │       ├── FarmerChart.tsx
-│   │       ├── FarmerStatsCards.tsx
-│   │       ├── FieldAgent.tsx       # Field agent assignment card
-│   │       ├── RecentSubmit.tsx     # Recent produce submissions
-│   │       ├── SubmitFarmProduce.tsx  # Produce submission form
-│   │       └── notifications/
-│   │
-│   ├── context/                     # React Context API providers
-│   │   ├── UserContext.tsx          # Auth state: user data, role, login/logout
-│   │   ├── CartContext.tsx          # Cart state: items, quantities, totals
-│   │   ├── SearchContext.tsx        # Global search query state
-│   │   └── ProduceContext.tsx       # Farmer produce submissions state
-│   │
-│   ├── lib/
-│   │   ├── data/
-│   │   │   └── products.ts          # Static product catalogue (6 dashboard products)
-│   │   ├── constants.ts             # App-wide constants
-│   │   └── utils.ts                 # cn() — className merge utility
-│   │
-│   └── types/
-│       └── index.ts                 # Shared TypeScript type definitions
-│
-├── next.config.ts                   # Next.js config (image domains, optimizations)
-├── tailwind.config.ts               # Tailwind config (if exists)
-├── postcss.config.mjs               # PostCSS config for Tailwind
-├── tsconfig.json                    # TypeScript compiler options
-└── package.json
+Optimized for containerized deployment or serverless platforms such as Vercel, Railway, or AWS ECS:
+
+```bash
+# Build production bundle
+npm run build
+
+# Start production server
+npm run start
 ```
 
 ---
 
-## 5. Pages & Routes
+## 13. Maintainers & Licensing
 
-### Public Routes (No auth required)
+Developed and maintained by **Smarthub Agrochain Engineering**.
 
-| Route | File | Description |
-|---|---|---|
-| `/` | `app/page.tsx` | Landing page: Hero, Connectivity, Target Market, Testimonials |
-| `/products` | `app/products/page.tsx` | Public export showroom — 9 products with category filter tabs and seasonality calendar |
-| `/how-it-works` | `app/how-it-works/page.tsx` | Interactive role switcher (Buyer / Farmer view), Agrochain supply loop, Live cost estimator tool, FAQ accordion |
-| `/about` | `app/about/page.tsx` | Company mission, team, and values |
-| `/contact` | `app/contact/page.tsx` | Contact form and trade desk info |
-| `/login` | `app/login/page.tsx` | Login form — writes user to `localStorage` |
-| `/signup` | `app/signup/page.tsx` | Signup form — role selection (Buyer / Farmer) |
-| `/cart` | `app/cart/page.tsx` | Cart items, quantity controls, checkout modal |
-
-### Buyer Dashboard Routes (Authenticated — role: `buyer`)
-
-| Route | Description |
-|---|---|
-| `/dashboard` | Overview: KPI stats, revenue chart, recent offers |
-| `/dashboard/products` | Personalised product catalogue with search and add-to-cart |
-| `/dashboard/products/[id]` | Product detail view: full specs, pricing, sourcing CTA |
-| `/dashboard/orders` | Order list with status badges (Pending / Active / Delivered) |
-| `/dashboard/tracking` | Multi-step shipment tracker with port-to-port timeline |
-| `/dashboard/wallet` | Wallet balance, deposit funds, transaction history |
-| `/dashboard/notifications` | Platform notifications and alerts |
-| `/dashboard/settings` | Profile update: name, email, country, currency, avatar |
-
-### Farmer Portal Routes (Authenticated — role: `farmer`)
-
-| Route | Description |
-|---|---|
-| `/farmer` | Farmer dashboard: stats, chart, field agent card, recent submissions |
-| `/farmer/sell` | Submit new produce: name, quantity, grade, harvest date |
-| `/farmer/listings` | All submitted produce and current status |
-| `/farmer/produce/[id]` | Individual produce batch detail view |
-| `/farmer/wallet` | Payout wallet and transaction history |
-| `/farmer/notifications` | Notifications and agent updates |
-| `/farmer/settings` | Profile: farm name, state, phone, bank details |
-
-### Admin Panel Routes (Authenticated — role: `admin`)
-
-| Route | Description |
-|---|---|
-| `/admin/login` | Separate admin authentication gate |
-| `/admin/overview` | Platform health, commission rate, moderation task queue (approve/reject) |
-| `/admin/products` | All farmer listings with moderation controls |
-| `/admin/orders` | Full platform order log |
-| `/admin/users` | User directory: Buyers and Farmers |
-| `/admin/analytics` | Revenue charts, category breakdowns, performance metrics |
-| `/admin/content` | Content management |
-| `/admin/notifications` | Admin notification centre |
-| `/admin/settings` | Admin account settings |
-
----
-
-## 6. Context / State Management
-
-All global state is managed via **React Context API**. Every provider is registered in `src/app/layout.tsx` and wraps the entire app.
-
-### `UserContext` (`src/context/UserContext.tsx`)
-
-Manages authentication and user profile.
-
-```typescript
-interface UserData {
-  name: string;
-  email: string;
-  profileImage: string;
-  currency: string;
-  country: string;
-  address: string;
-  role: "buyer" | "farmer" | "admin";
-  // Farmer-only fields:
-  farmName?: string;
-  phone?: string;
-  state?: string;
-}
-```
-
-**Key exports:**
-- `useUser()` — hook to access `{ user, isAuthenticated, updateUser, logout }`
-- `updateUser(data)` — partial update, auto-persists to `localStorage` key `smarthub_user`
-- `logout()` — clears user state and removes `smarthub_user` from `localStorage`
-- Admin users are also synced to a `smarthub_admins` array in `localStorage`
-
-### `CartContext` (`src/context/CartContext.tsx`)
-
-Manages the shopping cart for buyers.
-
-**Key exports:**
-- `useCart()` — hook to access `{ cartItems, addToCart, updateQuantity, removeFromCart, clearCart, cartCount, cartTotal }`
-- Cart persists to `localStorage` key `smarthub_cart`
-- `cartTotal` is calculated as `sum(item.price × item.quantity)`
-
-### `SearchContext` (`src/context/SearchContext.tsx`)
-
-Provides a global search query string shared across the products listing and navbar search input.
-
-### `ProduceContext` (`src/context/ProduceContext.tsx`)
-
-Manages farmer produce submissions in memory (resets on page refresh in the current demo build).
-
----
-
-## 7. Design System
-
-All design tokens are defined in `src/app/globals.css` using Tailwind v4's `@theme inline` directive.
-
-### Color Palette
-
-| Token | Hex | Usage |
-|---|---|---|
-| `--color-primary` | `#1B4D28` | Primary green — buttons, headings, active states, sidebar |
-| `--color-primary-hover` | `#143d20` | Hover state for primary |
-| `--color-secondary` | `#739072` | Muted green — subtitles, badges, secondary text |
-| `--color-secondary-hover` | `#5f7a5e` | Hover state for secondary |
-| `--color-accent` | `#4CAF50` | Bright accent green — highlights, live indicators |
-| `--background` | `#EEF2EE` | Page background — a soft sage/off-white |
-| `--foreground` | `#171717` | Body text |
-
-> 💡 **Dark Mode is intentionally disabled.** The entire app forces light mode via `color-scheme: light !important` on both `:root` and `html`. Do not add dark mode classes — they will not apply.
-
-### Typography
-
-Three fonts are loaded via `next/font/google` in `layout.tsx`:
-
-| Variable | Font | Usage |
-|---|---|---|
-| `--font-sans` (`--font-geist-sans`) | Geist Sans | Primary body and UI text |
-| `--font-mono` (`--font-geist-mono`) | Geist Mono | Code, data, monospaced elements |
-| `--font-handwriting` (`--font-caveat`) | Caveat | Decorative accent text |
-
-### Breakpoints
-
-Custom breakpoints defined in `@theme inline`:
-
-```
-xs:  320px   sm:  480px   md:  768px   lg:  1024px
-xl: 1280px  2xl: 1440px  3xl: 1920px   4k: 2560px  5k: 3840px
-```
-
-### Custom Scrollbar
-
-A brand-matching custom scrollbar is styled globally:
-- **Width:** 10px (global), 6px (inside `<aside>` sidebars)
-- **Thumb color:** `#1B4D28` (green) on light backgrounds, `rgba(255,255,255,0.2)` inside dark sidebars
-- **Firefox compatible** via `scrollbar-width: thin`
-
-### Animations
-
-- **`.animate-marquee`** — Infinite horizontal scroll used in the partner logos / testimonials ticker (30s linear loop, pauses on hover)
-
----
-
-## 8. Page Transitions
-
-Page transitions are handled by **Framer Motion** via Next.js's `template.tsx` file pattern.
-
-**How it works:**
-- `src/app/template.tsx` — wraps every public page
-- `src/app/dashboard/template.tsx` — wraps every dashboard page
-- `src/app/farmer/template.tsx` — wraps every farmer page
-- `src/app/admin/template.tsx` — wraps every admin page
-
-Each `template.tsx` uses the same animation config:
-
-```tsx
-<motion.div
-  initial={{ opacity: 0, y: 12, scale: 0.99 }}
-  animate={{ opacity: 1, y: 0, scale: 1 }}
-  exit={{ opacity: 0, y: 12, scale: 0.99 }}
-  transition={{ ease: [0.22, 1, 0.36, 1], duration: 0.5 }}
->
-```
-
-This gives a smooth **fade + slight upward drift + micro-scale** on every page navigation. The cubic-bezier `[0.22, 1, 0.36, 1]` is a premium "ease-out expo" curve.
-
-> **Important:** Unlike `layout.tsx` (which persists across routes), `template.tsx` re-mounts on every navigation, which is what triggers the animation. Do not move transition logic into `layout.tsx`.
-
----
-
-## 9. User Roles & Access
-
-The platform supports **three distinct user roles**, each with a separate portal:
-
-| Role | Login Path | Portal Path | Access Level |
-|---|---|---|---|
-| `buyer` | `/login` | `/dashboard` | Can browse products, place orders, manage cart, track shipments, manage wallet |
-| `farmer` | `/login` | `/farmer` | Can submit produce, view listings, manage farm settings, receive payouts |
-| `admin` | `/admin/login` | `/admin/overview` | Can approve/reject listings, moderate users, view platform analytics |
-
-**Role is set during signup** and stored in `localStorage` under `smarthub_user.role`.
-
-**Route protection** in the current demo is handled client-side in each dashboard layout by reading `useUser()`. For production, implement middleware-based protection using Next.js `middleware.ts`.
-
-### Dual Product View Strategy
-
-- **Public visitors** (`/products`) see the **export showroom** — a curated, marketing-focused product catalogue with B2B specifications, seasonality calendar, and quality verification banners. No prices shown; CTAs push to sign-up.
-- **Authenticated buyers** (`/dashboard/products`) see the **sourcing dashboard** — personalised product listings with live pricing, add-to-cart functionality, and order history integration.
-
----
-
-## 10. Product Catalogue
-
-### Public Showroom (`/products`)
-
-Products are defined as a `CropDetail[]` array **directly in** `src/app/products/page.tsx`.
-
-**Current product order (visible top to bottom in 3-column grid):**
-
-| Position | Product | Image File | Category |
-|---|---|---|---|
-| 1 | Cleaned Natural Sesame Seeds | `sesame_seeds.png` | Seeds & Grains |
-| 2 | Premium Sweet Dried Dates (Debino) | `dates.jpg` | Nuts & Cocoa |
-| 3 | High-Grade Processed Cassava Flour | `flour.png` | Fresh & Processed |
-| 4 | Premium Raw Cashew Nuts (RCN) | `cashew_nut.png` | Nuts & Cocoa |
-| 5 | Organic Single-Origin Cocoa Beans | `cocoa_beans.png` | Nuts & Cocoa |
-| 6 | Premium Split Dried Ginger | `ginger_spices.png` | Seeds & Grains |
-| 7 | Export-Grade Hand-Selected Groundnuts | `peanuts.png` | Nuts & Cocoa |
-| 8 | Fresh Premium Green Cabbages | `cabbage.jpg` | Fresh & Processed |
-| 9 | Sweet Organic Seedless Watermelons | `watermelon.jpg` | Fresh & Processed |
-
-Each product has: `name`, `scientificName`, `category`, `grade`, `moisture`, `admixture`, `defects`, `specificationKey`, `specValue`, `description`, `seasonStart`, `seasonEnd`, `packing`, `image`.
-
-To **reorder products**, simply rearrange the objects in the `commodities` array inside `src/app/products/page.tsx`.
-
-To **add a new product**, place its image in `public/images/products/` and add a new object to the `commodities` array.
-
-### Dashboard Catalogue (`/dashboard/products`)
-
-Products for the buyer dashboard are sourced from `src/lib/data/products.ts`. This is a separate dataset (currently 6 products) with additional e-commerce fields: `price`, `originalPrice`, `unit`, `stock`, `rating`, `reviewsCount`, `certification`, `sku`, `brand`, `moq`.
-
----
-
-## 11. Public Assets
-
-All static files live in `/public` and are served at the root URL.
-
-### Key Images
-
-| File | Used On |
-|---|---|
-| `hero-bg.jpg` | Landing page (`/`) hero background |
-| `how-it-works-hero.jpg` | How It Works (`/how-it-works`) hero background |
-| `landing-hero-drone.jpg` | Products showroom (`/products`) hero background |
-| `contact-hero.jpg` | Contact page (`/contact`) hero background |
-| `LOGO.jpg` | Navbar brand logo |
-| `agrochain-farmers.png` | Connectivity / About sections |
-| `agrochain-logistics.png` | Connectivity / About sections |
-| `target-buyer.png` | Target Market section |
-| `target-importer.png` | Target Market section |
-| `target-processor.png` | Target Market section |
-| `avatar-1.png` to `avatar-5.png` | Testimonials section |
-
-> ⚠️ **Image caching:** Next.js caches optimised images inside `.next/cache/images`. If you replace an image file in `/public` with a new one of the same name, you **must** delete `.next` and restart the dev server to see the change. Do not rely on browser hard-refresh alone.
-
----
-
-## 12. Key Components
-
-### `Navbar` (`src/components/layout/Navbar.tsx`)
-- Responsive top navigation with mobile hamburger menu
-- Auth-aware: shows **Login / Sign Up** for guests; shows user avatar + role-appropriate dashboard link for authenticated users
-- Active link highlighting based on current pathname
-
-### `Toast` (`src/components/ui/Toast.tsx`)
-- Global notification system using React Context
-- Imported via `<ToastProvider>` in `layout.tsx`
-- Usage anywhere in the app:
-```tsx
-const { showToast } = useToast();
-showToast("Your order has been placed!", "success");
-```
-- Supports `"success"`, `"error"`, `"info"` variants
-
-### `Button` (`src/components/ui/Button.tsx`)
-- Accepts `className` for style overrides
-- Always use this instead of raw `<button>` for consistent focus states and active scale animation
-
-### `Hero` (`src/components/ui/Hero.tsx`)
-- Full-screen landing page hero with background image, headline, and CTA buttons
-- Background image: `/hero-bg.jpg`
-
-### `Testimonials` (`src/components/ui/Testimonials.tsx`)
-- Auto-scrolling marquee of customer testimonials
-- Pauses on hover
-- Uses `animate-marquee` CSS class
-
-### `RevenueChart` (`src/components/dashboard/RevenueChart.tsx`)
-- Recharts `LineChart` showing monthly revenue trends
-- Mock data — replace with API call when backend is ready
-
-### `Sidebar` (`src/components/dashboard/Sidebar.tsx`)
-- Collapsible left sidebar for buyer dashboard
-- Dark green (`#1B4D28`) background with white icons and text
-- Active route highlighted
-
----
-
-## 13. localStorage Keys
-
-The app uses the following `localStorage` keys for the demo build:
-
-| Key | Contents | Set By |
-|---|---|---|
-| `smarthub_user` | `UserData` JSON object (name, email, role, etc.) | `UserContext.updateUser()` |
-| `smarthub_cart` | `CartItem[]` JSON array | `CartContext` |
-| `smarthub_admins` | Admin user records array | `UserContext.updateUser()` (role: admin) |
-
-To **clear all app data** in the browser, run in the console:
-```javascript
-localStorage.removeItem('smarthub_user');
-localStorage.removeItem('smarthub_cart');
-localStorage.removeItem('smarthub_admins');
-```
-
----
-
-## 14. Configuration Files
-
-### `next.config.ts`
-
-```typescript
-const nextConfig = {
-  images: {
-    remotePatterns: [{ protocol: "https", hostname: "images.unsplash.com" }],
-  },
-  experimental: {
-    optimizePackageImports: ["lucide-react", "recharts", "framer-motion"],
-  },
-};
-```
-
-- `optimizePackageImports` — tree-shakes these libraries to reduce bundle size
-- `remotePatterns` — whitelists Unsplash for external image usage via `next/image`
-
-### `tsconfig.json`
-
-- Path alias `@/*` maps to `./src/*` — always use `@/` imports, never relative paths.
-
-### `postcss.config.mjs`
-
-Standard Tailwind CSS v4 PostCSS config. No modifications needed.
-
----
-
-## 15. Deployment
-
-This project is optimised for **Vercel** deployment.
-
-1. Push code to a GitHub/GitLab repository
-2. Import the repo at [https://vercel.com/new](https://vercel.com/new)
-3. Vercel auto-detects Next.js — no build configuration needed
-4. Set environment variables in the Vercel dashboard if required
-
-### Environment Variables
-
-No environment variables are required for the current demo build. When integrating a backend, add to `.env.local`:
-
-```env
-NEXT_PUBLIC_API_URL=https://api.your-domain.com
-NEXT_PUBLIC_STRIPE_KEY=pk_live_...
-```
-
-> ⚠️ Never commit `.env.local` to version control. It is already in `.gitignore`.
-
----
-
-## 16. Known Limitations (Demo Build)
-
-| Feature | Current State | Production Plan |
-|---|---|---|
-| **Authentication** | Simulated via `localStorage`. Any email/password is accepted. | JWT + NextAuth.js or Supabase Auth |
-| **Product data** | Static arrays in source files | PostgreSQL / MongoDB + REST API |
-| **Cart** | Persisted to `localStorage` only | Server-side cart with user session |
-| **Orders / Tracking** | Mock data, no real state changes | Backend order lifecycle API |
-| **Wallet** | Static mock balances and transactions | Payment gateway (Paystack / Stripe) |
-| **Admin moderation** | In-memory state only (resets on refresh) | Admin API with database writes |
-| **Farmer submissions** | In-memory via `ProduceContext` | Form submission + database + file uploads |
-| **Route protection** | Client-side `useUser()` check only | Next.js `middleware.ts` with JWT validation |
-
----
-
-## 17. Roadmap
-
-- [ ] Backend API integration (Node.js / Express / Supabase)
-- [ ] Real authentication with JWT and refresh tokens (NextAuth.js)
-- [ ] Payment gateway integration (Paystack for NG, Stripe for international)
-- [ ] Real-time shipment tracking with WebSockets or Server-Sent Events
-- [ ] Admin CMS for managing product listings and farmer onboarding
-- [ ] Multi-currency pricing support
-- [ ] Email notifications (Resend / SendGrid)
-- [ ] Mobile app (React Native or Flutter) for farmer field agents
-- [ ] Blockchain-based supply chain traceability layer
-
----
-
-## 18. Contributing
-
-1. **Fork** the repository
-2. Create a feature branch:
-   ```bash
-   git checkout -b feat/your-feature-name
-   ```
-3. Make your changes — follow the existing code style (TypeScript, Tailwind utilities, no inline styles)
-4. **Never commit** directly to `main`
-5. Commit using conventional commits:
-   ```bash
-   git commit -m "feat: add farmer payout webhook handler"
-   git commit -m "fix: correct sesame seeds image path on products page"
-   git commit -m "chore: update README with admin panel routes"
-   ```
-6. Push and open a Pull Request against `main`
-
-### Code Style Guidelines
-
-- Use **TypeScript** — no `any` types unless absolutely unavoidable
-- Use `@/` path aliases — never `../../` relative imports
-- Use the `cn()` utility from `@/lib/utils` for conditional classNames
-- Use the `<Button>` component — not raw `<button>` elements
-- Use `<Image>` from `next/image` — not `<img>` tags
-- Keep components focused — one responsibility per file
-- All new pages must have a `<title>` and meta `description` for SEO
-
----
-
-## License
-
-MIT © Smarthub Agrochain
+**License**: Proprietary & Confidential — All Rights Reserved © 2026 Smarthub Agrochain.
