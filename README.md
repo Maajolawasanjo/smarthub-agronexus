@@ -1,177 +1,349 @@
-# 🌾 Smarthub Agrochain (AgroNexus)
+# 🌾 SmartHub AgroChain (AgroNexus)
 
-> **Enterprise-Grade B2B Agricultural Export & Sourcing Marketplace**
+> **AI-Powered Enterprise B2B Agricultural Marketplace & Supply Chain Platform**
 > 
-> *Architected for high-concurrency agricultural commodity trading, automated escrow verification, multi-tenant farmer onboarding, real-time shipment telemetry, and cross-border settlement across sub-Saharan Africa.*
+> *Architected for high-concurrency commodity trading, multi-currency escrow, automated financial ledgers, digital wallets, identity verification (KYC), and end-to-end supply chain telemetry across global agricultural export routes.*
+
+![SmartHub AgroChain Banner](/public/images/greenhouse_harvest_banner.png)
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.x_(App_Router)-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x_Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16.x-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![Prisma](https://img.shields.io/badge/Prisma_ORM-6.x-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io)
+[![Flutterwave](https://img.shields.io/badge/Flutterwave-Payment_Gateway-F5A623?style=for-the-badge&logo=flutterwave&logoColor=white)](https://flutterwave.com)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-4.x-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Vitest](https://img.shields.io/badge/Vitest-3.x-6E9F18?style=for-the-badge&logo=vitest&logoColor=white)](https://vitest.dev)
+[![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Architectural Overview](#1-architectural-overview)
-2. [Core Domain & Business Capabilities](#2-core-domain--business-capabilities)
-3. [Technology Stack & System Topology](#3-technology-stack--system-topology)
-4. [Database Schema & Entity-Relationship Architecture](#4-database-schema--entity-relationship-architecture)
-5. [API Specification & Data Flow Pipelines](#5-api-specification--data-flow-pipelines)
-6. [Security, Session Management & RBAC](#6-security-session-management--rbac)
-7. [Installation & Operational Guide](#7-installation--operational-guide)
-8. [Directory Structure](#8-directory-structure)
-9. [Financial Ledger & Escrow Settlement Engine](#9-financial-ledger--escrow-settlement-engine)
-10. [Automated Quality Control & Trust Policies](#10-automated-quality-control--trust-policies)
-11. [Testing & Quality Assurance](#11-testing--quality-assurance)
-12. [Deployment & Infrastructure Topology](#12-deployment--infrastructure-topology)
-13. [Maintainers & Licensing](#13-maintainers--licensing)
+1. [Hero Section](#1-hero-section)
+2. [Table of Contents](#2-table-of-contents)
+3. [Overview](#3-overview)
+4. [The Problem](#4-the-problem)
+5. [The Solution](#5-the-solution)
+6. [Core Features](#6-core-features)
+   - [Buyer Features](#buyer-features)
+   - [Farmer Features](#farmer-features)
+   - [Admin Features](#admin-features)
+7. [Screenshots & UI Walkthrough](#7-screenshots--ui-walkthrough)
+8. [System Architecture](#8-system-architecture)
+9. [Technology Stack](#9-technology-stack)
+10. [Folder Structure](#10-folder-structure)
+11. [Database Design](#11-database-design)
+12. [Business Workflow](#12-business-workflow)
+13. [Financial System](#13-financial-system)
+14. [Security & Compliance](#14-security--compliance)
+15. [API Overview](#15-api-overview)
+16. [Installation](#16-installation)
+17. [Environment Variables](#17-environment-variables)
+18. [Running Tests](#18-running-tests)
+19. [Production Readiness](#19-production-readiness)
+20. [Roadmap](#20-roadmap)
+21. [Contributors](#21-contributors)
+22. [License](#22-license)
+23. [Contact](#23-contact)
+24. [Acknowledgements](#24-acknowledgements)
 
 ---
 
-## 1. Architectural Overview
+## 3. Overview
 
-**Smarthub Agrochain** (AgroNexus) is a production-grade, distributed B2B platform designed to eliminate friction, opaque intermediary pricing, and quality risk in international agricultural exports. Built upon Next.js 16 App Router, PostgreSQL, Prisma ORM, and modern event-driven design patterns, the system bridges the gap between rural smallholder farmers, licensed logistics aggregators, quality control laboratories, and institutional global commodity buyers.
+**SmartHub AgroChain** (AgroNexus) is a Next.js 16 and PostgreSQL-powered enterprise B2B agricultural export marketplace and supply chain management engine. Designed to connect smallholder farming communities, agricultural cooperatives, and local producers directly with international importers, food processors, and commodity traders.
+
+The platform eliminates predatory intermediaries by integrating:
+- **Direct-to-Buyer Marketplace**: Enabling multi-farmer competition with transparent commodity pricing, harvest provenance, moisture metrics, and export specifications.
+- **Smart Escrow & Double-Entry Ledger**: Safeguarding funds in multi-currency digital wallets until digital Proof-of-Delivery (POD) is confirmed.
+- **Automated Verification & Moderation**: Ensuring that all listed produce undergoes quality control checks before entering the active catalog.
+- **Multi-Role Portal Hierarchy**: Customized control centers tailored for Buyers, Farmers, Logistics Agents, and System Super Administrators.
+
+---
+
+## 4. The Problem
+
+Agricultural trade in emerging markets—particularly sub-Saharan Africa—is constrained by systemic inefficiencies and structural trust deficits:
+
+1. **Farmer Exploitation & Opaque Intermediaries**: Smallholder farmers receive as little as 20% of international market values due to aggressive multi-layered middlemen.
+2. **Payment Insecurity & Fraud**: Producers frequently suffer from delayed payouts, bounced checks, or non-payment post-delivery. Conversely, international buyers face risks of non-shipment or sub-standard goods.
+3. **Quality & Moisture Discrepancies**: High rejection rates at destination ports due to unverified moisture content, pest contamination, and non-standard packaging.
+4. **Logistics & Traceability Blackholes**: Lack of real-time telemetry between farmgate harvest, regional aggregation hubs, customs processing, and maritime shipping lines.
+5. **Credit & Capital Deficits**: Inability for verified producers to leverage trade history for input financing or pre-harvest liquidity.
+
+---
+
+## 5. The Solution
+
+SmartHub AgroChain solves these structural trade barriers through a unified software architecture:
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                                 PRESENTATION LAYER                               │
-│  ┌───────────────────────┐  ┌───────────────────────┐  ┌──────────────────────┐  │
-│  │    Public Showroom    │  │    Farmer Dashboard   │  │   Admin Control HQ   │  │
-│  │     (/products)       │  │       (/farmer)       │  │       (/admin)       │  │
-│  └───────────┬───────────┘  └───────────┬───────────┘  └──────────┬───────────┘  │
-└──────────────┼──────────────────────────┼─────────────────────────┼──────────────┘
-               │                          │                         │
-┌──────────────▼──────────────────────────▼─────────────────────────▼──────────────┐
-│                              API & CONTROLLER LAYER                              │
-│  ┌───────────────────────┐  ┌───────────────────────┐  ┌──────────────────────┐  │
-│  │ /api/farmer/produce   │  │  /api/admin/products  │  │  /api/wallet/escrow  │  │
-│  └───────────┬───────────┘  └───────────┬───────────┘  └──────────┬───────────┘  │
-└──────────────┼──────────────────────────┼─────────────────────────┼──────────────┘
-               │                          │                         │
-┌──────────────▼──────────────────────────▼─────────────────────────▼──────────────┐
-│                             SERVICE & REPOSITORY LAYER                           │
-│  ┌───────────────────────┐  ┌───────────────────────┐  ┌──────────────────────┐  │
-│  │ WalletService / Escrow│  │ Trust & Policy Engine │  │ Fulfillment Engine   │  │
-│  └───────────┬───────────┘  └───────────┬───────────┘  └──────────┬───────────┘  │
-└──────────────┼──────────────────────────┼─────────────────────────┼──────────────┘
-               │                          │                         │
-┌──────────────▼──────────────────────────▼─────────────────────────▼──────────────┐
-│                             PERSISTENCE & STORAGE                                │
-│  ┌────────────────────────────────────────────────────────────────────────────┐  │
-│  │               PostgreSQL (Prisma ORM with Connection Pooling)               │  │
-│  └────────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            SMARTHUB AGROCHAIN SOLUTION                      │
+├───────────────────────┬───────────────────────────┬─────────────────────────┤
+│   B2B MARKETPLACE     │     FINANCIAL LEDGER      │   QUALITY & TELEMETRY   │
+│  - Multi-farmer list  │  - Multi-currency Wallet  │  - Grade inspection QC  │
+│  - Real-time catalog  │  - Smart Escrow Lock      │  - Moisture telemetry   │
+│  - Direct buyer quotes│  - Automated Payouts      │  - Milestone tracking   │
+└───────────────────────┴───────────────────────────┴─────────────────────────┘
+```
+
+- **Direct Supermarket-Style Competition**: Buyers compare live commodity offers from multiple verified farmers, evaluating price per metric ton, moisture level, origin state, and certified organic status.
+- **Programmable Escrow Vaults**: Buyer capital is locked upon contract generation and released atomically to the farmer's wallet only after physical inspection and POD verification.
+- **Automated Quality Verification Engine**: Platform inspectors evaluate produce batches against international export standards (`ISO`/`FSSAI`/`NAFDAC`), gating unverified produce in a moderation queue.
+- **Real-Time Telemetry & Transparency**: End-to-end shipment lifecycle tracking from farmgate loading to vessel dispatch.
+
+---
+
+## 6. Core Features
+
+### Buyer Features
+- 🛒 **Export Showroom & Sourcing Catalog**: Browse export-ready commodities (Sesame Seeds, Raw Cashew Nuts, Cocoa Beans, Split Dried Ginger, Cassava Flour) with interactive category filtering.
+- 🔍 **Interactive Sourcing & Price Calculator**: Calculate landed costs, logistics fees, insurance, and freight estimates dynamically.
+- 💼 **Digital Wallet & Escrow Checkout**: Deposit funds via local/international payment rails, lock funds in escrow, and monitor balance movements.
+- 📦 **Order Lifecycle & Milestone Tracker**: Monitor multi-step order progress from `Pending Inspection` to `Port Arrival` and `Delivered`.
+- ⭐ **Supplier Verification & Ratings**: Review verified farmer performance scores, harvest history, and quality inspection certificates.
+
+### Farmer Features
+- 🌾 **Produce Submission Studio**: List harvested commodities with details including variety, asking price, stock quantity, packaging unit (`KG`, `BAG`, `TON`, `CRATE`, `PIECE`), harvest date, and high-resolution batch photos.
+- 📊 **Farmer Operational Dashboard**: Real-time KPI analytics tracking total sales volume, active listings, pending escrow balances, and field agent assignments.
+- 💳 **Payout Wallet & Instant Withdrawals**: Receive cleared escrow funds directly into local bank accounts via automated payment rails.
+- 📜 **Produce Verification Management**: Submit farm registration documents and view field agent quality inspection reports.
+- 📈 **Price Intelligence**: Access regional market price trends to price produce competitively.
+
+### Admin Features
+- 🛡️ **Product Moderation Queue**: Inspect pending produce submissions, verify moisture metrics, check harvest locations, and approve/reject listings (`isAvailable` state toggle).
+- 👥 **User Management & RBAC**: Administer user accounts across `ADMIN`, `FARMER`, and `BUYER` roles with suspension, verification, and KYB/KYC tools.
+- 🏛️ **Treasury & Escrow Control HQ**: Audit platform transaction ledgers, manage commission fee structures, and resolve trade disputes.
+- 📊 **System-Wide Analytics**: Monitor gross merchandise value (GMV), platform transaction volume, category demand, and regional output metrics.
+
+---
+
+## 7. Screenshots & UI Walkthrough
+
+### Public Export Showroom & Landing Page
+![Public Landing Page](/public/images/greenhouse_harvest_banner.png)
+
+### Logistics & Supply Chain Connectivity
+![Supply Chain Telemetry](/public/agrochain-logistics.png)
+
+### Farmers & Field Operations
+![Farmers Field Operations](/public/agrochain-farmers.png)
+
+*(Note: Additional screenshots of the Buyer Sourcing Dashboard, Farmer Control Center, Admin Approval Queue, and Wallet Interface can be found under `/public/` and generated via screenshot tools.)*
+
+---
+
+## 8. System Architecture
+
+SmartHub AgroChain utilizes a clean multi-tier architecture with strict domain boundaries:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            CLIENT PRESENTATION TIER                         │
+│   Next.js 16 App Router (React 19, Tailwind CSS 4, Framer Motion 12)       │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ (REST API / JSON / Server Actions)
+┌──────────────────────────────────────▼──────────────────────────────────────┐
+│                             API & SECURITY TIER                             │
+│   Auth / Sessions (Cryptographic JWT) │ RBAC Middleware │ Rate Limiters    │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+┌──────────────────────────────────────▼──────────────────────────────────────┐
+│                           BUSINESS LOGIC & SERVICES                         │
+│  ┌────────────────────┐   ┌─────────────────────┐   ┌────────────────────┐  │
+│  │ Wallet & Escrow    │   │ Quality & Moderation│   │ Order & Shipping   │  │
+│  │ Service Engine     │   │ Policy Engine       │   │ Fulfillment Engine │  │
+│  └────────────────────┘   └─────────────────────┘   └────────────────────┘  │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ (Prisma ORM Client)
+┌──────────────────────────────────────▼──────────────────────────────────────┐
+│                          PERSISTENCE & EXTERNAL RAILS                       │
+│  ┌─────────────────────────────────┐       ┌─────────────────────────────┐  │
+│  │ PostgreSQL 16 DB (Prisma Schema)│       │ Flutterwave Payment Gateway │  │
+│  └─────────────────────────────────┘       └─────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Core Domain & Business Capabilities
+## 9. Technology Stack
 
-### 🌾 1. Multi-Farmer Competition ("Supermarket Engine")
-- **Independent Listing Autonomy**: Multiple verified farmers can list identical commodities (e.g. *Cleaned Natural Sesame Seeds* or *Single-Origin Cocoa Beans*) with distinct asking prices, stock quantities, minimum order quantities (MOQ), moisture levels, and farm locations.
-- **Fair Marketplace Competition**: The storefront catalog surfaces listings side-by-side without artificial deduplication, displaying producer provenance, origin state, and trust ratings.
+### Presentation & Frontend
+- **Framework**: [Next.js 16.x (App Router)](https://nextjs.org/)
+- **UI Runtime**: [React 19.x](https://react.dev/)
+- **Type System**: [TypeScript 5.x](https://www.typescriptlang.org/) (Strict Mode)
+- **Styling**: [Tailwind CSS 4.x](https://tailwindcss.com/) & Custom CSS Design Tokens
+- **Motion & Micro-interactions**: [Framer Motion 12.x](https://www.framer.com/motion/)
+- **Charts & Data Visualization**: [Recharts 3.x](https://recharts.org/)
+- **Icons**: [Lucide React](https://lucide.dev/)
 
-### 🔍 2. Quality Assurance & Moderation Workflow
-- **Pending Review Pipeline**: Every new produce submission defaults to `isAvailable = false` (Pending Approval).
-- **Admin Audit Queue**: Platform operators evaluate moisture content, admixture, packaging specifications, and farm origin before toggling items to `Approved`.
-- **Multi-Image Persistence**: Supports up to 5 high-resolution inspection photos per batch, stored and mapped via the `ProductImage` database entity.
-
-### 💰 3. Escrow-Protected Financial Ledger
-- **Buyer Escrow Lock**: Funds are securely locked in an escrow account upon order placement.
-- **Automated Settlement**: Escrow is released to the seller's wallet only after digital Proof-of-Delivery (POD) is confirmed by the buyer or system inspector.
-- **Double-Entry Ledger Integrity**: Every balance adjustment (Deposit, Escrow Lock, Release, Payout Withdrawal) is recorded in immutable `WalletTransaction` ledgers.
-
----
-
-## 3. Technology Stack & System Topology
-
-| Tier | Component | Technology | Rationale |
-|---|---|---|---|
-| **Framework** | Core Application | **Next.js 16.x (App Router)** | Server Components, Turbopack bundling, streaming SSR |
-| **Language** | Runtime | **TypeScript 5.x (Strict)** | Static safety, DTO validation, strict null checks |
-| **Database** | Database Engine | **PostgreSQL 16.x** | ACIDO compliance, JSONB support, relational integrity |
-| **ORM** | Database Adapter | **Prisma ORM 6.x** | Type-safe queries, migration control, schema safety |
-| **Styling** | Presentation | **Tailwind CSS 4.x & Vanilla CSS** | Custom design tokens, zero runtime CSS-in-JS |
-| **Animations** | Motion Engine | **Framer Motion 12.x** | Hardware-accelerated cubic-bezier transitions |
-| **Telemetry** | Observability | **Custom Tracing / W3C TraceContext** | Distributed trace headers, latency tracking |
-| **Testing** | QA | **Vitest 3.x** | High-speed unit & integration test runner |
+### Backend, Database & Infrastructure
+- **Database**: [PostgreSQL 16.x](https://www.postgresql.org/)
+- **ORM**: [Prisma ORM 6.x](https://www.prisma.io/)
+- **Session & Auth Security**: Jose / Web Crypto API JWT session tokens
+- **Payment Processing & Payouts**: Flutterwave SDK / REST Webhooks
+- **Telemetry & Tracing**: W3C TraceContext Distributed Tracing (`x-trace-id`)
+- **Testing Framework**: [Vitest 3.x](https://vitest.dev/)
 
 ---
 
-## 4. Database Schema & Entity-Relationship Architecture
+## 10. Folder Structure
 
-The relational model (`prisma/schema.prisma`) enforces strict referential integrity across users, produce catalog, orders, and financial transactions.
+```
+smarthub-agronexus/
+├── docs/                            # Deep engineering documentation & OpenAPI specs
+│   ├── openapi.yaml                 # OpenAPI 3.0 API Specification
+│   ├── farmer-dashboard-audit.md    # Production audit & hardening reports
+│   └── feature-inventory.md         # Comprehensive feature roadmap
+├── prisma/                          # Relational schema definition & seed scripts
+│   └── schema.prisma
+├── public/                          # Optimized static imagery, branding, and assets
+│   ├── LOGO.jpg
+│   ├── agrochain-farmers.png
+│   ├── agrochain-logistics.png
+│   └── images/products/             # Commodity images
+├── src/
+│   ├── app/                         # Next.js 16 App Router Routes
+│   │   ├── about/                   # About page (/about)
+│   │   ├── admin/                   # Admin Panel (/admin/*)
+│   │   │   ├── analytics/           # Global analytics
+│   │   │   ├── overview/            # Moderation overview
+│   │   │   ├── products/            # Produce approval queue
+│   │   │   └── users/               # User directory
+│   │   ├── api/                     # REST API Route Handlers
+│   │   │   ├── admin/               # Admin endpoints
+│   │   │   ├── auth/                # Auth endpoints (/login, /register, /logout)
+│   │   │   ├── farmer/              # Farmer produce ingestion & management
+│   │   │   ├── orders/              # Order lifecycle & escrow triggers
+│   │   │   ├── products/            # Public & buyer catalog queries
+│   │   │   └── wallet/              # Digital wallet deposit & withdrawal
+│   │   ├── dashboard/               # Buyer Dashboard (/dashboard/*)
+│   │   ├── farmer/                  # Farmer Portal (/farmer/*)
+│   │   ├── products/                # Public Export Showroom (/products)
+│   │   ├── globals.css              # Theme variables & design system
+│   │   └── layout.tsx               # Root Layout
+│   ├── components/                  # Domain-Driven UI Components
+│   │   ├── admin/                   # Admin moderation widgets
+│   │   ├── dashboard/               # Buyer dashboard cards & charts
+│   │   ├── farmer/                  # Produce submission forms & metrics
+│   │   ├── layout/                  # Navbar, Footer
+│   │   └── ui/                      # Primitive design components (Button, Modal, Toast)
+│   ├── context/                     # Global React State Contexts (User, Cart, Produce)
+│   ├── dto/                         # Data Transfer Object Contracts & Types
+│   ├── lib/                         # Core Utilities (Prisma, Session, Security, Tracing)
+│   ├── repositories/                # Repository Pattern Abstractions (User, Order, Payment)
+│   └── services/                    # Core Business Logic Services (Wallet, Settlement, Trust)
+├── vitest.config.ts                 # Vitest Runner Config
+├── next.config.ts                   # Next.js Optimization Config
+└── package.json
+```
+
+---
+
+## 11. Database Design
+
+The relational database architecture (`prisma/schema.prisma`) maintains strict ACIDO compliance, foreign key constraints, and cascade policies.
 
 ```mermaid
 erDiagram
-    User ||--o| FarmerProfile : owns
-    User ||--o| BuyerProfile : owns
-    User ||--o| Wallet : owns
-    FarmerProfile ||--o{ Product : produces
-    Category ||--o{ Product : categorizes
-    Product ||--o{ ProductImage : contains
-    Product ||--o1 Inventory : tracks
-    Product ||--o{ OrderItem : included_in
-    Order ||--o{ OrderItem : consists_of
-    User ||--o{ Order : places
-    Order ||--o1 Delivery : tracked_by
-    Order ||--o1 Payment : settled_by
-    Wallet ||--o{ WalletTransaction : records
+    USER ||--o| FARMER_PROFILE : "has profile"
+    USER ||--o| BUYER_PROFILE : "has profile"
+    USER ||--o| WALLET : "owns"
+    FARMER_PROFILE ||--o{ PRODUCT : "produces"
+    CATEGORY ||--o{ PRODUCT : "classifies"
+    PRODUCT ||--o{ PRODUCT_IMAGE : "contains"
+    PRODUCT ||--o1 INVENTORY : "tracks stock"
+    PRODUCT ||--o{ ORDER_ITEM : "ordered in"
+    ORDER ||--o{ ORDER_ITEM : "contains"
+    USER ||--o{ ORDER : "places"
+    ORDER ||--o1 PAYMENT : "settled by"
+    ORDER ||--o1 DELIVERY : "dispatched via"
+    WALLET ||--o{ WALLET_TRANSACTION : "logs"
 ```
 
-### Key Models Overview:
-- **`User`**: Central identity with `Role` enum (`ADMIN`, `FARMER`, `BUYER`).
-- **`FarmerProfile`**: Verified farm metadata, state, LGA, and KYC status (`PENDING`, `VERIFIED`, `APPROVED`).
-- **`BuyerProfile`**: Shipping addresses, tax identification, import licenses.
-- **`Product`**: Commodity details, asking price, normalized `unit` (`KG`, `BAG`, `TON`, `CRATE`, `PIECE`), and approval state (`isAvailable`).
-- **`ProductImage`**: Linked image gallery URLs per product batch.
-- **`Inventory`**: Stock tracking with `availableQty` and `reservedQty`.
-- **`Wallet` & `WalletTransaction`**: Financial ledger tracking `BALANCE`, `ESCROW_LOCKED`, `PAYOUT_PENDING`.
+### Core Entities:
+- **`User`**: Base identity model (`id`, `email`, `passwordHash`, `fullName`, `role: ADMIN | FARMER | BUYER`, `isActive`).
+- **`FarmerProfile`**: Farm details (`farmName`, `farmAddress`, `state`, `lga`, `verificationStatus: PENDING | APPROVED | REJECTED`).
+- **`BuyerProfile`**: Procurement details (`companyName`, `taxId`, `country`, `address`).
+- **`Product`**: Commodity record (`name`, `description`, `price`, `unit: KG | BAG | TON | CRATE | PIECE`, `isAvailable`, `farmerProfileId`, `categoryId`).
+- **`ProductImage`**: Linked high-resolution batch photography.
+- **`Inventory`**: Stock tracking (`availableQty`, `reservedQty`).
+- **`Wallet` & `WalletTransaction`**: Multi-currency ledger tracking available balances and locked escrow amounts.
 
 ---
 
-## 5. API Specification & Data Flow Pipelines
+## 12. Business Workflow
 
-### Key Endpoints
-
-| HTTP Method | Route Endpoint | Role Required | Description |
-|---|---|---|---|
-| `POST` | `/api/farmer/produce` | `FARMER` | Ingests produce batch with dynamic category resolution & unit normalization |
-| `GET` | `/api/products` | `PUBLIC` | Fetches active approved market catalog |
-| `GET` | `/api/products/[id]` | `ALL` | Fetches specific produce details (supports pending review view for submitter) |
-| `GET` | `/api/admin/products` | `ADMIN` | Fetches moderation queue filtered by status (`Pending`, `Approved`, `Rejected`) |
-| `PUT` | `/api/admin/products/[id]/approve` | `ADMIN` | Approves or rejects a produce submission |
-| `POST` | `/api/wallet/deposit` | `BUYER` | Credits buyer digital wallet |
-| `POST` | `/api/wallet/withdraw` | `FARMER` | Initiates bank transfer payout from cleared balance |
-
----
-
-## 6. Security, Session Management & RBAC
-
-1. **Role-Based Access Control (RBAC)**:
-   - `ADMIN`: Platform moderation, verification approvals, system fee configuration, global analytics.
-   - `FARMER`: Produce management, field inspection reports, wallet payout withdrawals.
-   - `BUYER`: Procurement showroom, cart management, escrow checkout, shipment tracking.
-2. **Cryptographic Sessions**:
-   - Encrypted session tokens with expiry verification (`src/lib/session.ts`).
-3. **Audit Logging & Tracing**:
-   - `W3C TraceContext` standard tracing headers (`x-trace-id`) injected into requests for API observability.
+```
+[Buyer Places Order]
+        │
+        ▼
+[Funds Locked in Escrow Vault] ──► (Status: ESCROW_LOCKED)
+        │
+        ▼
+[Farmer Prepares Produce Batch]
+        │
+        ▼
+[Quality Inspection & Shipping Dispatch]
+        │
+        ▼
+[Digital Proof of Delivery (POD) Confirmed]
+        │
+        ▼
+[Escrow Released to Farmer Wallet] ──► (Status: CLEARED)
+        │
+        ▼
+[Farmer Initiates Bank Withdrawal]
+```
 
 ---
 
-## 7. Installation & Operational Guide
+## 13. Financial System
+
+SmartHub AgroChain implements a robust double-entry accounting engine (`src/services/wallet.service.ts`):
+
+1. **Wallet Deposits**: Buyers credit their digital wallet via integrated card or bank transfer rails.
+2. **Escrow Encumbrance**: When an order is generated, funds are atomically moved from `availableBalance` to `escrowLockedBalance`.
+3. **Automated Settlement & Commission**: Upon order fulfillment (POD), platform commissions are computed, and net proceeds are released to the farmer's cleared balance.
+4. **Payout Withdrawal Engine**: Farmers request withdrawals directly to local bank accounts, backed by webhook state confirmation.
+5. **Reconciliation & Audit**: All transaction logs record transaction references, timestamps, and balance snapshots for accounting reconciliation.
+
+---
+
+## 14. Security & Compliance
+
+- **Role-Based Access Control (RBAC)**: Enforced across client navigation and API endpoints to isolate `ADMIN`, `FARMER`, and `BUYER` boundaries.
+- **Session Security**: Server-side JWT session validation using HTTP-only secure cookies.
+- **Input Sanitization & SQL Injection Defense**: Prisma ORM parametrized queries prevent SQL injection attacks.
+- **Webhook Security**: Payment webhooks validate signatures (`verif-hash`) to prevent transaction spoofing.
+- **Rate Limiting**: API routes incorporate IP-based rate limiting to prevent denial-of-service attempts.
+
+---
+
+## 15. API Overview
+
+Comprehensive API specifications are documented in OpenAPI 3.0 format under [`/docs/openapi.yaml`](/docs/openapi.yaml).
+
+### Summary Endpoints:
+- **Authentication**: `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout`, `GET /api/auth/me`
+- **Farmer Operations**: `POST /api/farmer/produce`, `GET /api/farmer/analytics`, `GET /api/farmer/customers`, `PATCH /api/farmer/produce/[id]/status`
+- **Catalog & Showroom**: `GET /api/products`, `GET /api/products/[id]`, `GET /api/categories`
+- **Admin Moderation**: `GET /api/admin/products`, `PUT /api/admin/products/[id]/approve`, `GET /api/admin/overview`
+- **Wallet & Escrow**: `POST /api/wallet/deposit`, `POST /api/wallet/withdraw`, `GET /api/wallet`
+
+---
+
+## 16. Installation
 
 ### Prerequisites
 - **Node.js**: v18.x or v20.x LTS
-- **npm**: v9.x+
+- **npm**: v9.x or higher
 - **PostgreSQL**: v15.x or v16.x
 
-### Step-by-Step Environment Setup
+### Step-by-Step Execution
 
-1. **Clone Repository**:
+1. **Clone the Repository**:
    ```bash
    git clone https://github.com/Maajolawasanjo/smarthub-agronexus.git
    cd smarthub-agronexus
@@ -182,114 +354,117 @@ erDiagram
    npm install
    ```
 
-3. **Configure Environment Variables**:
-   Create a `.env` file in the project root:
-   ```env
-   DATABASE_URL="postgresql://user:password@localhost:5432/smarthub_agronexus?schema=public"
-   SESSION_SECRET="super-secret-32-character-minimum-key"
-   NODE_ENV="development"
+3. **Configure Environment File**:
+   Copy `.env.example` (or create `.env`):
+   ```bash
+   cp .env.example .env
    ```
 
-4. **Initialize Database Schema & Seeds**:
+4. **Initialize Database Schema & Client**:
    ```bash
    npx prisma db push
    npx prisma generate
    ```
 
-5. **Start Development Server**:
+5. **Run Development Server**:
    ```bash
    npm run dev
    ```
-   Navigate to `http://localhost:3000`.
+   Open `http://localhost:3000` in your web browser.
 
 ---
 
-## 8. Directory Structure
+## 17. Environment Variables
 
-```
-smarthub-agronexus/
-├── docs/                            # OpenAPI specs, audit logs, architecture diagrams
-├── prisma/                          # Database schema definition & migration scripts
-│   └── schema.prisma
-├── public/                          # Optimized static imagery & public brand assets
-├── src/
-│   ├── app/                         # Next.js 16 App Router hierarchy
-│   │   ├── admin/                   # Platform operator panel (/admin/*)
-│   │   ├── api/                     # REST API handlers & endpoints
-│   │   ├── dashboard/               # Buyer sourcing dashboard (/dashboard/*)
-│   │   ├── farmer/                  # Producer portal (/farmer/*)
-│   │   ├── products/                # Public export showroom (/products/*)
-│   │   ├── globals.css              # Custom styling tokens & theme definitions
-│   │   └── layout.tsx               # Root layout wrapper
-│   ├── components/                  # Enterprise React components
-│   │   ├── admin/                   # Admin moderation controls
-│   │   ├── dashboard/               # Buyer procurement widgets
-│   │   ├── farmer/                  # Produce submission & status components
-│   │   ├── layout/                  # Navigation bars, footers
-│   │   └── ui/                      # Reusable primitives (Buttons, Modals, Toasts)
-│   ├── context/                     # Application state providers
-│   ├── dto/                         # Data Transfer Object interfaces & validators
-│   ├── lib/                         # Core utilities, Prisma client, session security
-│   ├── repositories/                # Repository pattern implementation for data access
-│   └── services/                    # Business logic services (Wallet, Settlement, Trust)
-├── vitest.config.ts                 # Vitest test framework configuration
-└── next.config.ts                   # Next.js build configuration
-```
+| Variable Name | Required | Description | Example |
+|---|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL connection string | `postgresql://user:pass@localhost:5432/agronexus?schema=public` |
+| `SESSION_SECRET` | Yes | 32+ character key for cryptographic JWT signing | `super-secret-production-encryption-key-32-chars` |
+| `NODE_ENV` | Yes | Application environment | `development` \| `production` |
+| `NEXT_PUBLIC_APP_URL` | Optional | Frontend application base URL | `http://localhost:3000` |
+| `FLUTTERWAVE_PUBLIC_KEY` | Optional | Flutterwave gateway public key | `FLWPUBK_TEST-xxxxxx-X` |
+| `FLUTTERWAVE_SECRET_KEY` | Optional | Flutterwave gateway secret key | `FLWSECK_TEST-xxxxxx-X` |
+| `FLUTTERWAVE_SECRET_HASH`| Optional | Secret hash for webhook validation | `agronexus-webhook-secret-hash` |
 
 ---
 
-## 9. Financial Ledger & Escrow Settlement Engine
+## 18. Running Tests
 
-The financial core (`src/services/wallet.service.ts`) ensures atomic updates to financial balances:
-
-1. **Deposit**: Buyer funds wallet via bank transfer / gateway -> Status: `CLEARED`.
-2. **Escrow Lock**: When an order is created, funds transfer from `availableBalance` -> `escrowBalance`.
-3. **Escrow Release**: Upon buyer POD confirmation, funds transfer from `escrowBalance` -> Farmer `availableBalance`.
-4. **Payout**: Farmer requests withdrawal to local bank account (`src/app/api/wallet/withdraw/route.ts`).
-
----
-
-## 10. Automated Quality Control & Trust Policies
-
-- **Commodity Category Resolution**: Submissions automatically route to verified agricultural categories (e.g. *Tubers & Roots*, *Seeds & Grains*, *Nuts & Cocoa*, *Fresh & Processed*).
-- **Unit Normalization**: Automatically converts input metrics to standard export units (`KG`, `BAG`, `TON`, `CRATE`, `PIECE`).
-- **Tier 1 Listing Limits**: Unverified accounts are limited to listing a maximum number of active items until identity verification is completed.
-
----
-
-## 11. Testing & Quality Assurance
-
-Run static analysis and unit test suites:
+SmartHub AgroChain utilizes **Vitest** for fast unit and integration testing.
 
 ```bash
-# Type check TypeScript codebase
-npx tsc --noEmit
-
-# Execute unit and integration tests with Vitest
+# Run full test suite
 npx vitest run
 
-# Run linter
+# Run TypeScript compilation check
+npx tsc --noEmit
+
+# Run Next.js linter
 npm run lint
 ```
 
 ---
 
-## 12. Deployment & Infrastructure Topology
+## 19. Production Readiness
 
-Optimized for containerized deployment or serverless platforms such as Vercel, Railway, or AWS ECS:
+The codebase has undergone production hardening across the following vectors:
 
-```bash
-# Build production bundle
-npm run build
-
-# Start production server
-npm run start
-```
+- ✅ **Data Integrity**: Database tables enforced via foreign keys, unique constraints, and transaction isolation.
+- ✅ **Concurrency Handling**: Stock reservations and wallet adjustments executed in atomic Prisma transactions.
+- ✅ **Clean Codebase**: 0 TypeScript compilation errors (`npx tsc --noEmit` verified).
+- ✅ **Observability**: Standardized API error responses and distributed tracing (`x-trace-id`).
 
 ---
 
-## 13. Maintainers & Licensing
+## 20. Roadmap
 
-Developed and maintained by **Smarthub Agrochain Engineering**.
+### 🚀 Version 1.0 (Current Baseline)
+- [x] Full Next.js 16 App Router UI & Server API Infrastructure
+- [x] Multi-tenant role system (`ADMIN`, `FARMER`, `BUYER`)
+- [x] PostgreSQL & Prisma ORM database models
+- [x] Farmer produce ingestion engine with multi-photo uploads and unit normalization
+- [x] Admin approval and product moderation queue
+- [x] Digital wallet and escrow financial ledger engine
 
-**License**: Proprietary & Confidential — All Rights Reserved © 2026 Smarthub Agrochain.
+### 🔮 Version 2.0 (Planned)
+- [ ] AI-assisted produce pricing & yield forecasting
+- [ ] Automated SMS/WhatsApp notifications for field farmers
+- [ ] Real-time IoT sensor telemetry (container temperature & humidity tracking)
+- [ ] Automated logistics routing & freight aggregation
+
+### 🌐 Version 3.0 (Future Vision)
+- [ ] Multi-currency cross-border settlement (USDC / Fiat integration)
+- [ ] On-chain agricultural provenance and trade history on public ledger
+- [ ] Pre-harvest financing & yield index insurance products
+
+---
+
+## 21. Contributors
+
+Developed and maintained by the **SmartHub AgroChain Engineering Team**:
+
+- **Maajo Nathan Lawasanjo** — *Lead Systems Architect & Core Developer* ([@Maajolawasanjo](https://github.com/Maajolawasanjo))
+
+---
+
+## 22. License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 23. Contact
+
+- **Website**: [https://smarthubagro.com](https://smarthubagro.com)
+- **Email**: `admin@smarthubagro.com`
+- **GitHub**: [https://github.com/Maajolawasanjo/smarthub-agronexus](https://github.com/Maajolawasanjo/smarthub-agronexus)
+
+---
+
+## 24. Acknowledgements
+
+Special thanks to the open-source communities and platforms powering SmartHub AgroChain:
+- [Next.js](https://nextjs.org/) & [Vercel](https://vercel.com/)
+- [PostgreSQL](https://www.postgresql.org/) & [Prisma ORM](https://www.prisma.io/)
+- [Tailwind CSS](https://tailwindcss.com/) & [Framer Motion](https://www.framer.com/motion/)
+- [Flutterwave](https://flutterwave.com/)
