@@ -1,8 +1,19 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
 
-const JWT_SECRET = process.env.JWT_SECRET || "smarthub-agrochain-production-secret-key-2026";
 export const SESSION_COOKIE_NAME = "smarthub_session";
+
+/**
+ * Get JWT secret from environment configuration.
+ * Fails explicitly if JWT_SECRET is missing or empty.
+ */
+export function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || !secret.trim()) {
+    throw new Error("CRITICAL SECURITY ERROR: JWT_SECRET environment variable is missing.");
+  }
+  return secret.trim();
+}
 
 export interface SessionPayload {
   userId: string;
@@ -15,6 +26,7 @@ export interface SessionPayload {
  * Sign a payload using HMAC SHA-256 JWT string
  */
 export function signSessionToken(payload: Omit<SessionPayload, "exp">, expiresInDays = 7): string {
+  const secret = getJwtSecret();
   const exp = Math.floor(Date.now() / 1000) + expiresInDays * 24 * 60 * 60;
   const fullPayload: SessionPayload = { ...payload, exp };
 
@@ -22,7 +34,7 @@ export function signSessionToken(payload: Omit<SessionPayload, "exp">, expiresIn
   const body = Buffer.from(JSON.stringify(fullPayload)).toString("base64url");
 
   const signature = crypto
-    .createHmac("sha256", JWT_SECRET)
+    .createHmac("sha256", secret)
     .update(`${header}.${body}`)
     .digest("base64url");
 
@@ -34,12 +46,13 @@ export function signSessionToken(payload: Omit<SessionPayload, "exp">, expiresIn
  */
 export function verifySessionToken(token: string): SessionPayload | null {
   try {
+    const secret = getJwtSecret();
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     const [header, body, signature] = parts;
 
     const expectedSignature = crypto
-      .createHmac("sha256", JWT_SECRET)
+      .createHmac("sha256", secret)
       .update(`${header}.${body}`)
       .digest("base64url");
 

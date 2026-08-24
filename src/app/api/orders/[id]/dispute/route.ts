@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 import { publishAgroEvent } from "@/lib/events";
+import { getSession } from "@/lib/session";
+import { recordAuditEvent } from "@/lib/audit";
 
 // POST /api/orders/[id]/dispute — Submit formal order dispute
 export async function POST(
@@ -14,8 +16,10 @@ export async function POST(
   const { id: orderId } = await params;
 
   try {
+    const session = await getSession();
     const cookieStore = await cookies();
-    const userId = cookieStore.get("userId")?.value || "usr_demo_buyer";
+    const userId = session?.userId || cookieStore.get("userId")?.value || "usr_demo_buyer";
+    const userEmail = session?.email || null;
     const body = await req.json();
     const { reason, description } = body;
 
@@ -49,6 +53,17 @@ export async function POST(
       orderId,
       orderNumber: order.orderNumber,
       remarks: `Dispute logged: ${reason} - ${description}`,
+    });
+
+    await recordAuditEvent({
+      category: "DISPUTE",
+      severity: "WARNING",
+      action: "DISPUTE_OPENED",
+      actorId: userId,
+      actorEmail: userEmail,
+      resourceId: orderId,
+      metadata: { reason, orderNumber: order.orderNumber },
+      req,
     });
 
     const res = NextResponse.json(

@@ -4,6 +4,8 @@ import { getSession } from "@/lib/session";
 import { logger } from "@/lib/logger";
 import { createNotification } from "@/lib/notifications";
 
+import { recordAuditEvent } from "@/lib/audit";
+
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -72,6 +74,22 @@ export async function PUT(
       verificationId: id,
       farmerUserId: verification.farmerProfile.userId,
       status: newStatus,
+    });
+
+    // Record authoritative audit event
+    await recordAuditEvent({
+      category: "KYC",
+      severity: action === "APPROVE" ? "INFO" : "WARNING",
+      action: action === "APPROVE" ? "KYC_APPROVED" : "KYC_REJECTED",
+      actorId: session.userId,
+      actorEmail: session.email,
+      resourceType: "Verification",
+      resourceId: id,
+      metadata: {
+        farmerUserId: verification.farmerProfile.userId,
+        verificationStatus: newStatus,
+        remarks: remarks || (action === "APPROVE" ? "Approved by compliance team." : null),
+      },
     });
 
     // Publish domain event to Event Bus

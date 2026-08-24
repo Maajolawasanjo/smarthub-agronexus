@@ -74,7 +74,7 @@ export function FarmerWithdrawModal({
       }
 
       setSuccessMsg(
-        `Withdrawal of ₦${numAmount.toLocaleString("en-NG")} initiated! Status is PENDING settlement via Flutterwave bank transfer.`
+        `Withdrawal of ₦${numAmount.toLocaleString("en-NG")} initiated! Status is PENDING bank settlement.`
       );
       setAmount("");
       setTimeout(() => {
@@ -105,7 +105,7 @@ export function FarmerWithdrawModal({
           </div>
           <h2 className="text-xl font-bold text-gray-900 tracking-tight">Withdraw Funds</h2>
           <p className="text-xs text-gray-500 mt-1">
-            Payout directly to your verified bank account via Flutterwave Transfers API.
+            Payout directly to your verified bank account.
           </p>
         </div>
 

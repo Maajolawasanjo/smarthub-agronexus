@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { WalletService } from "@/services/wallet.service";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
+import { recordAuditEvent } from "@/lib/audit";
 
 // POST /api/orders/[id]/release-escrow — Release escrow funds to farmer upon buyer delivery confirmation
 export async function POST(
@@ -54,6 +55,17 @@ export async function POST(
     }
 
     const result = await WalletService.executeEscrowRelease(session.userId, orderId);
+
+    await recordAuditEvent({
+      category: "PAYMENT",
+      severity: "INFO",
+      action: "ESCROW_RELEASED",
+      actorId: session.userId,
+      actorEmail: session.email,
+      resourceId: order.id,
+      metadata: { orderNumber: order.orderNumber, amount: Number(order.totalAmount) },
+      req,
+    });
 
     const res = NextResponse.json(
       createSuccessResponse({

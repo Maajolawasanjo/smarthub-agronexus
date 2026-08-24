@@ -1,3 +1,6 @@
+import crypto from "crypto";
+import { config } from "@/lib/config";
+
 /**
  * Settlement Engine for SmartHub AgroChain
  * Centralized financial calculations, platform fee allocation, tax splits,
@@ -6,7 +9,7 @@
 
 export interface SettlementBreakdown {
   grossAmount: number;
-  platformFeeRate: number; // e.g. 0.025 (2.5%)
+  platformFeeRate: number; // Single Source of Truth (config.fees.platformFeeRate = 0.05)
   platformFee: number;
   taxRate: number; // e.g. 0.075 (7.5% VAT)
   taxAmount: number;
@@ -24,7 +27,7 @@ export interface GeneratedReceipt {
   netFarmerPayout: number;
 }
 
-const STANDARD_PLATFORM_FEE_RATE = 0.025; // 2.5% platform commission
+const STANDARD_PLATFORM_FEE_RATE = config.fees.platformFeeRate; // 5.0% platform commission (Single Source of Truth)
 const STANDARD_TAX_RATE = 0.075; // 7.5% VAT on service fee
 
 /**
@@ -77,14 +80,40 @@ export function generateReceipt(
 }
 
 /**
- * Validates webhook security signatures (HMAC SHA-256)
+ * Validates webhook security signatures (HMAC SHA-256 & verif-hash secret matching)
  */
 export function verifyWebhookSignature(
   rawBody: string,
   signatureHeader: string | null,
   secret: string
 ): boolean {
-  if (!signatureHeader || !rawBody) return false;
-  // Standard HMAC SHA-256 mock/live signature verification
-  return signatureHeader.length > 10;
+  if (!signatureHeader || !signatureHeader.trim() || !secret || !secret.trim()) {
+    return false;
+  }
+  const cleanHeader = signatureHeader.trim();
+  const cleanSecret = secret.trim();
+
+  // 1. Direct Secret Hash Match (Flutterwave verif-hash header protocol)
+  if (cleanHeader.length === cleanSecret.length) {
+    if (crypto.timingSafeEqual(Buffer.from(cleanHeader), Buffer.from(cleanSecret))) {
+      return true;
+    }
+  }
+
+  // 2. Cryptographic HMAC SHA-256 Match (raw body payload signature)
+  if (rawBody && rawBody.trim()) {
+    const computedHmac = crypto
+      .createHmac("sha256", cleanSecret)
+      .update(rawBody)
+      .digest("hex");
+
+    if (
+      cleanHeader.length === computedHmac.length &&
+      crypto.timingSafeEqual(Buffer.from(cleanHeader), Buffer.from(computedHmac))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }

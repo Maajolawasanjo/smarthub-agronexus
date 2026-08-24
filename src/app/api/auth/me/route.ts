@@ -4,13 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { formatAuthenticatedUser } from "@/lib/user-dto";
 
 export async function GET() {
+  const headers = { "Cache-Control": "no-store, max-age=0" };
   try {
     const session = await getSession();
 
     if (!session || !session.userId) {
       return NextResponse.json(
         { authenticated: false, user: null },
-        { status: 401 }
+        { status: 401, headers }
       );
     }
 
@@ -25,21 +26,24 @@ export async function GET() {
     if (!user || !user.isActive) {
       return NextResponse.json(
         { authenticated: false, user: null, error: "User session invalid or account inactive." },
-        { status: 401 }
+        { status: 401, headers }
       );
     }
 
     const userPayload = formatAuthenticatedUser(user);
 
-    return NextResponse.json({
-      authenticated: true,
-      user: userPayload,
-    });
+    return NextResponse.json(
+      {
+        authenticated: true,
+        user: userPayload,
+      },
+      { headers }
+    );
   } catch (error) {
     console.error("Error in GET /api/auth/me:", error);
     return NextResponse.json(
       { authenticated: false, user: null, error: "Internal server error fetching session." },
-      { status: 500 }
+      { status: 500, headers }
     );
   }
 }

@@ -5,7 +5,6 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const {
-      farmerProfileId,
       name,
       categoryId,
       description,
@@ -20,6 +19,51 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Product name and price are required." },
         { status: 400 }
+      );
+    }
+
+    // Authenticated Session Farmer Resolution — SEC-004 & MKT-001 Guardrails
+    const { getSession } = await import("@/lib/session");
+    const session = await getSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { error: "Authentication required to submit produce." },
+        { status: 401 }
+      );
+    }
+
+    if (session.role !== "FARMER" && session.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Access denied. Only registered farmers can submit produce." },
+        { status: 403 }
+      );
+    }
+
+    const farmerProfile = await prisma.farmerProfile.findUnique({
+      where: { userId: session.userId },
+      include: { user: true },
+    });
+
+    if (!farmerProfile) {
+      return NextResponse.json(
+        { error: "Valid farmer profile required. Please complete farmer registration." },
+        { status: 403 }
+      );
+    }
+
+    if (farmerProfile.user && !farmerProfile.user.isActive) {
+      return NextResponse.json(
+        { error: "Account suspended: Produce creation is disabled for frozen accounts." },
+        { status: 403 }
+      );
+    }
+
+    // MKT-001: Verification Guard — Only APPROVED farmers can publish produce to the marketplace
+    if (farmerProfile.verificationStatus !== "APPROVED" && session.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Verification required: Your farmer profile must be approved before you can list produce on the marketplace." },
+        { status: 403 }
       );
     }
 
@@ -51,63 +95,6 @@ export async function POST(req: Request) {
         });
       }
       finalCategoryId = category.id;
-    }
-
-    // Authenticated Session Farmer Resolution
-    const { getSession } = await import("@/lib/session");
-    const session = await getSession();
-
-    let farmerProfile = null;
-    if (session?.userId) {
-      farmerProfile = await prisma.farmerProfile.findUnique({
-        where: { userId: session.userId },
-        include: { user: true },
-      });
-    }
-
-    if (!farmerProfile && farmerProfileId) {
-      farmerProfile = await prisma.farmerProfile.findUnique({
-        where: { id: farmerProfileId },
-        include: { user: true },
-      });
-    }
-
-    if (!farmerProfile && session?.userId) {
-      const u = await prisma.user.findUnique({ where: { id: session.userId } });
-      if (u) {
-        farmerProfile = await prisma.farmerProfile.create({
-          data: {
-            userId: u.id,
-            farmName: `${u.fullName}'s Farm`,
-            farmAddress: "Taraba State, Nigeria",
-            state: "Taraba State",
-            lga: "Zing",
-            verificationStatus: "APPROVED",
-          },
-          include: { user: true },
-        });
-      }
-    }
-
-    if (!farmerProfile) {
-      farmerProfile = await prisma.farmerProfile.findFirst({
-        where: { user: { isActive: true } },
-        include: { user: true },
-      });
-    }
-
-    if (!farmerProfile) {
-      return NextResponse.json(
-        { error: "Valid farmer profile is required to submit produce. Please complete your registration." },
-        { status: 404 }
-      );
-    }
-
-    if (farmerProfile.user && !farmerProfile.user.isActive) {
-      return NextResponse.json(
-        { error: "Account suspended: Produce creation is disabled for frozen accounts." },
-        { status: 403 }
-      );
     }
 
     // Update farmer profile location if provided in request
@@ -204,7 +191,7 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error submitting farmer produce API:", error);
     return NextResponse.json(
       { error: "Internal server error submitting produce." },
@@ -221,7 +208,7 @@ export async function GET(req: Request) {
     const { getSession } = await import("@/lib/session");
     const session = await getSession();
 
-    let whereClause: any = {};
+    let whereClause: Record<string, unknown> = {};
 
     if (session?.userId && session.role === "FARMER") {
       const farmerProfile = await prisma.farmerProfile.findUnique({
@@ -245,7 +232,7 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json({ produce: produceList }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching farmer produce API:", error);
     return NextResponse.json(
       { error: "Internal server error fetching farmer produce." },

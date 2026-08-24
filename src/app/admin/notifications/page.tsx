@@ -15,82 +15,59 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-// Mock B2B admin notification list
-const initialNotifications = [
-    {
-        id: "1",
-        title: "Farmer verification pending review",
-        description: "Farmer John Deo submitted Organic Cashew crop certificate documentation for listings #83335.",
-        time: "10 minutes ago",
-        priority: "High",
-        type: "verification",
-        read: false,
-        link: "/admin/products"
-    },
-    {
-        id: "2",
-        title: "B2B Escrow Wire authorization required",
-        description: "Payment release requested for Order #83335 ($145.00) after successful buyer inspection of Tomatoes.",
-        time: "1 hour ago",
-        priority: "High",
-        type: "payment",
-        read: false,
-        link: "/admin/orders"
-    },
-    {
-        id: "3",
-        title: "Escrow Commission Cleared",
-        description: "5% platform fee of ₦333,717 successfully logged from wholesale Cocoa Bean contract #90299.",
-        time: "4 hours ago",
-        priority: "Medium",
-        type: "payment",
-        read: true,
-        link: "/admin/analytics"
-    },
-    {
-        id: "4",
-        title: "Database Automated Backup Completed",
-        description: "Incremental platform data backup successfully stored in AWS S3 container (EU-West-1). Size: 14.8 GB.",
-        time: "15 hours ago",
-        priority: "Low",
-        type: "system",
-        read: true,
-    },
-    {
-        id: "5",
-        title: "New Administrator Login Detected",
-        description: "Successful login for administrator 'OLAK' from device Windows 11 / IP 197.210.64.12.",
-        time: "1 day ago",
-        priority: "Medium",
-        type: "security",
-        read: true,
-    }
-];
-
 export default function AdminNotificationsPage() {
-    const [notifications, setNotifications] = useState(initialNotifications);
+    const [notifications, setNotifications] = useState<any[]>([]);
     const [filter, setFilter] = useState("All");
 
     React.useEffect(() => {
         async function fetchLiveNotifications() {
             try {
-                const res = await fetch("/api/admin/overview");
-                const data = await res.json();
-                if (data.moderationQueue && data.moderationQueue.length > 0) {
-                    const liveItems = data.moderationQueue.map((item: any) => ({
-                        id: item.id,
-                        title: item.title || "Pending Moderation Action",
-                        description: `Submitted by ${item.submittedBy}. Review required for publication.`,
-                        time: item.date || "Just now",
-                        priority: "High",
-                        type: "verification",
-                        read: false,
-                        link: "/admin/products"
-                    }));
-                    setNotifications(prev => [...liveItems, ...prev]);
+                const [overviewRes, userNotifRes] = await Promise.all([
+                    fetch("/api/admin/overview").catch(() => null),
+                    fetch("/api/notifications").catch(() => null),
+                ]);
+
+                const items: any[] = [];
+
+                if (overviewRes && overviewRes.ok) {
+                    const data = await overviewRes.json();
+                    if (data.moderationQueue && data.moderationQueue.length > 0) {
+                        data.moderationQueue.forEach((item: any) => {
+                            items.push({
+                                id: `mod-${item.id}`,
+                                title: item.title || "Pending Moderation Action",
+                                description: `Submitted by ${item.submittedBy}. Review required.`,
+                                time: item.date || "Pending",
+                                priority: "High",
+                                type: "verification",
+                                read: false,
+                                link: "/admin/products"
+                            });
+                        });
+                    }
                 }
+
+                if (userNotifRes && userNotifRes.ok) {
+                    const data = await userNotifRes.json();
+                    if (data.notifications && data.notifications.length > 0) {
+                        data.notifications.forEach((n: any) => {
+                            items.push({
+                                id: n.id,
+                                title: n.title,
+                                description: n.message,
+                                time: new Date(n.createdAt).toLocaleTimeString(),
+                                priority: n.isRead ? "Low" : "High",
+                                type: "system",
+                                read: n.isRead,
+                                link: n.link || undefined
+                            });
+                        });
+                    }
+                }
+
+                setNotifications(items);
             } catch (err) {
-                // Fallback
+                console.error("Failed to load live admin notifications", err);
             }
         }
         fetchLiveNotifications();

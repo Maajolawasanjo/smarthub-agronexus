@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     const whereClause: any = {
       isAvailable: true,
       farmerProfile: {
+        verificationStatus: "APPROVED",
         user: {
           isActive: true,
         },

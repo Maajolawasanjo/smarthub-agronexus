@@ -1,4 +1,5 @@
 import { defaultEmailAdapter, defaultSMSAdapter, EmailPayload, SMSPayload, DispatchResult } from "./adapters";
+import { prisma } from "@/lib/prisma";
 
 export interface OutboxItem {
   id: string;
@@ -66,6 +67,36 @@ class OutboxManager {
         if (res.success) {
           item.status = "SENT";
           processed += 1;
+
+          // NOT-001: Persist notification record to PostgreSQL (non-blocking resilience)
+          const recipientEmailOrPhone = item.type === "EMAIL" ? (item.payload as EmailPayload).to : (item.payload as SMSPayload).to;
+          Promise.race([
+            prisma.user.findFirst({
+              where: {
+                OR: [
+                  { email: recipientEmailOrPhone },
+                  { phoneNumber: recipientEmailOrPhone },
+                ],
+              },
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("DB_TIMEOUT")), 300)),
+          ]).then(async (user: any) => {
+            if (user) {
+              const title = item.type === "EMAIL" ? (item.payload as EmailPayload).subject : "SMS Alert";
+              const message = item.type === "EMAIL" ? `Template: ${(item.payload as EmailPayload).template}` : (item.payload as SMSPayload).message;
+              await prisma.notification.create({
+                data: {
+                  userId: user.id,
+                  title: title || "Notification",
+                  message: message || "System update",
+                  type: "SYSTEM",
+                  isRead: false,
+                },
+              });
+            }
+          }).catch((dbLogErr) => {
+            // Soft fail logging when database connection is unavailable in unit testing
+          });
         } else {
           throw new Error(res.error || "Dispatch failed");
         }

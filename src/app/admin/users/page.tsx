@@ -4,43 +4,40 @@ import React, { useState } from "react";
 import { UserPlus, Search, ArrowRight, Eye, ShieldAlert, X, CheckCircle2, UserX, UserCheck } from "lucide-react";
 import Image from "next/image";
 
-// Mock data matching Image 5 exactly
-const initialUsers = [
-    { id: "83335", email: "john@example.com", name: "John Deo", role: "Farmer", status: "Active", joined: "23-06-2026" },
-    { id: "90299", email: "jane@example.com", name: "Jane Smith", role: "Buyer", status: "Active", joined: "23-06-2026" },
-    { id: "90298", email: "mike@example.com", name: "Mike Johnson", role: "Farmer", status: "Active", joined: "23-06-2026" },
-    { id: "65109", email: "sarah@example.com", name: "Sarah Connor", role: "Agent", status: "Active", joined: "23-06-2026" },
-    { id: "65108", email: "ahmed@example.com", name: "Ahmed Buba", role: "Buyer", status: "Inactive", joined: "23-06-2026" },
-];
-
 export default function AdminUsersPage() {
-    const [users, setUsers] = useState(initialUsers);
+    const [users, setUsers] = useState<Array<{ id: string; rawId: string; email: string; name: string; role: string; status: string; joined: string }>>([]);
     const [activeTab, setActiveTab] = useState("All users");
     const [showModal, setShowModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [isLoading, setIsLoading] = useState(true);
+
+    const fetchUsers = React.useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const res = await fetch("/api/admin/users");
+            const data = await res.json();
+            if (data.users) {
+                const mapped = data.users.map((u: any) => ({
+                    id: u.id.slice(-6).toUpperCase(),
+                    rawId: u.id,
+                    email: u.email,
+                    name: u.fullName,
+                    role: u.role === "FARMER" ? "Farmer" : u.role === "BUYER" ? "Buyer" : u.role === "ADMIN" ? "Admin" : "Agent",
+                    status: u.isActive ? "Active" : "Inactive",
+                    joined: new Date(u.createdAt).toLocaleDateString("en-GB"),
+                }));
+                setUsers(mapped);
+            }
+        } catch (err) {
+            console.error("Failed to load users from backend:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
 
     React.useEffect(() => {
-        async function fetchUsers() {
-            try {
-                const res = await fetch("/api/admin/users");
-                const data = await res.json();
-                if (data.users && data.users.length > 0) {
-                    const mapped = data.users.map((u: any) => ({
-                        id: u.id.slice(-6).toUpperCase(),
-                        email: u.email,
-                        name: u.fullName,
-                        role: u.role === "FARMER" ? "Farmer" : u.role === "BUYER" ? "Buyer" : "Agent",
-                        status: u.isActive ? "Active" : "Inactive",
-                        joined: new Date(u.createdAt).toLocaleDateString("en-GB"),
-                    }));
-                    setUsers(mapped);
-                }
-            } catch (err) {
-                // Fallback
-            }
-        }
         fetchUsers();
-    }, []);
+    }, [fetchUsers]);
 
     // Form inputs for new user
     const [newUserName, setNewUserName] = useState("");
@@ -63,11 +60,12 @@ export default function AdminUsersPage() {
 
         const newUser = {
             id: Math.floor(10000 + Math.random() * 90000).toString(),
+            rawId: `temp-${Date.now()}`,
             email: newUserEmail,
             name: newUserName,
             role: newUserRole,
             status: "Active",
-            joined: "29-05-2026"
+            joined: new Date().toLocaleDateString("en-GB")
         };
 
         setUsers([newUser, ...users]);
@@ -78,18 +76,28 @@ export default function AdminUsersPage() {
         triggerToast(`User account for ${newUserName} successfully created!`);
     };
 
-    // Toggle user status between Active & Inactive
-    const toggleUserStatus = (id: string) => {
-        setUsers(prev =>
-            prev.map(user => {
-                if (user.id === id) {
-                    const newStatus = user.status === "Active" ? "Inactive" : "Active";
-                    triggerToast(`User status for ${user.name} changed to ${newStatus}.`);
-                    return { ...user, status: newStatus };
-                }
-                return user;
-            })
-        );
+    // Toggle user status between Active & Inactive via PATCH /api/admin/users
+    const toggleUserStatus = async (rawId: string, currentStatus: string, name: string) => {
+        const targetIsActive = currentStatus !== "Active";
+        try {
+            const res = await fetch("/api/admin/users", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: rawId, isActive: targetIsActive }),
+            });
+
+            if (res.ok) {
+                const newStatus = targetIsActive ? "Active" : "Inactive";
+                setUsers(prev =>
+                    prev.map(user => (user.rawId === rawId ? { ...user, status: newStatus } : user))
+                );
+                triggerToast(`User status for ${name} changed to ${newStatus}.`);
+            } else {
+                triggerToast(`Failed to update status for ${name}.`);
+            }
+        } catch (err) {
+            triggerToast(`Error updating status for ${name}.`);
+        }
     };
 
     // Filter users by tab & search query
@@ -222,7 +230,7 @@ export default function AdminUsersPage() {
                                         <td className="py-4.5 px-6 text-gray-400 text-xs font-semibold">{item.joined}</td>
                                         <td className="py-4.5 px-6">
                                             <button
-                                                onClick={() => toggleUserStatus(item.id)}
+                                                onClick={() => toggleUserStatus(item.rawId, item.status, item.name)}
                                                 className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
                                                     item.status === "Active"
                                                         ? "text-red-500 border-red-100 hover:bg-red-50"

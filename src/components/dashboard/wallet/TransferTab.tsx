@@ -69,7 +69,7 @@ export function TransferTab() {
 
       if (json.success) {
         toast(
-          `Withdrawal request sent! ₦${amountNum.toLocaleString()} moved to Pending — funds will be released to your bank once Flutterwave confirms the transfer. Ref: ${json.data.transactionRef}`,
+          `Withdrawal request sent! ₦${amountNum.toLocaleString()} moved to Pending — funds will be released to your bank once settlement completes. Ref: ${json.data.transactionRef}`,
           "success"
         );
         setTransferAmount("");
@@ -123,7 +123,7 @@ export function TransferTab() {
                 <Clock size={14} className="text-amber-600 shrink-0" />
                 <div>
                   <p className="text-[11px] font-bold text-amber-800">Pending Withdrawal: {walletPage.balances.formattedPendingWithdrawals}</p>
-                  <p className="text-[10px] text-amber-600">Funds in transit — awaiting bank confirmation via Flutterwave webhook.</p>
+                  <p className="text-[10px] text-amber-600">Funds in transit — awaiting bank settlement confirmation.</p>
                 </div>
               </div>
             )}

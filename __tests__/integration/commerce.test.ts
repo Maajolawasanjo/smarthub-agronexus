@@ -13,9 +13,9 @@ describe("Phase 4 End-to-End Commerce Domain Integration Tests", () => {
     // 2. Order Placed & Settlement Calculated
     const orderTotal = 25000;
     const settlement = calculateSettlement(orderTotal);
-    expect(settlement.platformFee).toBe(625); // 2.5% of 25,000
-    expect(settlement.taxAmount).toBe(46.88); // 7.5% of 625
-    expect(settlement.netFarmerPayout).toBe(24328.12);
+    expect(settlement.platformFee).toBe(1250); // 5.0% of 25,000
+    expect(settlement.taxAmount).toBe(93.75); // 7.5% of 1250
+    expect(settlement.netFarmerPayout).toBe(23656.25);
 
     // 3. Fulfillment Lifecycle Transitions
     expect(isValidFulfillmentTransition("PENDING", "CONFIRMED")).toBe(true);

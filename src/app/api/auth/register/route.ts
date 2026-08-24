@@ -63,7 +63,8 @@ export async function POST(req: Request) {
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedPhone = userPhone.trim();
     const requestedRole = String(role).toUpperCase();
-    const targetRole = requestedRole === "FARMER" ? "FARMER" : requestedRole === "ADMIN" ? "ADMIN" : "BUYER";
+    // Public registration strictly prohibits ADMIN creation. Only FARMER or BUYER allowed.
+    const targetRole = requestedRole === "FARMER" ? "FARMER" : "BUYER";
 
     if (targetRole === "FARMER" && (!farmName || !farmName.trim())) {
       return NextResponse.json(
@@ -158,18 +159,19 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { name?: string; message?: string; code?: string; meta?: { target?: string | string[] }; stack?: string };
     console.error("[REGISTER_TELEMETRY_ERROR] Detailed Catch Output:", {
-      name: error?.name,
-      message: error?.message,
-      code: error?.code,
-      meta: error?.meta,
-      stack: error?.stack?.split("\n")?.slice(0, 5),
+      name: err?.name,
+      message: err?.message,
+      code: err?.code,
+      meta: err?.meta,
+      stack: err?.stack?.split("\n")?.slice(0, 5),
     });
 
     // Handle Prisma Unique Constraint Error (P2002)
-    if (error?.code === "P2002") {
-      const targetField = error?.meta?.target ? (Array.isArray(error.meta.target) ? error.meta.target.join(", ") : error.meta.target) : "field";
+    if (err?.code === "P2002") {
+      const targetField = err?.meta?.target ? (Array.isArray(err.meta.target) ? err.meta.target.join(", ") : err.meta.target) : "field";
       return NextResponse.json(
         { error: `An account with this ${targetField} already exists.` },
         { status: 409 }
@@ -179,7 +181,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { 
         error: "An unexpected server error occurred during registration. Please try again.",
-        details: process.env.NODE_ENV !== "production" ? (error?.message || String(error)) : undefined 
+        details: process.env.NODE_ENV !== "production" ? (err?.message || String(error)) : undefined 
       },
       { status: 500 }
     );

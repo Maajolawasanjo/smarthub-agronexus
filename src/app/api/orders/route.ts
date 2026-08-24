@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { recordAuditEvent } from "@/lib/audit";
 import {
   OrdersPageDTO,
   OrderSummaryItemDTO,
@@ -105,14 +106,21 @@ export async function POST(req: Request) {
           subtotal,
         });
 
-        // 2. Atomically reserve inventory
-        await tx.inventory.update({
-          where: { productId: product.id },
-          data: {
-            availableQty: { decrement: requestedQty },
-            reservedQty: { increment: requestedQty },
-          },
-        });
+        // 2. Atomically reserve inventory with conditional check against race conditions (INV-001)
+        const updatedRows = await tx.$executeRaw`
+          UPDATE "Inventory"
+          SET "availableQty" = "availableQty" - ${requestedQty},
+              "reservedQty"  = "reservedQty"  + ${requestedQty},
+              "updatedAt"    = NOW()
+          WHERE "productId"  = ${product.id}
+            AND "availableQty" >= ${requestedQty}
+        `;
+
+        if (Number(updatedRows) !== 1) {
+          throw new Error(
+            `INSUFFICIENT_STOCK: Concurrent reservation failed for "${product.name}". Requested: ${requestedQty}. Stock was modified by another checkout.`
+          );
+        }
       }
 
       // 3. If paying with WALLET, check balance & debit atomically inside transaction
@@ -130,7 +138,7 @@ export async function POST(req: Request) {
         const currentBalance = Number(wallet.balance);
         if (currentBalance < totalAmount) {
           throw new Error(
-            `Insufficient wallet balance. Order Total: ₦${totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}, Available Balance: ₦${currentBalance.toLocaleString("en-NG", { minimumFractionDigits: 2 })}. Please top up your wallet or use Credit Card / Flutterwave.`
+            `Insufficient wallet balance. Order Total: ₦${totalAmount.toLocaleString("en-NG", { minimumFractionDigits: 2 })}, Available Balance: ₦${currentBalance.toLocaleString("en-NG", { minimumFractionDigits: 2 })}. Please top up your wallet or proceed to payment.`
           );
         }
 
@@ -199,6 +207,21 @@ export async function POST(req: Request) {
       return createdOrder;
     });
 
+    await recordAuditEvent({
+      category: "ORDER",
+      severity: "INFO",
+      action: "ORDER_CREATED",
+      actorId: session.userId,
+      actorEmail: session.email,
+      resourceId: newOrder.id,
+      metadata: {
+        orderNumber: newOrder.orderNumber,
+        totalAmount: Number(newOrder.totalAmount),
+        itemCount: newOrder.orderItems.length,
+      },
+      req,
+    });
+
     return NextResponse.json(
       {
         message: "Order placed successfully. Inventory reserved. Escrow hold initialized.",
@@ -213,23 +236,25 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { message?: string };
     console.error("[ORDERS_CREATE_ERROR] Full Details:", error);
 
     // Handle known validation errors
     if (
-      error.message?.includes("Insufficient stock") ||
-      error.message?.includes("not available") ||
-      error.message?.includes("Invalid quantity") ||
-      error.message?.includes("Insufficient wallet balance")
+      err.message?.includes("Insufficient stock") ||
+      err.message?.includes("INSUFFICIENT_STOCK") ||
+      err.message?.includes("not available") ||
+      err.message?.includes("Invalid quantity") ||
+      err.message?.includes("Insufficient wallet balance")
     ) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: err.message }, { status: 400 });
     }
 
     return NextResponse.json(
       {
         error: "Internal server error creating order.",
-        details: process.env.NODE_ENV !== "production" ? (error?.message || String(error)) : undefined
+        details: process.env.NODE_ENV !== "production" ? (err?.message || String(error)) : undefined
       },
       { status: 500 }
     );
@@ -257,7 +282,7 @@ export async function GET(req: Request) {
     const skip = (page - 1) * limit;
 
     // Build where clause based on user role
-    const whereClause: any = {};
+    const whereClause: Record<string, unknown> = {};
 
     if (session.role === "BUYER") {
       const buyerProfile = await prisma.buyerProfile.findUnique({
@@ -325,12 +350,8 @@ export async function GET(req: Request) {
       // Aggregate status counts
       prisma.order.groupBy({
         by: ["status"],
-        where: session.role === "BUYER"
-          ? { buyerId: whereClause.buyerId }
-          : session.role === "FARMER"
-          ? { orderItems: { some: { product: { farmerProfileId: whereClause.orderItems?.some?.product?.farmerProfileId } } } }
-          : {},
-        _count: { id: true },
+        where: whereClause as any,
+        _count: { _all: true },
       }),
     ]);
 
@@ -348,7 +369,7 @@ export async function GET(req: Request) {
     };
 
     for (const sc of statusCounts) {
-      const count = sc._count.id;
+      const count = typeof sc._count === "object" && sc._count ? (sc._count as { _all?: number })._all ?? 0 : Number(sc._count || 0);
       statusSummary.all += count;
       switch (sc.status) {
         case "PENDING": statusSummary.pending = count; break;
@@ -364,10 +385,10 @@ export async function GET(req: Request) {
 
     // Calculate statistics
     const totalSpentResult = await prisma.order.aggregate({
-      where: session.role === "BUYER" ? { buyerId: whereClause.buyerId } : {},
+      where: whereClause as any,
       _sum: { totalAmount: true },
     });
-    const totalSpent = Number(totalSpentResult._sum.totalAmount || 0);
+    const totalSpent = Number(totalSpentResult._sum?.totalAmount || 0);
     const totalOrders = statusSummary.all;
     const avgOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
 
@@ -411,7 +432,7 @@ export async function GET(req: Request) {
     };
 
     return NextResponse.json(dto, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error fetching OrdersPageDTO:", error);
     return NextResponse.json(
       { error: "Internal server error fetching orders." },

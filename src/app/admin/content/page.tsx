@@ -91,7 +91,11 @@ export default function AdminContentPage() {
             )}
 
             {/* Subtext info */}
-            <div className="-mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs px-4 py-2.5 rounded-xl font-medium flex items-center gap-2">
+                <span className="bg-amber-200 text-amber-900 text-[10px] font-bold uppercase px-2 py-0.5 rounded">Static Preview</span>
+                <span>B2B Content CMS is currently in static preview mode. Article modifications are not persisted to database.</span>
+            </div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <p className="text-gray-500 text-sm">
                     Publish blog posts, agricultural tutorials, seasonal harvest reports, and announcements.
                 </p>

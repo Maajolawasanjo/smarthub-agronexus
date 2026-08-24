@@ -179,6 +179,12 @@ model Delivery {
   trackingNumber     String?
   estimatedDelivery  DateTime?
   deliveredAt        DateTime?
+  podPhotoUrl        String?
+  podSignatureUrl    String?
+  podLatitude        Float?
+  podLongitude       Float?
+  podDriverName      String?
+  podLicensePlate    String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   logisticsPartner   LogisticsPartner? @relation(fields: [logisticsPartnerId], references: [id])
@@ -386,5 +392,75 @@ enum TxStatus {
   FAILED
   REVERSED
   PENDING
+}
+
+enum AuditCategory {
+  AUTH
+  USER
+  ORDER
+  PAYMENT
+  ESCROW
+  DELIVERY
+  KYC
+  DISPUTE
+  SYSTEM
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum OutboxChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+model AuditEvent {
+  id           String        @id @default(cuid())
+  category     AuditCategory @default(SYSTEM)
+  severity     AuditSeverity @default(INFO)
+  action       String
+  actorId      String?
+  actorEmail   String?
+  resourceType String?
+  resourceId   String?
+  metadata     Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime      @default(now())
+
+  @@index([category])
+  @@index([actorId])
+  @@index([resourceId])
+  @@index([createdAt])
+}
+
+model NotificationOutbox {
+  id          String        @id @default(cuid())
+  channel     OutboxChannel
+  recipient   String
+  subject     String?
+  payload     Json
+  status      OutboxStatus  @default(PENDING)
+  attempts    Int           @default(0)
+  maxAttempts Int           @default(3)
+  availableAt DateTime      @default(now())
+  processedAt DateTime?
+  lastError   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, availableAt])
 }
 

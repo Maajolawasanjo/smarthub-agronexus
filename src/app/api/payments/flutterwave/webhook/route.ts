@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { WalletService } from "@/services/wallet.service";
+import { verifyWebhookSignature } from "@/lib/settlement";
 
 export async function POST(req: Request) {
   try {
+    const rawBody = await req.text();
     const signature = req.headers.get("verif-hash");
     const secretHash = process.env.FLUTTERWAVE_SECRET_HASH || process.env.FLUTTERWAVE_SECRET_KEY;
 
-    // 1. Cryptographic Signature Guard
-    if (!signature || signature !== secretHash) {
+    // 1. Cryptographic Signature Guard (PAY-001)
+    if (!secretHash || !verifyWebhookSignature(rawBody, signature, secretHash)) {
       console.warn("[FLUTTERWAVE_WEBHOOK_UNAUTHORIZED] Signature mismatch or missing header.");
       return NextResponse.json(
         { error: "Unauthorized webhook signature match failure." },
@@ -16,17 +18,19 @@ export async function POST(req: Request) {
       );
     }
 
-    const payload = await req.json();
+    const payload = JSON.parse(rawBody);
     const event = payload.event;
 
     // ────────────────────────────────────────────────────────────────────────
-    // A. CHARGE COMPLETED — Buyer wallet funding / direct product checkout
+    // A. CHARGE COMPLETED — Direct Product Order Checkout or Wallet Deposit (PAY-004)
     // ────────────────────────────────────────────────────────────────────────
     if (event === "charge.completed" && payload.data?.status === "successful") {
       const transactionId = payload.data.id;
       const txRef = payload.data.tx_ref;
       const amount = payload.data.amount;
       const userId = payload.data.meta?.userId;
+      const orderId = payload.data.meta?.orderId;
+      const paymentId = payload.data.meta?.paymentId;
 
       const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
 
@@ -69,8 +73,22 @@ export async function POST(req: Request) {
 
       console.log(`[FLUTTERWAVE_CHARGE_SUCCESS] Ref: ${txRef}, Amount: ₦${amount}, User: ${userId}`);
 
-      // 4. Atomic Ledger Entry + Wallet Balance Credit
-      if (userId && userId !== "guest") {
+      // 4. Match Order Checkout Payment vs Wallet Deposit
+      const targetPayment = await prisma.payment.findFirst({
+        where: {
+          OR: [
+            { transactionRef: txRef },
+            ...(orderId ? [{ orderId }] : []),
+            ...(paymentId ? [{ id: paymentId }] : []),
+          ],
+        },
+      });
+
+      if (targetPayment) {
+        // Settle Order Payment & Escrow Lock (PAY-004)
+        await WalletService.settleOrderPaymentFromGateway(targetPayment.id, txRef, Number(amount));
+      } else if (userId && userId !== "guest") {
+        // General Wallet Funding Deposit
         await WalletService.executeDeposit(userId, Number(amount), txRef);
       }
     }

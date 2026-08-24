@@ -313,15 +313,9 @@ function validateCvv(v: string, type: CardType) {
 export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
     // ── ALL REACT HOOKS DECLARED UNCONDITIONALLY AT TOP LEVEL ──
     const { clearCart } = useCart();
-    const [method, setMethod] = useState<PaymentMethod>("card");
-    const [showCvv, setShowCvv] = useState(false);
+    const [method, setMethod] = useState<PaymentMethod>("wallet");
     const [isSuccess, setIsSuccess] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // Card form state
-    const [card, setCard] = useState<CardForm>({ name: "", number: "", expiry: "", cvv: "" });
-    const [errors, setErrors] = useState<CardErrors>({});
-    const [touched, setTouched] = useState<Partial<Record<keyof CardForm, boolean>>>({});
 
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [orderNumber, setOrderNumber] = useState<string>("");
@@ -330,9 +324,9 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
     const [isFetchingWallet, setIsFetchingWallet] = useState<boolean>(false);
 
-    // Fetch user's live wallet balance whenever modal opens or wallet tab is selected
+    // Fetch user's live wallet balance whenever modal opens
     useEffect(() => {
-        if (isOpen && method === "wallet") {
+        if (isOpen) {
             setIsFetchingWallet(true);
             fetch("/api/wallet")
                 .then(res => res.json())
@@ -346,76 +340,15 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                 .catch(() => setWalletBalance(0))
                 .finally(() => setIsFetchingWallet(false));
         }
-    }, [isOpen, method]);
-
-    const detectedType = detectCardType(card.number);
-    const cardInfo = CARD_TYPES[detectedType];
+    }, [isOpen]);
 
     // Unconditional Early Return ONLY AFTER all Hooks are defined
     if (!isOpen) return null;
-
-    const getErrors = (): CardErrors => ({
-        name: validateName(card.name),
-        number: validateNumber(card.number, detectedType),
-        expiry: validateExpiry(card.expiry),
-        cvv: validateCvv(card.cvv, detectedType),
-    });
-
-    const isCardValid = () => {
-        const e = getErrors();
-        return !e.name && !e.number && !e.expiry && !e.cvv;
-    };
-
-    const handleBlur = (field: keyof CardForm): void => {
-        setTouched(prev => ({ ...prev, [field]: true }));
-        setErrors(getErrors());
-    };
-
-    const handleCardNumber = (raw: string): void => {
-        const digits = raw.replace(/\D/g, "");
-        const type = detectCardType(digits);
-        const max = CARD_TYPES[type].maxLength;
-        const clamped = digits.slice(0, max);
-        const formatted = formatCardNumber(clamped, type);
-        setCard(prev => ({ ...prev, number: formatted }));
-        if (touched.number) setErrors(prev => ({ ...prev, number: validateNumber(formatted, type) }));
-    };
-
-    const handleExpiry = (raw: string): void => {
-        let digits = raw.replace(/\D/g, "").slice(0, 4);
-        let formatted = digits;
-        if (digits.length > 2) {
-            let mm = digits.slice(0, 2);
-            if (Number(mm) > 12) mm = "12";
-            if (mm === "00") mm = "01";
-            formatted = mm + "/" + digits.slice(2);
-        }
-        setCard(prev => ({ ...prev, expiry: formatted }));
-        if (touched.expiry) setErrors(prev => ({ ...prev, expiry: validateExpiry(formatted) }));
-    };
-
-    const handleCvv = (raw: string) => {
-        const digits = raw.replace(/\D/g, "").slice(0, cardInfo.cvvLength);
-        setCard(prev => ({ ...prev, cvv: digits }));
-        if (touched.cvv) setErrors(prev => ({ ...prev, cvv: validateCvv(digits, detectedType) }));
-    };
-
-    const handleName = (v: string) => {
-        setCard(prev => ({ ...prev, name: v }));
-        if (touched.name) setErrors(prev => ({ ...prev, name: validateName(v) }));
-    };
 
     const isWalletSufficient = walletBalance !== null && walletBalance >= total;
     const walletShortfall = walletBalance !== null ? Math.max(0, total - walletBalance) : 0;
 
     const handleSubmit = async (): Promise<void> => {
-        if (method === "card") {
-            setTouched({ name: true, number: true, expiry: true, cvv: true });
-            const e = getErrors();
-            setErrors(e);
-            if (!isCardValid()) return;
-        }
-
         if (method === "wallet") {
             if (walletBalance !== null && walletBalance < total) {
                 setSubmitError(
@@ -440,8 +373,8 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                 return;
             }
 
-            // Handle Flutterwave Checkout Gateway
-            if (method === "flutterwave") {
+            // Handle Hosted Payment Gateway (Make Payment)
+            if (method === "flutterwave" || method === "card") {
                 const flwRes = await fetch("/api/payments/flutterwave/initialize", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -453,17 +386,14 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
 
                 const flwData = await flwRes.json();
                 if (flwRes.ok && flwData.link) {
-                    // Redirect customer directly to Flutterwave Payment Gateway
                     window.location.href = flwData.link;
                     return;
                 } else {
-                    setSubmitError(flwData.error || "Failed to launch Flutterwave checkout session.");
+                    setSubmitError(flwData.error || "Failed to launch payment checkout session.");
                     setIsSubmitting(false);
                     return;
                 }
             }
-
-            const apiPaymentMethod = method === "card" ? "CARD" : "WALLET";
 
             const res = await fetch("/api/orders", {
                 method: "POST",
@@ -472,7 +402,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                     items: orderItems,
                     shippingAddress: "Lagos Port Terminal, Nigeria",
                     incoterm: "FOB",
-                    paymentMethod: apiPaymentMethod,
+                    paymentMethod: "WALLET",
                 }),
             });
 
@@ -537,13 +467,13 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 pb-2 shrink-0">
                             <div>
-                                <h2 className="text-lg font-bold text-gray-900">Choose Payment Method</h2>
+                                <h2 className="text-lg font-bold text-gray-900">Complete Payment</h2>
                                 <p className="text-xs text-gray-400">Total payable: <span className="font-bold text-[#1B4D28]">₦{total.toLocaleString("en-NG", { minimumFractionDigits: 2 })}</span></p>
                             </div>
                             <button
                                 onClick={onClose}
                                 disabled={isSubmitting}
-                                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50 cursor-pointer"
                             >
                                 <X size={20} />
                             </button>
@@ -553,11 +483,10 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                         <div className="px-6 pb-8 overflow-y-auto pt-4">
 
                             {/* Method Selector */}
-                            <div className="grid grid-cols-3 gap-3 mb-6">
+                            <div className="grid grid-cols-2 gap-3 mb-6">
                                 {[
-                                    { id: "card", label: "Credit Card", icon: <CreditCard size={18} />, color: "bg-[#1B4D28]" },
-                                    { id: "flutterwave", label: "Flutterwave", icon: <Zap size={18} />, color: "bg-[#FB923C]" },
-                                    { id: "wallet", label: "Agro Wallet", icon: <Wallet size={18} />, color: "bg-[#FFB800]" },
+                                    { id: "wallet", label: "Pay from Balance", icon: <Wallet size={18} />, color: "bg-[#1B4D28]" },
+                                    { id: "flutterwave", label: "Make Payment", icon: <CreditCard size={18} />, color: "bg-[#F5A623]" },
                                 ].map((m) => (
                                     <button
                                         key={m.id}
@@ -567,7 +496,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                         }}
                                         disabled={isSubmitting}
                                         className={cn(
-                                            "flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl border-2 transition-all group disabled:opacity-50",
+                                            "flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl border-2 transition-all group disabled:opacity-50 cursor-pointer",
                                             method === m.id
                                                 ? "border-[#1B4D28] bg-green-50/40 shadow-sm"
                                                 : "border-gray-100 bg-white hover:border-gray-200"
@@ -589,137 +518,26 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                 ))}
                             </div>
 
-                            {/* ── 1. Credit Card Form ── */}
-                            {method === "card" && (
+                            {/* ── 1. Make Payment View ── */}
+                            {(method === "flutterwave" || method === "card") && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    {/* Detected Card Type Badge */}
-                                    <div className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all",
-                                        detectedType !== "unknown"
-                                            ? "border-[#1B4D28]/20 bg-green-50/40"
-                                            : "border-gray-100 bg-gray-50/60"
-                                    )}>
-                                        <div className="shrink-0">{cardInfo.icon}</div>
-                                        <div>
-                                            <p className="text-xs font-bold text-gray-700">
-                                                {detectedType !== "unknown" ? `${cardInfo.label} detected` : "Enter card number to detect type"}
-                                            </p>
-                                            <p className="text-[10px] text-gray-400">
-                                                {detectedType !== "unknown"
-                                                    ? `${cardInfo.maxLength} digits · CVV: ${cardInfo.cvvLength} digits`
-                                                    : "Supports Visa, Mastercard, Verve, Amex, Discover"}
-                                            </p>
+                                    <div className="p-5 bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-green-500/10 border-2 border-green-500/30 rounded-3xl text-center">
+                                        <div className="w-14 h-14 bg-gradient-to-tr from-[#1B4D28] to-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg mx-auto mb-3">
+                                            <CreditCard size={28} />
                                         </div>
-                                        {detectedType !== "unknown" && (
-                                            <div className="ml-auto w-5 h-5 rounded-full bg-[#1B4D28] flex items-center justify-center">
-                                                <Check size={11} className="text-white" strokeWidth={3} />
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Cardholder Name */}
-                                    <FieldWrapper label="Cardholder Name" error={touched.name ? errors.name : undefined}>
-                                        <input
-                                            type="text"
-                                            placeholder="John Doe"
-                                            value={card.name}
-                                            onChange={e => handleName(e.target.value)}
-                                            onBlur={() => handleBlur("name")}
-                                            disabled={isSubmitting}
-                                            autoComplete="off"
-                                            className={getInputClass("name", touched, errors, card.name)}
-                                        />
-                                    </FieldWrapper>
-
-                                    {/* Card Number */}
-                                    <FieldWrapper label="Card Number" error={touched.number ? errors.number : undefined}>
-                                        <div className="relative">
-                                            <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                placeholder={detectedType === "amex" ? "3782 822463 10005" : "4111 1111 1111 1111"}
-                                                value={card.number}
-                                                onChange={e => handleCardNumber(e.target.value)}
-                                                onBlur={() => handleBlur("number")}
-                                                disabled={isSubmitting}
-                                                autoComplete="off"
-                                                maxLength={detectedType === "amex" ? 17 : 19}
-                                                className={cn(getInputClass("number", touched, errors, card.number), "pr-14 font-mono tracking-widest")}
-                                            />
-                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                                {cardInfo.icon}
-                                            </div>
-                                        </div>
-                                    </FieldWrapper>
-
-                                    {/* Expiry + CVV row */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <FieldWrapper label="Expiry Date" error={touched.expiry ? errors.expiry : undefined}>
-                                            <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                placeholder="MM/YY"
-                                                value={card.expiry}
-                                                onChange={e => handleExpiry(e.target.value)}
-                                                onBlur={() => handleBlur("expiry")}
-                                                disabled={isSubmitting}
-                                                autoComplete="off"
-                                                maxLength={5}
-                                                className={getInputClass("expiry", touched, errors, card.expiry)}
-                                            />
-                                        </FieldWrapper>
-
-                                        <FieldWrapper
-                                            label={`CVV (${cardInfo.cvvLength} digits)`}
-                                            error={touched.cvv ? errors.cvv : undefined}
-                                        >
-                                            <div className="relative">
-                                                <input
-                                                    type={showCvv ? "text" : "password"}
-                                                    inputMode="numeric"
-                                                    placeholder={"•".repeat(cardInfo.cvvLength)}
-                                                    value={card.cvv}
-                                                    onChange={e => handleCvv(e.target.value)}
-                                                    onBlur={() => handleBlur("cvv")}
-                                                    disabled={isSubmitting}
-                                                    autoComplete="off"
-                                                    maxLength={cardInfo.cvvLength}
-                                                    className={cn(getInputClass("cvv", touched, errors, card.cvv), "pr-10 font-mono tracking-widest")}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowCvv(!showCvv)}
-                                                    disabled={isSubmitting}
-                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                                                >
-                                                    {showCvv ? <EyeOff size={16} /> : <Eye size={16} />}
-                                                </button>
-                                            </div>
-                                        </FieldWrapper>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* ── 2. Flutterwave Integration View ── */}
-                            {method === "flutterwave" && (
-                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <div className="p-5 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-amber-500/10 border-2 border-amber-500/30 rounded-3xl text-center">
-                                        <div className="w-14 h-14 bg-gradient-to-tr from-orange-500 to-amber-400 rounded-2xl flex items-center justify-center text-white shadow-lg mx-auto mb-3">
-                                            <Zap size={28} />
-                                        </div>
-                                        <h3 className="text-base font-bold text-gray-900 mb-1">Flutterwave Online Checkout</h3>
+                                        <h3 className="text-base font-bold text-gray-900 mb-1">Make Payment</h3>
                                         <p className="text-xs text-gray-500 max-w-[320px] mx-auto leading-relaxed mb-4">
-                                            Pay instantly via Cards, Bank Transfer, USSD, or Mobile Money using Flutterwave secure gateway.
+                                            Proceed to complete your order payment securely via SmartHub payment portal.
                                         </p>
-                                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-100/60 rounded-full border border-amber-200 text-amber-900 text-xs font-semibold">
-                                            <ShieldCheck size={14} className="text-amber-700" />
+                                        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-100/60 rounded-full border border-green-200 text-[#1B4D28] text-xs font-semibold">
+                                            <ShieldCheck size={14} className="text-[#1B4D28]" />
                                             <span>256-Bit SSL Encrypted Payment</span>
                                         </div>
                                     </div>
                                 </div>
                             )}
 
-                            {/* ── 3. SmartHub AgroChain Wallet View (With Balance Verification) ── */}
+                            {/* ── 2. SmartHub Agro Wallet View ── */}
                             {method === "wallet" && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
                                     <div className="p-5 bg-emerald-900 text-white rounded-3xl shadow-xl relative overflow-hidden">
@@ -808,14 +626,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                             <button
                                 onClick={handleSubmit}
                                 disabled={isSubmitting || (method === "wallet" && walletBalance !== null && !isWalletSufficient)}
-                                className={cn(
-                                    "w-full mt-6 py-4 px-6 rounded-2xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed",
-                                    method === "card"
-                                        ? "bg-[#1B4D28] hover:bg-[#153b1e] shadow-green-900/20"
-                                        : method === "flutterwave"
-                                            ? "bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-700 hover:to-orange-600 shadow-orange-500/20"
-                                            : "bg-[#1B4D28] hover:bg-[#153b1e] shadow-green-900/20"
-                                )}
+                                className="w-full mt-6 py-4 px-6 rounded-2xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed bg-[#1B4D28] hover:bg-[#153b1e] shadow-green-900/20 cursor-pointer"
                             >
                                 {isSubmitting ? (
                                     <div className="flex items-center gap-2">
@@ -826,11 +637,9 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                     <>
                                         <Lock size={16} />
                                         <span>
-                                            {method === "card"
-                                                ? `Pay ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} with Card`
-                                                : method === "flutterwave"
-                                                    ? `Pay ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} with Flutterwave`
-                                                    : `Pay ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} from Wallet`}
+                                            {method === "wallet"
+                                                ? `Pay ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} from Balance`
+                                                : `Make Payment (₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })})`}
                                         </span>
                                     </>
                                 )}

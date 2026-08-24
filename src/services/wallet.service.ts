@@ -67,10 +67,12 @@ export class WalletService {
     // The Wallet model is the cached ledger summary.
     // Each balance column is updated atomically in prisma.$transaction by the corresponding ledger operation.
     // Read from DB fields — do NOT re-aggregate on every request.
-    const availableBalance   = Number(wallet.balance);
-    const escrowBalance      = Number((wallet as any).escrow           ?? 0);
-    const pendingWithdrawals = Number((wallet as any).pendingWithdrawal ?? 0);
-    const frozenBalance      = Number((wallet as any).frozen            ?? 0);
+    // Read from DB fields — do NOT re-aggregate on every request.
+    const walletRecord = wallet as unknown as { balance: unknown; escrow?: unknown; pendingWithdrawal?: unknown; frozen?: unknown };
+    const availableBalance   = Number(walletRecord.balance);
+    const escrowBalance      = Number(walletRecord.escrow           ?? 0);
+    const pendingWithdrawals = Number(walletRecord.pendingWithdrawal ?? 0);
+    const frozenBalance      = Number(walletRecord.frozen            ?? 0);
 
     const balances: WalletBalanceDTO = {
       currency: "NGN",
@@ -146,7 +148,7 @@ export class WalletService {
     // 4. Funding Instructions
     const fundingInstructions: FundingInstructionsDTO = {
       flutterwaveCheckoutUrl: `/api/payments/flutterwave/initialize?userId=${userId}`,
-      supportedMethods: ["FLUTTERWAVE", "USSD", "CARD"],
+      supportedMethods: ["FLUTTERWAVE", "VIRTUAL_ACCOUNT", "USSD", "CARD"],
     };
 
     // 5. Linked Bank Accounts
@@ -175,10 +177,10 @@ export class WalletService {
     const recentTransactions: WalletTransactionDTO[] = dbTx.map((tx) => ({
       id: tx.id,
       reference: tx.reference,
-      type: tx.type as any,
+      type: tx.type as WalletTransactionDTO["type"],
       amount: Number(tx.amount),
       formattedAmount: `${tx.type === "DEPOSIT" || tx.type === "REFUND" || tx.type === "ESCROW_RELEASE" ? "+" : "-"}${this.formatNGN(Number(tx.amount))}`,
-      status: tx.status as any,
+      status: tx.status as WalletTransactionDTO["status"],
       description: tx.description || "System transaction",
       date: new Date(tx.createdAt).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" }),
       method: tx.type === "DEPOSIT" ? "Bank Transfer / Paystack" : "Wallet Direct",
@@ -383,8 +385,9 @@ export class WalletService {
             description: `[PROCESSING] Flutterwave payout pending bank settlement (ID: ${flwData.data?.id || txRef})`,
           },
         });
-      } catch (err: any) {
-        if (err.message?.startsWith("BANK_TRANSFER_FAILED")) throw err;
+      } catch (err: unknown) {
+        const error = err as { message?: string };
+        if (error.message?.startsWith("BANK_TRANSFER_FAILED")) throw err;
         console.error("[FLUTTERWAVE_TRANSFER_EXCEP]", err);
       }
     } else {
@@ -663,8 +666,6 @@ export class WalletService {
    * Create a new dispute claim in PostgreSQL
    */
   public static async createDispute(userId: string, orderId: string, title: string, description: string) {
-    let targetOrderId = orderId;
-    
     // Find order if orderNumber passed
     const order = await prisma.order.findFirst({
       where: { OR: [{ id: orderId }, { orderNumber: orderId }] },
@@ -743,6 +744,107 @@ export class WalletService {
       formattedTotalVatRemitted: this.formatNGN(totalVatRemitted),
       monthlyStatements,
     };
+  }
+
+  /**
+   * Settles an order payment received from an authoritative gateway webhook (PAY-004).
+   * Atomically:
+   * 1. Verifies pending Payment record and matches amounts & currencies.
+   * 2. Marks Payment as PAID and sets transactionRef.
+   * 3. Updates Order status to CONFIRMED.
+   * 4. Locks funds in Buyer's escrow column.
+   * 5. Creates WalletTransaction record for ESCROW_LOCK with uniqueness enforcement.
+   */
+  public static async settleOrderPaymentFromGateway(
+    orderIdOrPaymentId: string,
+    transactionRef: string,
+    paidAmount: number
+  ) {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Locate Payment by orderId, paymentId, or transactionRef
+      const payment = await tx.payment.findFirst({
+        where: {
+          OR: [
+            { orderId: orderIdOrPaymentId },
+            { id: orderIdOrPaymentId },
+            { transactionRef: transactionRef },
+          ],
+        },
+        include: {
+          order: {
+            include: {
+              buyer: { include: { user: true } },
+            },
+          },
+        },
+      });
+
+      if (!payment) {
+        throw new Error(`PAYMENT_NOT_FOUND: No payment record found for "${orderIdOrPaymentId}".`);
+      }
+
+      // Idempotency: If already paid, return safely without mutating balances again
+      if (payment.paymentStatus === "PAID") {
+        return { status: "ALREADY_SETTLED", payment };
+      }
+
+      const expectedAmount = Number(payment.amount);
+      if (Math.abs(paidAmount - expectedAmount) > 0.01) {
+        throw new Error(
+          `AMOUNT_MISMATCH: Gateway paid amount (₦${paidAmount}) does not match expected order amount (₦${expectedAmount}).`
+        );
+      }
+
+      // 2. Locate or create buyer wallet
+      const buyerUserId = payment.order.buyer.userId;
+      let buyerWallet = await tx.wallet.findUnique({
+        where: { userId: buyerUserId },
+      });
+
+      if (!buyerWallet) {
+        buyerWallet = await tx.wallet.create({
+          data: { userId: buyerUserId, balance: 0, escrow: 0 },
+        });
+      }
+
+      // 3. Mark Payment as PAID
+      const updatedPayment = await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          paymentStatus: "PAID",
+          transactionRef,
+          paidAt: new Date(),
+        },
+      });
+
+      // 4. Confirm Order status
+      await tx.order.update({
+        where: { id: payment.orderId },
+        data: { status: "CONFIRMED" },
+      });
+
+      // 5. Lock funds in Buyer Escrow
+      await tx.wallet.update({
+        where: { id: buyerWallet.id },
+        data: {
+          escrow: { increment: paidAmount },
+        },
+      });
+
+      // 6. Record WalletTransaction (Enforces unique reference)
+      const txRecord = await tx.walletTransaction.create({
+        data: {
+          walletId: buyerWallet.id,
+          type: "ESCROW_LOCK",
+          amount: paidAmount,
+          reference: transactionRef,
+          description: `Gateway payment confirmed & escrow locked for Order #${payment.order.orderNumber}`,
+          status: "SUCCESS",
+        },
+      });
+
+      return { status: "SUCCESSFULLY_SETTLED", payment: updatedPayment, txRecord };
+    });
   }
 }
 

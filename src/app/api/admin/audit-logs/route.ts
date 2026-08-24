@@ -21,62 +21,81 @@ export async function GET(req: Request) {
     const categoryFilter = searchParams.get("category");
     const actorFilter = searchParams.get("actor")?.toLowerCase();
 
-    const [verifications, disputes, recentOrders] = await Promise.all([
-      prisma.verification.findMany({
-        take: 30,
-        orderBy: { updatedAt: "desc" },
-        include: { farmerProfile: { include: { user: true } } },
-      }),
-      prisma.dispute.findMany({
-        take: 30,
-        orderBy: { createdAt: "desc" },
-        include: { user: true },
-      }),
-      prisma.order.findMany({
-        take: 30,
-        orderBy: { createdAt: "desc" },
-        include: { buyer: { include: { user: true } } },
-      }),
-    ]);
+    const categoryEnum = categoryFilter ? (categoryFilter.toUpperCase() as any) : undefined;
 
-    let auditEvents = [
-      ...verifications.map((v) => ({
-        id: `AUD-KYC-${v.id.slice(0, 8)}`,
-        category: "KYC_VERIFICATION",
-        severity: "INFO",
-        action: `Farmer Verification Status: ${v.farmerProfile.verificationStatus}`,
-        actor: v.farmerProfile.user.fullName,
-        actorEmail: v.farmerProfile.user.email,
-        resourceId: v.id,
-        traceId: traceCtx.traceId,
-        timestamp: v.updatedAt.toISOString(),
-      })),
-      ...disputes.map((d) => ({
-        id: `AUD-DISP-${d.id.slice(0, 8)}`,
-        category: "DISPUTE_ARBITRATION",
-        severity: "WARNING",
-        action: `Dispute ${d.status}: ${d.title}`,
-        actor: d.user.fullName,
-        actorEmail: d.user.email,
-        resourceId: d.id,
-        traceId: traceCtx.traceId,
-        timestamp: d.createdAt.toISOString(),
-      })),
-      ...recentOrders.map((o) => ({
-        id: `AUD-ORD-${o.id.slice(0, 8)}`,
-        category: "ORDER_TRANSACTION",
-        severity: "INFO",
-        action: `Order #${o.orderNumber} placed with status ${o.status}`,
-        actor: o.buyer.user.fullName,
-        actorEmail: o.buyer.user.email,
-        resourceId: o.id,
-        traceId: traceCtx.traceId,
-        timestamp: o.createdAt.toISOString(),
-      })),
-    ];
+    const dbAuditEvents = await prisma.auditEvent.findMany({
+      where: categoryEnum ? { category: categoryEnum } : undefined,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+    });
 
-    if (categoryFilter) {
-      auditEvents = auditEvents.filter((e) => e.category === categoryFilter.toUpperCase());
+    let auditEvents = dbAuditEvents.map((e) => ({
+      id: `AUD-${e.id.slice(0, 8)}`,
+      category: e.category,
+      severity: e.severity,
+      action: e.action,
+      actor: e.actorEmail || e.actorId || "System",
+      actorEmail: e.actorEmail || "—",
+      resourceId: e.resourceId || "N/A",
+      traceId: traceCtx.traceId,
+      timestamp: e.createdAt.toISOString(),
+    }));
+
+    // If no persistent AuditEvent records found yet, query historical table activities
+    if (auditEvents.length === 0) {
+      const [verifications, disputes, recentOrders] = await Promise.all([
+        prisma.verification.findMany({
+          take: 30,
+          orderBy: { updatedAt: "desc" },
+          include: { farmerProfile: { include: { user: true } } },
+        }),
+        prisma.dispute.findMany({
+          take: 30,
+          orderBy: { createdAt: "desc" },
+          include: { user: true },
+        }),
+        prisma.order.findMany({
+          take: 30,
+          orderBy: { createdAt: "desc" },
+          include: { buyer: { include: { user: true } } },
+        }),
+      ]);
+
+      auditEvents = [
+        ...verifications.map((v) => ({
+          id: `AUD-KYC-${v.id.slice(0, 8)}`,
+          category: "KYC" as any,
+          severity: "INFO" as any,
+          action: `Farmer Verification Status: ${v.farmerProfile.verificationStatus}`,
+          actor: v.farmerProfile.user.fullName,
+          actorEmail: v.farmerProfile.user.email,
+          resourceId: v.id,
+          traceId: traceCtx.traceId,
+          timestamp: v.updatedAt.toISOString(),
+        })),
+        ...disputes.map((d) => ({
+          id: `AUD-DISP-${d.id.slice(0, 8)}`,
+          category: "DISPUTE" as any,
+          severity: "WARNING" as any,
+          action: `Dispute ${d.status}: ${d.title}`,
+          actor: d.user.fullName,
+          actorEmail: d.user.email,
+          resourceId: d.id,
+          traceId: traceCtx.traceId,
+          timestamp: d.createdAt.toISOString(),
+        })),
+        ...recentOrders.map((o) => ({
+          id: `AUD-ORD-${o.id.slice(0, 8)}`,
+          category: "ORDER" as any,
+          severity: "INFO" as any,
+          action: `Order #${o.orderNumber} placed with status ${o.status}`,
+          actor: o.buyer.user.fullName,
+          actorEmail: o.buyer.user.email,
+          resourceId: o.id,
+          traceId: traceCtx.traceId,
+          timestamp: o.createdAt.toISOString(),
+        })),
+      ];
     }
 
     if (actorFilter) {

@@ -1,34 +1,21 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 
-// Helper to resolve authenticated user ID
-async function getAuthenticatedUserId(): Promise<{ userId: string; email?: string }> {
-  const session = await getSession();
-  if (session?.userId) {
-    return { userId: session.userId, email: session.email };
-  }
-  const cookieStore = await cookies();
-  const cookieUserId = cookieStore.get("userId")?.value;
-  return { userId: cookieUserId || "usr_demo_buyer" };
-}
-
 // GET /api/user/profile — Fetch current user profile with role-specific data
 export async function GET(req: Request) {
   const traceCtx = createTraceContext(req);
   try {
-    const { userId, email } = await getAuthenticatedUserId();
+    const session = await getSession();
+    if (!session) {
+      const res = NextResponse.json(createErrorResponse("UNAUTHORIZED", "Authentication required to view user profile"), { status: 401 });
+      return attachTraceHeaders(res, traceCtx);
+    }
 
-    let user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { id: userId },
-          ...(email ? [{ email }] : []),
-        ],
-      },
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
       include: {
         buyerProfile: true,
         farmerProfile: true,
@@ -36,36 +23,30 @@ export async function GET(req: Request) {
     });
 
     if (!user) {
-      // Create fallback demo user record if missing
-      user = await prisma.user.create({
-        data: {
-          id: userId,
-          email: email || "user@smarthub-agro.com",
-          fullName: "Nathan Ma'ajo",
-          phoneNumber: "+2348012345678",
-          password: "demo_password_hash",
-          role: "BUYER",
-          buyerProfile: {
-            create: {
-              address: "12 Agricultural Extension Way",
-              state: "Kano State",
-            },
-          },
-        },
-        include: {
-          buyerProfile: true,
-          farmerProfile: true,
-        },
-      });
+      const res = NextResponse.json(createErrorResponse("NOT_FOUND", "User profile not found"), { status: 404 });
+      return attachTraceHeaders(res, traceCtx);
     }
 
-    const { password, ...userWithoutPassword } = user;
+    const userWithoutPassword = {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+      isActive: user.isActive,
+      profileImage: user.profileImage,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      buyerProfile: user.buyerProfile,
+      farmerProfile: user.farmerProfile,
+    };
 
     const res = NextResponse.json(createSuccessResponse(userWithoutPassword));
     return attachTraceHeaders(res, traceCtx);
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to fetch user profile";
     console.error("Error in GET /api/user/profile:", err);
-    const res = NextResponse.json(createErrorResponse("FETCH_FAILED", err.message || "Failed to fetch user profile"), { status: 500 });
+    const res = NextResponse.json(createErrorResponse("FETCH_FAILED", message), { status: 500 });
     return attachTraceHeaders(res, traceCtx);
   }
 }
@@ -74,7 +55,12 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   const traceCtx = createTraceContext(req);
   try {
-    const { userId, email } = await getAuthenticatedUserId();
+    const session = await getSession();
+    if (!session) {
+      const res = NextResponse.json(createErrorResponse("UNAUTHORIZED", "Authentication required to update user profile"), { status: 401 });
+      return attachTraceHeaders(res, traceCtx);
+    }
+
     const body = await req.json();
 
     const {
@@ -90,47 +76,14 @@ export async function PATCH(req: Request) {
       profileImage,
     } = body;
 
-    // 1. Locate or create target user (outside transaction to avoid stale-tx issues)
-    let targetUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { id: userId },
-          ...(email ? [{ email }] : []),
-          ...(bodyEmail ? [{ email: bodyEmail }] : []),
-        ],
-      },
+    // 1. Locate target authenticated user
+    const targetUser = await prisma.user.findUnique({
+      where: { id: session.userId },
       include: { buyerProfile: true, farmerProfile: true },
     });
 
     if (!targetUser) {
-      // Create minimal user record then update profile fields
-      targetUser = await prisma.user.create({
-        data: {
-          id: userId,
-          email: bodyEmail || email || "user@smarthub-agro.com",
-          fullName: fullName || "Nathan Ma'ajo",
-          phoneNumber: phoneNumber || `+234${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-          password: "demo_password_hash",
-          profileImage: profileImage || undefined,
-          role: "BUYER",
-          buyerProfile: {
-            create: {
-              address: address || "Kano Central Market",
-              state: state || "Kano",
-              lga: lga || "Kano Municipal",
-            },
-          },
-        },
-        include: { buyerProfile: true, farmerProfile: true },
-      });
-
-
-      const fresh = await prisma.user.findUnique({
-        where: { id: targetUser.id },
-        include: { buyerProfile: true, farmerProfile: true },
-      });
-      const { password, ...userWithoutPassword } = fresh!;
-      const res = NextResponse.json(createSuccessResponse(userWithoutPassword));
+      const res = NextResponse.json(createErrorResponse("NOT_FOUND", "User profile not found"), { status: 404 });
       return attachTraceHeaders(res, traceCtx);
     }
 
@@ -209,13 +162,26 @@ export async function PATCH(req: Request) {
       return attachTraceHeaders(res, traceCtx);
     }
 
-    const { password, ...userWithoutPassword } = finalUser;
+    const userWithoutPassword = {
+      id: finalUser.id,
+      fullName: finalUser.fullName,
+      email: finalUser.email,
+      phoneNumber: finalUser.phoneNumber,
+      role: finalUser.role,
+      isActive: finalUser.isActive,
+      profileImage: finalUser.profileImage,
+      createdAt: finalUser.createdAt,
+      updatedAt: finalUser.updatedAt,
+      buyerProfile: finalUser.buyerProfile,
+      farmerProfile: finalUser.farmerProfile,
+    };
 
     const res = NextResponse.json(createSuccessResponse(userWithoutPassword));
     return attachTraceHeaders(res, traceCtx);
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to update profile";
     console.error("Error in PATCH /api/user/profile:", err);
-    const res = NextResponse.json(createErrorResponse("UPDATE_FAILED", err.message || "Failed to update profile"), { status: 500 });
+    const res = NextResponse.json(createErrorResponse("UPDATE_FAILED", message), { status: 500 });
     return attachTraceHeaders(res, traceCtx);
   }
 }

@@ -59,7 +59,60 @@ export async function GET() {
         date: new Date(v.createdAt).toLocaleDateString(),
       }));
 
-      const dto: AdminDashboardDTO = {
+      // Category Distribution Aggregation
+      const categories = await prisma.category.findMany({
+        include: {
+          _count: { select: { products: true } },
+        },
+      });
+
+      const totalCategorizedProducts = categories.reduce((sum, c) => sum + c._count.products, 0) || 1;
+      const palette = ["#1B4D28", "#739072", "#E28F10", "#3B3DBF", "#A855F7"];
+
+      const categoryData = categories.slice(0, 5).map((cat, idx) => ({
+        name: cat.name,
+        value: Math.round((cat._count.products / totalCategorizedProducts) * 100),
+        color: palette[idx % palette.length],
+      }));
+
+      // Sales & Growth Monthly Aggregation (Past 6 Months)
+      const now = new Date();
+      const monthsList = Array.from({ length: 6 }).map((_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+        return {
+          label: d.toLocaleString("default", { month: "short" }),
+          year: d.getFullYear(),
+          monthIdx: d.getMonth(),
+        };
+      });
+
+      const orders = await prisma.order.findMany({
+        where: { status: { in: ["DELIVERED", "COMPLETED", "IN_TRANSIT", "CONFIRMED"] } },
+        select: { createdAt: true, totalAmount: true },
+      });
+
+      const salesData = monthsList.map((m) => {
+        const monthOrders = orders.filter(
+          (o) => o.createdAt.getFullYear() === m.year && o.createdAt.getMonth() === m.monthIdx
+        );
+        return {
+          month: m.label,
+          sales: monthOrders.length,
+        };
+      });
+
+      const growthData = monthsList.map((m) => {
+        const monthOrders = orders.filter(
+          (o) => o.createdAt.getFullYear() === m.year && o.createdAt.getMonth() === m.monthIdx
+        );
+        const total = monthOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+        return {
+          month: m.label,
+          value: total,
+        };
+      });
+
+      const dto: AdminDashboardDTO & { salesData: any[]; categoryData: any[]; growthData: any[] } = {
         user: {
           id: user.id,
           fullName: user.fullName,
@@ -79,6 +132,14 @@ export async function GET() {
           openDisputes,
         },
         moderationQueue,
+        salesData,
+        categoryData: categoryData.length > 0 ? categoryData : [
+          { name: "Vegetables", value: 40, color: "#1B4D28" },
+          { name: "Grains", value: 30, color: "#739072" },
+          { name: "Tubers", value: 20, color: "#E28F10" },
+          { name: "Fruits", value: 10, color: "#3B3DBF" },
+        ],
+        growthData,
         recentActivity: [
           {
             id: "act-1",

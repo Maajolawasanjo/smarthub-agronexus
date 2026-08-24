@@ -107,8 +107,8 @@ export function AddFundModal({ isOpen, onClose, onSuccess }: AddFundModalProps) 
               ₦
             </div>
             <div>
-              <h3 className="text-base font-bold text-gray-900">Fund Your Wallet</h3>
-              <p className="text-[11px] text-gray-500">Powered by Flutterwave — Card, USSD, Bank Transfer</p>
+              <h3 className="text-base font-bold text-gray-900">Deposit Funds</h3>
+              <p className="text-[11px] text-gray-500">Fund your SmartHub Agro Wallet</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer">
@@ -128,7 +128,7 @@ export function AddFundModal({ isOpen, onClose, onSuccess }: AddFundModalProps) 
                   : "text-gray-500 hover:text-gray-800"
               }`}
             >
-              Pay via Flutterwave
+              Deposit Funds
             </button>
             <button
               onClick={() => setSelectedOption("SIMULATED")}
@@ -180,14 +180,6 @@ export function AddFundModal({ isOpen, onClose, onSuccess }: AddFundModalProps) 
                 ))}
               </div>
 
-              {/* Payment Methods Badge Row */}
-              <div className="flex flex-wrap gap-2 text-[10px] font-mono font-bold text-gray-500">
-                <span className="bg-gray-100 px-2.5 py-1 rounded-full">💳 Debit/Credit Card</span>
-                <span className="bg-gray-100 px-2.5 py-1 rounded-full">🏦 Bank Transfer</span>
-                <span className="bg-gray-100 px-2.5 py-1 rounded-full">📱 USSD</span>
-                <span className="bg-gray-100 px-2.5 py-1 rounded-full">📲 Mobile Banking</span>
-              </div>
-
               {/* CTA Button */}
               <button
                 onClick={handleFlutterwaveFund}
@@ -195,11 +187,11 @@ export function AddFundModal({ isOpen, onClose, onSuccess }: AddFundModalProps) 
                 className="w-full bg-gradient-to-r from-[#F5A623] via-[#e8951f] to-[#F5A623] hover:brightness-105 text-white py-4 rounded-2xl text-sm font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-orange-900/20 active:scale-[0.98] disabled:opacity-50"
               >
                 {loading ? (
-                  "Connecting to Flutterwave..."
+                  "Connecting to payment gateway..."
                 ) : (
                   <>
                     <CreditCard size={16} />
-                    Pay ₦{Number(amount || 0).toLocaleString()} via Flutterwave
+                    Deposit ₦{Number(amount || 0).toLocaleString()}
                     <ArrowRight size={14} />
                   </>
                 )}
@@ -209,11 +201,11 @@ export function AddFundModal({ isOpen, onClose, onSuccess }: AddFundModalProps) 
               <div className="flex items-center justify-center gap-4 pt-1 text-[10px] font-mono text-gray-400">
                 <span className="flex items-center gap-1"><ShieldCheck size={11} className="text-green-600" /> SSL SECURED</span>
                 <span className="flex items-center gap-1"><ShieldCheck size={11} className="text-green-600" /> PCI COMPLIANT</span>
-                <span className="flex items-center gap-1"><ShieldCheck size={11} className="text-green-600" /> FLUTTERWAVE VERIFIED</span>
+                <span className="flex items-center gap-1"><ShieldCheck size={11} className="text-green-600" /> 256-BIT ENCRYPTION</span>
               </div>
 
               <p className="text-[10px] text-gray-400 text-center">
-                Your wallet is credited automatically after Flutterwave confirms payment via secure webhook.
+                Your wallet is credited automatically once payment is completed and verified.
               </p>
             </div>
           )}

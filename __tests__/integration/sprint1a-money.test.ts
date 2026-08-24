@@ -2,11 +2,11 @@ import { describe, test, expect } from "vitest";
 import { calculateSettlement } from "../../src/lib/settlement";
 
 describe("Sprint 1A Acceptance Test — Money Cannot Break", () => {
-  test("1. Business Rule: Settlement fee split computes 2.5% platform fee & net farmer payout", () => {
+  test("1. Business Rule: Settlement fee split computes 5.0% platform fee & net farmer payout", () => {
     const settlement = calculateSettlement(50000);
-    expect(settlement.platformFee).toBe(1250);
-    expect(settlement.taxAmount).toBe(93.75); // 7.5% of 1250
-    expect(settlement.netFarmerPayout).toBe(48656.25);
+    expect(settlement.platformFee).toBe(2500); // 5.0% of 50,000
+    expect(settlement.taxAmount).toBe(187.50); // 7.5% of 2,500
+    expect(settlement.netFarmerPayout).toBe(47312.50);
   });
 
   test("2. Business Rule: Insufficient Wallet Balance Withdrawal Rejection", () => {

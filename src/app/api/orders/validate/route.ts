@@ -34,7 +34,6 @@ export async function POST(req: Request) {
     const errors: string[] = [];
     let recalculatedTotal = 0;
     let isValid = true;
-
     for (const item of items) {
       console.log(`[RUNTIME_TELEMETRY] 5. Executing Prisma query for productId: "${item.productId}"...`);
       let product: any = null;
@@ -43,31 +42,28 @@ export async function POST(req: Request) {
           where: { id: String(item.productId) },
           include: { inventory: true },
         });
-
-        if (!product) {
-          console.log(`[RUNTIME_TELEMETRY] 5a. Product "${item.productId}" not found by ID/SKU. Executing fallback lookup...`);
-          product = await prisma.product.findFirst({
-            where: { isAvailable: true },
-            include: { inventory: true },
-          });
-        }
       } catch (dbErr: any) {
-        console.warn(`[RUNTIME_TELEMETRY] 5-DB-WARN: DB query failed (${dbErr?.message?.split('\n')[0]}). Proceeding with catalog fallback.`);
+        console.warn(`[RUNTIME_TELEMETRY] DB query failed for productId "${item.productId}":`, dbErr?.message);
       }
 
-      if (!product) {
-        console.log(`[RUNTIME_TELEMETRY] 5b. No product found in database for "${item.productId}". Using mock fallback.`);
+      if (!product || !product.isAvailable) {
+        isValid = false;
+        const requestedQty = parseInt(item.quantity?.toString() || "1", 10);
+        const errorMsg = product
+          ? `"${product.name}" is currently unavailable.`
+          : `Product "${item.productId}" was not found in the catalog.`;
+        errors.push(errorMsg);
+
         validatedItems.push({
           productId: String(item.productId),
-          productName: "Agro Produce Item",
-          requestedQty: item.quantity || 1,
-          availableQty: 100,
-          unitPrice: 1500,
-          subtotal: 1500 * (item.quantity || 1),
-          isAvailable: true,
-          stockStatus: "IN_STOCK",
+          productName: product?.name || "Unavailable Product",
+          requestedQty,
+          availableQty: 0,
+          unitPrice: product ? Number(product.price) : 0,
+          subtotal: 0,
+          isAvailable: false,
+          stockStatus: "OUT_OF_STOCK",
         });
-        recalculatedTotal += 1500 * (item.quantity || 1);
         continue;
       }
 

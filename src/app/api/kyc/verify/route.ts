@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 import { publishAgroEvent } from "@/lib/events";
+import { recordAuditEvent } from "@/lib/audit";
 
 // POST /api/kyc/verify — Admin approval or rejection of farmer KYC identity
 export async function POST(req: Request) {
@@ -51,6 +52,17 @@ export async function POST(req: Request) {
     await publishAgroEvent(isApproved ? "KYC_APPROVED" : "KYC_REJECTED", {
       userId: updatedProfile.userId,
       remarks: `KYC ${newStatus}`,
+    });
+
+    await recordAuditEvent({
+      category: "KYC",
+      severity: isApproved ? "INFO" : "WARNING",
+      action: isApproved ? "KYC_APPROVED" : "KYC_REJECTED",
+      actorId: session?.userId || null,
+      actorEmail: session?.email || null,
+      resourceId: farmerProfileId,
+      metadata: { remarks: remarks || null },
+      req,
     });
 
     const res = NextResponse.json(

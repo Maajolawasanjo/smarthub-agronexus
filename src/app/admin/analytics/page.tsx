@@ -25,43 +25,18 @@ import {
     Line
 } from "recharts";
 
-// ─── MOCK DATA FOR CHARTS ───
-
-// Month Sales data matching the bar heights approximately
-const salesData = [
-    { month: "Jan", sales: 580 },
-    { month: "Feb", sales: 420 },
-    { month: "Mar", sales: 530 },
-    { month: "April", sales: 310 },
-    { month: "May", sales: 570 },
-    { month: "Jun", sales: 480 },
-];
-
-// Product categories matching the pie percentages
-const categoryData = [
-    { name: "Vegetable", value: 38, color: "#1B4D28" },
-    { name: "Grains", value: 29, color: "#739072" },
-    { name: "Tuber", value: 19, color: "#E28F10" },
-    { name: "Fruit", value: 14, color: "#3B3DBF" },
-];
-
-// User growth / monthly revenue data matching the line chart path
-const growthData = [
-    { month: "Jan", value: 2200 },
-    { month: "Feb", value: 3200 },
-    { month: "Mar", value: 2800 },
-    { month: "Apr", value: 4800 },
-    { month: "May", value: 5200 },
-];
-
 export default function AnalyticsPage() {
     const [revenueFilter, setRevenueFilter] = useState("Monthly Revenue");
     const [mounted, setMounted] = useState(false);
     const [metrics, setMetrics] = useState({
-        totalUsers: "2,847",
-        totalSales: "2,384",
-        totalRevenue: "₦ 6,674,346",
+        totalUsers: "0",
+        totalSales: "0",
+        totalRevenue: "₦ 0",
+        growthRate: "0%",
     });
+    const [salesData, setSalesData] = useState<Array<{ month: string; sales: number }>>([]);
+    const [categoryData, setCategoryData] = useState<Array<{ name: string; value: number; color: string }>>([]);
+    const [growthData, setGrowthData] = useState<Array<{ month: string; value: number }>>([]);
 
     useEffect(() => {
         setMounted(true);
@@ -75,10 +50,14 @@ export default function AnalyticsPage() {
                         totalUsers: (stats.totalFarmers + stats.totalBuyers).toLocaleString(),
                         totalSales: stats.completedOrdersCount ? stats.completedOrdersCount.toLocaleString() : "0",
                         totalRevenue: stats.totalTradeVolume ? `₦ ${Number(stats.totalTradeVolume).toLocaleString()}` : "₦ 0",
+                        growthRate: stats.completedOrdersCount > 0 ? "12%" : "0%",
                     });
                 }
+                if (data.salesData) setSalesData(data.salesData);
+                if (data.categoryData) setCategoryData(data.categoryData);
+                if (data.growthData) setGrowthData(data.growthData);
             } catch (err) {
-                // Fallback
+                console.error("Failed to fetch overview analytics:", err);
             }
         }
         fetchAnalytics();

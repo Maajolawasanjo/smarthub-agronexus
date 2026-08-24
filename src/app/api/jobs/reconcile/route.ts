@@ -9,16 +9,16 @@ export async function POST(req: Request) {
   const traceCtx = createTraceContext(req);
   try {
     const authHeader = req.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET || process.env.FLUTTERWAVE_SECRET_KEY;
+    const cronSecret = process.env.CRON_SECRET;
     const session = await getSession();
 
-    // Guard: Allow CRON bearer token or Admin session
-    const isCron = authHeader && authHeader === `Bearer ${cronSecret}`;
+    // Guard: Require valid CRON bearer token or Admin session. Fail closed if CRON_SECRET is unconfigured.
+    const isCron = Boolean(cronSecret && authHeader && authHeader === `Bearer ${cronSecret}`);
     const isAdmin = session?.role === "ADMIN";
 
     if (!isCron && !isAdmin) {
       const res = NextResponse.json(
-        createErrorResponse("UNAUTHORIZED", "CRON bearer secret or Admin session required to run reconciliation."),
+        createErrorResponse("UNAUTHORIZED", "Valid CRON bearer token or Admin session required to run reconciliation."),
         { status: 401 }
       );
       return attachTraceHeaders(res, traceCtx);

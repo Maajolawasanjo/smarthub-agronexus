@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 import { notificationOutbox } from "@/lib/notifications/outbox";
+import { recordAuditEvent } from "@/lib/audit";
 
 export type DeliveryState =
   | "DRIVER_ASSIGNED"
@@ -71,7 +72,10 @@ export async function POST(
 
     const existingDelivery = await prisma.delivery.findUnique({
       where: { id: deliveryId },
-      include: { order: { include: { buyer: { include: { user: true } } } } },
+      include: {
+        order: { include: { buyer: { include: { user: true } } } },
+        logisticsPartner: true,
+      },
     });
 
     if (!existingDelivery) {
@@ -79,14 +83,63 @@ export async function POST(
       return attachTraceHeaders(res, traceCtx);
     }
 
+    // 1. Strict Server-Side POD Authorization (DEL-001)
+    const isAdmin = session.role === "ADMIN";
+    const isAssignedDriver =
+      (session.role as string) === "LOGISTICS" ||
+      existingDelivery.logisticsPartnerId === session.userId ||
+      existingDelivery.podDriverName === session.email ||
+      existingDelivery.logisticsPartner?.email === session.email;
+
+    if (!isAdmin && !isAssignedDriver) {
+      const res = NextResponse.json(
+        createErrorResponse(
+          "FORBIDDEN",
+          "Only the assigned logistics driver or an Administrator can submit Proof of Delivery for this order"
+        ),
+        { status: 403 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    // 2. Strict GPS Validation (DEL-001) — No fake/default Lagos fallback
+    const lat = gpsSnapshot?.latitude;
+    const lng = gpsSnapshot?.longitude;
+
+    if (
+      typeof lat !== "number" ||
+      typeof lng !== "number" ||
+      Number.isNaN(lat) ||
+      Number.isNaN(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    ) {
+      const res = NextResponse.json(
+        createErrorResponse(
+          "INVALID_GPS_DATA",
+          "Valid GPS coordinates (latitude between -90 and 90, longitude between -180 and 180) are required for Proof of Delivery verification"
+        ),
+        { status: 400 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
     const isDelivered = deliveryState === "DELIVERED";
 
-    // Update Delivery status in Database
+    // Update Delivery status & persist immutable POD evidence in Database (DEL-001)
     const updatedDelivery = await prisma.delivery.update({
       where: { id: deliveryId },
       data: {
         deliveryStatus: isDelivered ? "DELIVERED" : "IN_TRANSIT",
         deliveredAt: isDelivered ? new Date() : null,
+        podPhotoUrl: evidenceMedia.deliveryPhotoUrl,
+        podSignatureUrl: evidenceMedia.buyerSignatureUrl,
+        podLatitude: lat,
+        podLongitude: lng,
+        podDriverName: driver.fullName,
+        podLicensePlate: driver.licensePlate || null,
       },
     });
 
@@ -120,6 +173,22 @@ export async function POST(
       await notificationOutbox.processQueue();
     }
 
+    await recordAuditEvent({
+      category: "DELIVERY",
+      severity: "INFO",
+      action: "POD_SUBMITTED",
+      actorId: session.userId,
+      actorEmail: session.email,
+      resourceId: updatedDelivery.id,
+      metadata: {
+        orderId: existingDelivery.orderId,
+        orderNumber: existingDelivery.order.orderNumber,
+        deliveryStatus: updatedDelivery.deliveryStatus,
+        isDelivered,
+      },
+      req,
+    });
+
     const evidencePackage: DeliveryEvidencePackage = {
       deliveryState,
       driver: {
@@ -131,8 +200,8 @@ export async function POST(
       pickupTimestamp: body.pickupTimestamp || new Date().toISOString(),
       deliveryTimestamp: new Date().toISOString(),
       gpsSnapshot: {
-        latitude: gpsSnapshot?.latitude || 6.5244, // Lagos Coordinates Default
-        longitude: gpsSnapshot?.longitude || 3.3792,
+        latitude: lat,
+        longitude: lng,
         accuracyMeters: gpsSnapshot?.accuracyMeters || 5,
       },
       evidenceMedia: {
