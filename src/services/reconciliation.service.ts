@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { config } from "@/lib/config";
 import { WalletService } from "@/services/wallet.service";
 
 export interface ReconciliationReport {
@@ -196,7 +197,10 @@ export class ReconciliationService {
 
     const totalPlatformRevenue = releaseTxns.reduce((sum, tx) => {
       const farmerCredit = Number(tx.amount);
-      const fee = (farmerCredit / 0.975) * 0.025;
+      const feeRate = config.fees.platformFeeRate; // Single Source of Truth from config
+      // Back-calculate the original gross amount, then compute the platform fee from it
+      const grossAmount = farmerCredit / (1 - feeRate);
+      const fee = grossAmount * feeRate;
       return sum + fee;
     }, 0);
 

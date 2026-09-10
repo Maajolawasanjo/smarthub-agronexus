@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
+import { LocationBanner } from "@/components/localization/LocationBanner";
 
 export default function DashboardLayout({
     children,
@@ -13,6 +14,7 @@ export default function DashboardLayout({
 
     return (
         <div className="min-h-screen bg-[#FAFAFA]">
+            <LocationBanner />
             <Sidebar
                 isOpen={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}

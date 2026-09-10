@@ -37,13 +37,13 @@ describe("Gap Closure Phase 3 — Communications & Driver Operations Tests", () 
       data: { orderId: "ord_100" },
     });
 
-    const statusBefore = notificationOutbox.getQueueStatus();
+    const statusBefore = await notificationOutbox.getQueueStatus();
     expect(statusBefore.pendingCount).toBeGreaterThanOrEqual(1);
 
     const { processed } = await notificationOutbox.processQueue();
     expect(processed).toBeGreaterThanOrEqual(1);
 
-    const statusAfter = notificationOutbox.getQueueStatus();
+    const statusAfter = await notificationOutbox.getQueueStatus();
     expect(statusAfter.sentCount).toBeGreaterThanOrEqual(1);
   });
 

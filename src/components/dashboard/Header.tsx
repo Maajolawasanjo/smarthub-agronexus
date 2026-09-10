@@ -7,6 +7,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useUser } from "@/context/UserContext";
 import { useCart } from "@/context/CartContext";
 import { useSearch } from "@/context/SearchContext";
+import { LocalizationTrigger } from "@/components/localization/LocalizationTrigger";
 
 interface HeaderProps {
     onMenuClick: () => void;
@@ -178,6 +179,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
             {/* Right: Actions — Notifications + Cart (marketplace only) + Profile */}
             <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
+                <LocalizationTrigger />
 
                 {/* Notifications — always visible */}
                 <Link href="/dashboard/notifications">

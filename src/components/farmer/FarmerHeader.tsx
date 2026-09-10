@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 import { useCart } from "@/context/CartContext";
+import { LocalizationTrigger } from "@/components/localization/LocalizationTrigger";
 
 interface FarmerHeaderProps {
     onMenuClick: () => void;
@@ -78,6 +79,7 @@ export function FarmerHeader({ onMenuClick }: FarmerHeaderProps) {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-2">
+                <LocalizationTrigger />
                 <Link href="/farmer/listings">
                     <button className="p-2 text-gray-500 hover:bg-gray-50 rounded-full" aria-label="Search">
                         <Search size={18} />

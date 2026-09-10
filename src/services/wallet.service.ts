@@ -1,7 +1,9 @@
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { config } from "@/lib/config";
 import { evaluateTrustPolicy } from "@/lib/trust";
 import { publishAgroEvent } from "@/lib/events";
+import { calculateSettlement } from "@/lib/settlement";
 import {
   WalletPageDTO,
   WalletBalanceDTO,
@@ -61,12 +63,12 @@ export class WalletService {
     }
 
     const wallet = await this.getOrCreateWallet(userId);
-    const buyerProfileId = user.buyerProfile?.id || userId;
+    // buyerProfileId is null for FARMER users — guard all buyer-centric aggregations below
+    const buyerProfileId = user.buyerProfile?.id ?? null;
 
     // 1. Calculate Balances
     // The Wallet model is the cached ledger summary.
     // Each balance column is updated atomically in prisma.$transaction by the corresponding ledger operation.
-    // Read from DB fields — do NOT re-aggregate on every request.
     // Read from DB fields — do NOT re-aggregate on every request.
     const walletRecord = wallet as unknown as { balance: unknown; escrow?: unknown; pendingWithdrawal?: unknown; frozen?: unknown };
     const availableBalance   = Number(walletRecord.balance);
@@ -86,28 +88,33 @@ export class WalletService {
       formattedPendingWithdrawals: this.formatNGN(pendingWithdrawals),
     };
 
-    // 2. Summary Aggregations
+    // 2. Summary Aggregations — only meaningful for BUYER users with a buyerProfile
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const monthlySpendAgg = await prisma.order.aggregate({
-      where: {
-        buyerId: buyerProfileId,
-        status: { in: ["DELIVERED", "COMPLETED"] },
-        createdAt: { gte: startOfMonth },
-      },
-      _sum: { totalAmount: true },
-    });
-    const monthlySpend = monthlySpendAgg._sum.totalAmount ? Number(monthlySpendAgg._sum.totalAmount) : 0.0;
+    let monthlySpend = 0;
+    let lifetimeSpend = 0;
 
-    const lifetimeSpendAgg = await prisma.order.aggregate({
-      where: {
-        buyerId: buyerProfileId,
-        status: { in: ["DELIVERED", "COMPLETED"] },
-      },
-      _sum: { totalAmount: true },
-    });
-    const lifetimeSpend = lifetimeSpendAgg._sum.totalAmount ? Number(lifetimeSpendAgg._sum.totalAmount) : 0.0;
+    if (buyerProfileId) {
+      const monthlySpendAgg = await prisma.order.aggregate({
+        where: {
+          buyerId: buyerProfileId,
+          status: { in: ["DELIVERED", "COMPLETED"] },
+          createdAt: { gte: startOfMonth },
+        },
+        _sum: { totalAmount: true },
+      });
+      monthlySpend = monthlySpendAgg._sum.totalAmount ? Number(monthlySpendAgg._sum.totalAmount) : 0.0;
+
+      const lifetimeSpendAgg = await prisma.order.aggregate({
+        where: {
+          buyerId: buyerProfileId,
+          status: { in: ["DELIVERED", "COMPLETED"] },
+        },
+        _sum: { totalAmount: true },
+      });
+      lifetimeSpend = lifetimeSpendAgg._sum.totalAmount ? Number(lifetimeSpendAgg._sum.totalAmount) : 0.0;
+    }
 
     const totalDepositsAgg = await prisma.walletTransaction.aggregate({
       where: { walletId: wallet.id, type: "DEPOSIT", status: "SUCCESS" },
@@ -183,7 +190,7 @@ export class WalletService {
       status: tx.status as WalletTransactionDTO["status"],
       description: tx.description || "System transaction",
       date: new Date(tx.createdAt).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" }),
-      method: tx.type === "DEPOSIT" ? "Bank Transfer / Paystack" : "Wallet Direct",
+      method: tx.type === "DEPOSIT" ? "Bank Transfer / Flutterwave" : "Wallet Direct",
     }));
 
     return {
@@ -241,7 +248,7 @@ export class WalletService {
       throw new Error(`INSUFFICIENT_FUNDS: Required ${this.formatNGN(amount)}, available ${this.formatNGN(currentBalance)}`);
     }
 
-    const txRef = `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const txRef = `PAY-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
 
     const [updatedWallet, txRecord] = await prisma.$transaction([
       prisma.wallet.update({
@@ -300,7 +307,7 @@ export class WalletService {
       throw new Error("INVALID_BANK_ACCOUNT: Bank account not found or unverified.");
     }
 
-    const txRef = `WD-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const txRef = `WD-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
     const bankDesc = `${bankAccount.bankName} (${bankAccount.accountNumber})`;
 
     // ── 2. VALIDATED State — Ledger lock: shift available balance → pendingWithdrawal ──
@@ -469,7 +476,7 @@ export class WalletService {
    */
   public static async executeRefund(userId: string, amount: number, orderId: string) {
     const wallet = await this.getOrCreateWallet(userId);
-    const txRef = `REF-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const txRef = `REF-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
 
     const [updatedWallet, txRecord] = await prisma.$transaction([
       prisma.wallet.update({
@@ -569,16 +576,14 @@ export class WalletService {
     if (!order) throw new Error("ORDER_NOT_FOUND");
 
     const totalAmount = Number(order.totalAmount);
-    const PLATFORM_FEE_PCT = config.fees.platformFeeRate; // Single Source of Truth
-    const platformFee = Math.round(totalAmount * PLATFORM_FEE_PCT * 100) / 100;
-    const farmerAmount = totalAmount - platformFee;
+    const { netFarmerPayout: farmerAmount, platformFee } = calculateSettlement(totalAmount);
 
     const farmerUserId = order.orderItems[0]?.product?.farmerProfile?.userId;
     const buyerWallet = await this.getOrCreateWallet(userId);
 
     if (farmerUserId) {
       const farmerWallet = await this.getOrCreateWallet(farmerUserId);
-      const txRef = `REL-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      const txRef = `REL-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
 
       await prisma.$transaction([
         // Mark order as completed
@@ -734,7 +739,7 @@ export class WalletService {
         formattedVat: this.formatNGN(vat),
         status: volume > 0 ? "READY" : "NO_ACTIVITY",
       };
-    }).filter((m) => m.volume > 0 || m.month.includes(new Date().toLocaleDateString("en-US", { month: "long" })));
+    }).filter((m, idx) => m.volume > 0 || idx === new Date().getMonth());
 
     return {
       year,

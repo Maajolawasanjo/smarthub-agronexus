@@ -1,8 +1,7 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import { X, Building2, AlertCircle, CheckCircle2, Loader2, ArrowRight } from "lucide-react";
 import { LinkedBankDTO } from "@/types/wallet.dto";
+import { useLocalization } from "@/hooks/useLocalization";
 
 interface FarmerWithdrawModalProps {
   isOpen: boolean;
@@ -21,7 +20,9 @@ export function FarmerWithdrawModal({
   linkedBanks,
   onSuccess,
 }: FarmerWithdrawModalProps) {
+  const { formatCurrency } = useLocalization();
   const [amount, setAmount] = useState<string>("");
+
   const [selectedBankId, setSelectedBankId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +128,7 @@ export function FarmerWithdrawModal({
           {/* Available Balance Banner */}
           <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Available Balance</span>
-            <span className="text-base font-extrabold text-gray-900">{formattedAvailableBalance}</span>
+            <span className="text-base font-extrabold text-gray-900">{formatCurrency(availableBalance)}</span>
           </div>
 
           {/* Amount Input */}

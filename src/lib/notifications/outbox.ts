@@ -13,115 +13,157 @@ export interface OutboxItem {
   updatedAt: string;
 }
 
+/**
+ * DB-backed Outbox Manager
+ * Persists all email/SMS notifications to the NotificationOutbox table so they
+ * survive server restarts and work correctly across all serverless instances.
+ */
 class OutboxManager {
-  private queue: OutboxItem[] = [];
-  private deadLetterQueue: OutboxItem[] = [];
-
-  enqueueEmail(payload: EmailPayload): OutboxItem {
-    const item: OutboxItem = {
-      id: `outbox-email-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      type: "EMAIL",
-      payload,
-      attempts: 0,
-      maxRetries: 3,
-      status: "PENDING",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    this.queue.push(item);
-    return item;
+  async enqueueEmail(payload: EmailPayload): Promise<OutboxItem> {
+    const record = await prisma.notificationOutbox.create({
+      data: {
+        channel: "EMAIL",
+        recipient: payload.to,
+        subject: payload.subject,
+        payload: payload as any,
+        status: "PENDING",
+        maxAttempts: 3,
+      },
+    });
+    return this.toOutboxItem(record, "EMAIL");
   }
 
-  enqueueSMS(payload: SMSPayload): OutboxItem {
-    const item: OutboxItem = {
-      id: `outbox-sms-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      type: "SMS",
-      payload,
-      attempts: 0,
-      maxRetries: 3,
-      status: "PENDING",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    this.queue.push(item);
-    return item;
+  async enqueueSMS(payload: SMSPayload): Promise<OutboxItem> {
+    const record = await prisma.notificationOutbox.create({
+      data: {
+        channel: "SMS",
+        recipient: payload.to,
+        payload: payload as any,
+        status: "PENDING",
+        maxAttempts: 3,
+      },
+    });
+    return this.toOutboxItem(record, "SMS");
   }
 
   async processQueue(): Promise<{ processed: number; failures: number }> {
     let processed = 0;
     let failures = 0;
+    const now = new Date();
 
-    for (const item of this.queue.filter((i) => i.status === "PENDING" || i.status === "FAILED")) {
-      item.status = "PROCESSING";
-      item.attempts += 1;
-      item.updatedAt = new Date().toISOString();
+    // Fetch pending items that are due for processing
+    const pendingItems = await prisma.notificationOutbox.findMany({
+      where: {
+        status: { in: ["PENDING", "FAILED"] },
+        availableAt: { lte: now },
+        attempts: { lt: prisma.notificationOutbox.fields.maxAttempts },
+      },
+      orderBy: { availableAt: "asc" },
+      take: 50,
+    });
+
+    for (const item of pendingItems) {
+      // Mark as PROCESSING atomically
+      await prisma.notificationOutbox.update({
+        where: { id: item.id },
+        data: { status: "PROCESSING" },
+      });
 
       try {
         let res: DispatchResult;
-        if (item.type === "EMAIL") {
-          res = await defaultEmailAdapter.sendEmail(item.payload as EmailPayload);
+        const itemPayload = item.payload as any;
+
+        if (item.channel === "EMAIL") {
+          res = await defaultEmailAdapter.sendEmail(itemPayload as EmailPayload);
         } else {
-          res = await defaultSMSAdapter.sendSMS(item.payload as SMSPayload);
+          res = await defaultSMSAdapter.sendSMS(itemPayload as SMSPayload);
         }
 
         if (res.success) {
-          item.status = "SENT";
+          await prisma.notificationOutbox.update({
+            where: { id: item.id },
+            data: {
+              status: "SENT",
+              processedAt: new Date(),
+              attempts: { increment: 1 },
+            },
+          });
           processed += 1;
 
-          // NOT-001: Persist notification record to PostgreSQL (non-blocking resilience)
-          const recipientEmailOrPhone = item.type === "EMAIL" ? (item.payload as EmailPayload).to : (item.payload as SMSPayload).to;
-          Promise.race([
-            prisma.user.findFirst({
-              where: {
-                OR: [
-                  { email: recipientEmailOrPhone },
-                  { phoneNumber: recipientEmailOrPhone },
-                ],
-              },
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("DB_TIMEOUT")), 300)),
-          ]).then(async (user: any) => {
+          // Create in-app notification record (non-blocking, soft-fail)
+          const recipientEmailOrPhone = item.recipient;
+          prisma.user.findFirst({
+            where: {
+              OR: [
+                { email: recipientEmailOrPhone },
+                { phoneNumber: recipientEmailOrPhone },
+              ],
+            },
+          }).then(async (user) => {
             if (user) {
-              const title = item.type === "EMAIL" ? (item.payload as EmailPayload).subject : "SMS Alert";
-              const message = item.type === "EMAIL" ? `Template: ${(item.payload as EmailPayload).template}` : (item.payload as SMSPayload).message;
+              const title = item.channel === "EMAIL" ? (item.subject || "Notification") : "SMS Alert";
+              const message = item.channel === "EMAIL"
+                ? `Template: ${(itemPayload as EmailPayload).template}`
+                : (itemPayload as SMSPayload).message;
               await prisma.notification.create({
                 data: {
                   userId: user.id,
-                  title: title || "Notification",
+                  title,
                   message: message || "System update",
                   type: "SYSTEM",
                   isRead: false,
                 },
               });
             }
-          }).catch((dbLogErr) => {
-            // Soft fail logging when database connection is unavailable in unit testing
-          });
+          }).catch(() => { /* Soft fail — never disrupt main flow */ });
         } else {
           throw new Error(res.error || "Dispatch failed");
         }
       } catch (err: any) {
-        item.lastError = err.message || "Network error";
         failures += 1;
+        const newAttempts = item.attempts + 1;
+        const isExhausted = newAttempts >= item.maxAttempts;
 
-        if (item.attempts >= item.maxRetries) {
-          item.status = "DEAD_LETTER_QUEUE";
-          this.deadLetterQueue.push(item);
-        } else {
-          item.status = "FAILED";
-        }
+        // Exponential backoff: retry after attempts * 5 minutes
+        const nextAvailableAt = new Date(Date.now() + newAttempts * 5 * 60 * 1000);
+
+        await prisma.notificationOutbox.update({
+          where: { id: item.id },
+          data: {
+            status: isExhausted ? "FAILED" : "FAILED",
+            attempts: { increment: 1 },
+            lastError: err.message || "Network error",
+            availableAt: isExhausted ? item.availableAt : nextAvailableAt,
+          },
+        });
       }
     }
 
     return { processed, failures };
   }
 
-  getQueueStatus() {
+  async getQueueStatus() {
+    const [pendingCount, sentCount, failedCount, totalCount] = await Promise.all([
+      prisma.notificationOutbox.count({ where: { status: "PENDING" } }),
+      prisma.notificationOutbox.count({ where: { status: "SENT" } }),
+      prisma.notificationOutbox.count({ where: { status: "FAILED" } }),
+      prisma.notificationOutbox.count({}),
+    ]);
+
+    return { pendingCount, sentCount, dlqCount: failedCount, totalCount };
+  }
+
+  private toOutboxItem(record: any, type: "EMAIL" | "SMS"): OutboxItem {
     return {
-      pendingCount: this.queue.filter((i) => i.status === "PENDING").length,
-      sentCount: this.queue.filter((i) => i.status === "SENT").length,
-      dlqCount: this.deadLetterQueue.length,
-      totalCount: this.queue.length,
+      id: record.id,
+      type,
+      payload: record.payload as any,
+      attempts: record.attempts,
+      maxRetries: record.maxAttempts,
+      status: record.status === "SENT" ? "SENT" : record.status === "FAILED" ? "FAILED" : "PENDING",
+      lastError: record.lastError || undefined,
+      createdAt: record.createdAt.toISOString(),
+      updatedAt: record.updatedAt.toISOString(),
     };
   }
 }

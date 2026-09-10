@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
+import { LocationBanner } from "@/components/localization/LocationBanner";
 import { useUser } from "@/context/UserContext";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -44,8 +45,10 @@ export default function AdminLayout({
     }
 
     return (
-        <div className="min-h-screen bg-[#EEF2EE] flex w-full">
-            {/* Sidebar Navigation */}
+        <div className="min-h-screen bg-[#EEF2EE] flex flex-col w-full">
+            <LocationBanner />
+            <div className="flex flex-1 w-full">
+                {/* Sidebar Navigation */}
             <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
             {/* Main Content Area */}
@@ -60,6 +63,7 @@ export default function AdminLayout({
                     </div>
                 </main>
             </div>
+        </div>
         </div>
     );
 }

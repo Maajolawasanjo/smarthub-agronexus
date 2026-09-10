@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Caveat } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
 import { UserProvider } from "@/context/UserContext";
+import { LocalizationProvider } from "@/context/LocalizationContext";
 import { CartProvider } from "@/context/CartContext";
 import { SearchProvider } from "@/context/SearchContext";
 import { ProduceProvider } from "@/context/ProduceContext";
@@ -68,15 +69,17 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <UserProvider>
-          <CartProvider>
-            <SearchProvider>
-              <ProduceProvider>
-                <ToastProvider>
-                  {children}
-                </ToastProvider>
-              </ProduceProvider>
-            </SearchProvider>
-          </CartProvider>
+          <LocalizationProvider>
+            <CartProvider>
+              <SearchProvider>
+                <ProduceProvider>
+                  <ToastProvider>
+                    {children}
+                  </ToastProvider>
+                </ProduceProvider>
+              </SearchProvider>
+            </CartProvider>
+          </LocalizationProvider>
         </UserProvider>
       </body>
     </html>

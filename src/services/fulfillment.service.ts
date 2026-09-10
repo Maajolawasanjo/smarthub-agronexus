@@ -11,6 +11,7 @@ import {
 } from "@/lib/fulfillment";
 
 import { orderRepository } from "@/repositories";
+import { WalletService } from "@/services/wallet.service";
 
 export async function getFulfillmentDTO(orderId: string, userRole: "BUYER" | "FARMER" | "ADMIN"): Promise<FulfillmentDTO | null> {
   const order = await orderRepository.findById(orderId);
@@ -153,7 +154,8 @@ export async function confirmBuyerDeliveryAndReleaseEscrow(orderId: string, buye
       data: { status: "COMPLETED" },
     });
 
-    if (order.payment) {
+    // Fix 13: Only update payment to PAID if it is in a valid pre-paid state
+    if (order.payment && ["PENDING", "PAID"].includes(order.payment.paymentStatus)) {
       await tx.payment.update({
         where: { id: order.payment.id },
         data: { paymentStatus: "PAID" },
@@ -169,6 +171,13 @@ export async function confirmBuyerDeliveryAndReleaseEscrow(orderId: string, buye
 
     return completedOrder;
   });
+
+  // Fix 4: Credit the farmer wallet after the DB transaction succeeds.
+  // WalletService.executeEscrowRelease atomically:
+  //   1. Decrements buyer's escrow column
+  //   2. Credits farmer wallet with (grossAmount - platformFee - VAT)
+  //   3. Logs the WalletTransaction ESCROW_RELEASE record
+  await WalletService.executeEscrowRelease(buyerUserId, orderId);
 
   logger.security(`Escrow released for order #${order.orderNumber}`, {
     orderId: order.id,

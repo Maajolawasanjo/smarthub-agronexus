@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FarmerSidebar } from "@/components/farmer/FarmerSidebar";
 import { FarmerHeader } from "@/components/farmer/FarmerHeader";
+import { LocationBanner } from "@/components/localization/LocationBanner";
 
 export default function FarmerLayout({
     children,
@@ -13,6 +14,7 @@ export default function FarmerLayout({
 
     return (
         <div className="min-h-screen bg-[#F5F6FA]">
+            <LocationBanner />
             <FarmerSidebar
                 isOpen={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}

@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
+import { useUser } from "@/context/UserContext";
+import { useLocalization } from "@/hooks/useLocalization";
 
 function Confetti() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -313,6 +315,7 @@ function validateCvv(v: string, type: CardType) {
 export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
     // ── ALL REACT HOOKS DECLARED UNCONDITIONALLY AT TOP LEVEL ──
     const { clearCart } = useCart();
+    const { formatCurrency } = useLocalization();
     const [method, setMethod] = useState<PaymentMethod>("wallet");
     const [isSuccess, setIsSuccess] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -352,7 +355,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
         if (method === "wallet") {
             if (walletBalance !== null && walletBalance < total) {
                 setSubmitError(
-                    `Insufficient AgroChain Wallet balance. Available: ₦${walletBalance.toLocaleString("en-NG", { minimumFractionDigits: 2 })}, Required: ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })}. Shortfall: ₦${walletShortfall.toLocaleString("en-NG", { minimumFractionDigits: 2 })}.`
+                    `Insufficient AgroChain Wallet balance. Available: ${formatCurrency(walletBalance)}, Required: ${formatCurrency(total)}. Shortfall: ${formatCurrency(walletShortfall)}.`
                 );
                 return;
             }
@@ -558,20 +561,20 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                             )}
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4 pt-1">
+                                         <div className="grid grid-cols-2 gap-4 pt-1">
                                             <div>
                                                 <p className="text-[11px] text-emerald-300/80 font-medium uppercase tracking-wider">Available Balance</p>
                                                 <p className="text-2xl font-extrabold tracking-tight mt-0.5">
                                                     {walletBalance !== null
-                                                        ? `₦${walletBalance.toLocaleString("en-NG", { minimumFractionDigits: 2 })}`
-                                                        : "₦0.00"}
+                                                        ? formatCurrency(walletBalance)
+                                                        : formatCurrency(0)}
                                                 </p>
                                             </div>
 
                                             <div className="text-right border-l border-emerald-700/50 pl-4">
                                                 <p className="text-[11px] text-emerald-300/80 font-medium uppercase tracking-wider">Order Total</p>
                                                 <p className="text-xl font-bold text-emerald-100 mt-0.5">
-                                                    ₦{total.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                                                    {formatCurrency(total)}
                                                 </p>
                                             </div>
                                         </div>
@@ -587,7 +590,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                                 <div>
                                                     <p className="text-xs font-bold text-green-900">Sufficient Wallet Balance Available</p>
                                                     <p className="text-[11px] text-green-700 mt-0.5">
-                                                        Your wallet has enough funds. Clicking pay will instantly debit ₦{total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} into Escrow Protection.
+                                                        Your wallet has enough funds. Clicking pay will instantly debit {formatCurrency(total)} into Escrow Protection.
                                                     </p>
                                                 </div>
                                             </div>
@@ -597,7 +600,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                                 <div>
                                                     <p className="text-xs font-bold text-amber-900">Insufficient Wallet Balance</p>
                                                     <p className="text-[11px] text-amber-700 mt-0.5">
-                                                        You need <strong className="text-amber-900">₦{walletShortfall.toLocaleString("en-NG", { minimumFractionDigits: 2 })}</strong> more to complete this purchase using your wallet.
+                                                        You need <strong className="text-amber-900">{formatCurrency(walletShortfall)}</strong> more to complete this purchase using your wallet.
                                                     </p>
                                                     <a
                                                         href="/dashboard/wallet"
@@ -638,8 +641,8 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                                         <Lock size={16} />
                                         <span>
                                             {method === "wallet"
-                                                ? `Pay ₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })} from Balance`
-                                                : `Make Payment (₦${total.toLocaleString("en-NG", { minimumFractionDigits: 2 })})`}
+                                                ? `Pay ${formatCurrency(total)} from Balance`
+                                                : `Make Payment (${formatCurrency(total)})`}
                                         </span>
                                     </>
                                 )}

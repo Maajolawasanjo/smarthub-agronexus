@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useUser } from "@/context/UserContext";
 import Image from "next/image";
 import { useState, useEffect } from "react";
+import { LocalizationTrigger } from "@/components/localization/LocalizationTrigger";
+import { useLocalization } from "@/hooks/useLocalization";
 
 interface AdminHeaderProps {
     onMenuClick: () => void;
@@ -14,20 +16,11 @@ interface AdminHeaderProps {
 export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
     const pathname = usePathname();
     const { user, loading } = useUser();
+    const { formatDate } = useLocalization();
     const [isScrolled, setIsScrolled] = useState(false);
     const [unreadCount, setUnreadCount] = useState<number>(0);
-    const [currentDateStr, setCurrentDateStr] = useState<string>("");
 
     useEffect(() => {
-        setCurrentDateStr(
-            new Date().toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-            })
-        );
-
         const handleScroll = () => {
             if (window.scrollY > 8) {
                 setIsScrolled(true);
@@ -54,6 +47,7 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
 
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
+
 
     const getPageTitle = () => {
         if (pathname === "/admin/analytics") return "Analytics & Report";
@@ -99,13 +93,15 @@ export function AdminHeader({ onMenuClick }: AdminHeaderProps) {
                         {getPageTitle()}
                     </h1>
                     <span className="text-xs text-gray-400 mt-1 md:mt-2 font-medium">
-                        {currentDateStr}
+                        {formatDate(new Date(), { dateStyle: "full" })}
                     </span>
                 </div>
             </div>
 
             {/* Right: Actions */}
             <div className="flex items-center gap-2 md:gap-3">
+                <LocalizationTrigger />
+
                 <Link href="/admin/products" className="p-2 text-gray-500 hover:bg-white hover:shadow-sm rounded-full border border-transparent hover:border-gray-100 transition-all bg-transparent" aria-label="Search">
                     <Search size={20} />
                 </Link>

@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { FundingInstructionsDTO } from "@/types/wallet.dto";
+import { useLocalization } from "@/hooks/useLocalization";
 
 interface AddFundModalProps {
   isOpen: boolean;
@@ -19,7 +20,9 @@ const QUICK_AMOUNTS = [5000, 10000, 25000, 50000, 100000];
 
 export function AddFundModal({ isOpen, onClose, onSuccess }: AddFundModalProps) {
   const { toast } = useToast();
+  const { formatCurrency, currency } = useLocalization();
   const [amount, setAmount] = useState("50000");
+
   const [selectedOption, setSelectedOption] = useState<FundMethod>("FLUTTERWAVE");
   const [loading, setLoading] = useState(false);
   const [simLoading, setSimLoading] = useState(false);
@@ -148,7 +151,7 @@ export function AddFundModal({ isOpen, onClose, onSuccess }: AddFundModalProps) 
               {/* Amount Input */}
               <div>
                 <label className="text-xs font-bold text-gray-700 block mb-2 uppercase tracking-wider">
-                  Amount to Fund (NGN)
+                  Amount to Fund (Canonical Ledger: NGN)
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-extrabold text-gray-400 text-lg">₦</span>
@@ -175,7 +178,7 @@ export function AddFundModal({ isOpen, onClose, onSuccess }: AddFundModalProps) 
                         : "bg-white text-gray-700 border-gray-200 hover:border-[#1B4D28] hover:text-[#1B4D28]"
                     }`}
                   >
-                    ₦{q.toLocaleString()}
+                    {formatCurrency(q)}
                   </button>
                 ))}
               </div>
