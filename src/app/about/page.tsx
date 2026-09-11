@@ -138,9 +138,9 @@ export default function AboutPage() {
             <Navbar />
 
             {/* ... [Hero Section - Unchanged] ... */}
-            <section className="relative min-h-[96vh] w-full flex flex-col items-center justify-center overflow-hidden">
+            <section className="relative w-full flex flex-col items-center justify-center overflow-hidden pt-40 pb-24 md:pt-48 md:pb-32">
                 <div className="absolute inset-0 z-0">
-                    <div className="absolute inset-0 bg-black/50 z-10" />
+                    <div className="absolute inset-0 bg-black/55 z-10" />
                     <Image
                         src="/about/hero-bg.jpg"
                         alt="Container Ship at Sea"
@@ -149,29 +149,33 @@ export default function AboutPage() {
                         priority
                     />
                 </div>
-                <div className="relative z-20 text-center px-6 max-w-5xl mx-auto flex flex-col items-center pt-28 pb-28 md:pb-24">
-                    <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-semibold text-white mb-5 md:mb-6 drop-shadow-2xl text-balance leading-tight">
+                <div className="relative z-20 text-center px-6 max-w-5xl mx-auto flex flex-col items-center">
+                    <span className="inline-block px-4 py-1.5 bg-white/10 border border-white/20 rounded-full text-gray-200 text-xs font-bold tracking-wider uppercase mb-8">
+                        🌍 About Agrochain
+                    </span>
+                    <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light text-white tracking-tight leading-[1.15] mb-6 md:mb-8">
                         Our Mission is to Make African Produce Globally Accessible
                     </h1>
-                    <p className="text-sm sm:text-base md:text-xl text-gray-100 max-w-3xl mx-auto leading-relaxed drop-shadow-lg mb-8 md:mb-10 font-light">
+                    <p className="text-base sm:text-lg md:text-xl text-gray-200 max-w-2xl mx-auto leading-relaxed font-light mb-8 md:mb-10">
                         AgroChain connects international buyers with premium-quality agricultural goods sourced and verified by our team in Nigeria.
                     </p>
                     <div className="mb-4">
                         <Link href="/products">
                             <Button className="bg-[#4CAF50] hover:bg-[#43A047] px-8 py-3 text-base md:text-lg font-medium shadow-2xl rounded-full">
-                                Explore Product
+                                Explore Products
                             </Button>
                         </Link>
                     </div>
                 </div>
                 {/* Partner Logos */}
-                <div className="absolute bottom-5 z-20 w-full flex justify-center items-center px-4">
-                    <div className="flex items-center justify-center gap-6 md:gap-14 flex-wrap max-w-xs sm:max-w-none">
-                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={65} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/VISTA.png" alt="Vista" width={70} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={90} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
+                <div className="relative z-20 mt-14 w-full flex flex-col items-center px-4">
+                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-widest mb-4">Trusted by global commodity traders</p>
+                    <div className="flex items-center justify-center gap-8 md:gap-12 flex-wrap">
+                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={90} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={75} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={90} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/VISTA.png" alt="Vista" width={80} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={100} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
                     </div>
                 </div>
             </section>
