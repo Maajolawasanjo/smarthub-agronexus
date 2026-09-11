@@ -28,6 +28,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  serverExternalPackages: ["@prisma/client", "bcrypt"],
+  outputFileTracingIncludes: {
+    "/api/**/*": ["./src/generated/prisma/**/*"],
+  },
   experimental: {
     optimizePackageImports: ["lucide-react", "recharts", "framer-motion"],
   },
