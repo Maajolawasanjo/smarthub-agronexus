@@ -51,7 +51,7 @@ export default function ProductsShowroom() {
                     <span className="inline-block px-4 py-1.5 bg-[#4CAF50]/10 border border-[#4CAF50]/20 rounded-full text-[#81C784] text-xs font-bold tracking-wider uppercase mb-8">
                         🌿 Verified Export Commodities
                     </span>
-                    <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-light text-white tracking-tight leading-[1.15] mb-6 md:mb-8">
+                    <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light text-white tracking-tight leading-[1.15] mb-6 md:mb-8">
                         Our Export Catalog
                     </h1>
                     <p className="text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed font-light mb-8 md:mb-10">
