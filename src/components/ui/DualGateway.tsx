@@ -1,20 +1,49 @@
+"use client";
+
 import Link from "next/link";
 import { Check, ArrowRight, Building2, Sprout } from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "./Button";
+import { MotionFade, MotionStagger, MotionStaggerItem } from "@/components/motion";
+
+const buyerPerks = [
+    "Direct catalog of 12+ verified export commodities",
+    "Lab-tested quality specs (Moisture, FFA, Purity certificates)",
+    "100% escrow capital protection until port clearance",
+    "Custom FOB Lagos & CIF destination port quotes",
+    "Dedicated export documentation & phytosanitary clearance",
+];
+
+const farmerPerks = [
+    "Direct access to global buyers in Europe, Asia & the Americas",
+    "Guaranteed prompt bank payments in Naira upon delivery",
+    "Free on-site harvest inspection, grading & bagging support",
+    "Transparent commodity pricing benchmarked to global rates",
+    "Zero listing fees or upfront onboarding charges",
+];
 
 export function DualGateway() {
     return (
         <section className="w-full py-28 md:py-36 bg-[#0d1f12] text-white font-sans relative overflow-hidden">
-            {/* Background Glow Accents */}
+
+            {/* Background Glow Accents — ambient breathing loop */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#4CAF50]/10 rounded-full blur-[120px]" />
-                <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-[#c8960a]/10 rounded-full blur-[120px]" />
+                <motion.div
+                    animate={{ scale: [1, 1.15, 1], opacity: [0.08, 0.16, 0.08] }}
+                    transition={{ repeat: Infinity, duration: 7, ease: "easeInOut" }}
+                    className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#4CAF50]/15 rounded-full blur-[130px]"
+                />
+                <motion.div
+                    animate={{ scale: [1.1, 1, 1.1], opacity: [0.08, 0.15, 0.08] }}
+                    transition={{ repeat: Infinity, duration: 8, ease: "easeInOut" }}
+                    className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-[#c8960a]/15 rounded-full blur-[130px]"
+                />
             </div>
 
             <div className="max-w-7xl mx-auto px-4 md:px-8 relative z-10">
 
                 {/* Section Header */}
-                <div className="text-center max-w-3xl mx-auto mb-20">
+                <MotionFade direction="up" distance={24} className="text-center max-w-3xl mx-auto mb-20">
                     <span className="inline-block px-4 py-1.5 rounded-full bg-[#4CAF50]/10 border border-[#4CAF50]/20 text-[#81C784] text-xs font-bold tracking-wider uppercase mb-5">
                         🌱 Two Sides of One Trusted Ecosystem
                     </span>
@@ -27,13 +56,20 @@ export function DualGateway() {
                     <p className="text-base sm:text-lg text-gray-300 leading-relaxed font-light">
                         Whether you are an international buyer securing bulk export tonnage or a Nigerian agricultural producer seeking direct off-takers, Agrochain provides the infrastructure.
                     </p>
-                </div>
+                </MotionFade>
 
                 {/* Dual Gateway Cards Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
 
                     {/* Card 1: For Importers & Processors */}
-                    <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.03] border border-white/10 rounded-3xl p-8 sm:p-12 shadow-2xl backdrop-blur-md flex flex-col justify-between hover:border-[#4CAF50]/50 transition-all duration-300 group">
+                    <motion.div
+                        initial={{ opacity: 0, x: -45 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true, amount: 0.15 }}
+                        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                        whileHover={{ y: -6, borderColor: "rgba(76, 175, 80, 0.55)" }}
+                        className="bg-gradient-to-br from-white/[0.08] to-white/[0.03] border border-white/10 rounded-3xl p-8 sm:p-12 shadow-2xl backdrop-blur-md flex flex-col justify-between transition-colors duration-300 group"
+                    >
                         <div>
                             {/* Top Badge & Icon */}
                             <div className="flex items-center justify-between mb-8">
@@ -53,39 +89,48 @@ export function DualGateway() {
                             </p>
 
                             {/* Value Propositions */}
-                            <ul className="space-y-3.5 mb-10">
-                                {[
-                                    "Direct catalog of 12+ verified export commodities",
-                                    "Lab-tested quality specs (Moisture, FFA, Purity certificates)",
-                                    "100% escrow capital protection until port clearance",
-                                    "Custom FOB Lagos & CIF destination port quotes",
-                                    "Dedicated export documentation & phytosanitary clearance",
-                                ].map((item, idx) => (
-                                    <li key={idx} className="flex items-start gap-3 text-xs sm:text-sm text-gray-200">
-                                        <div className="w-5 h-5 rounded-full bg-[#4CAF50]/20 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#4CAF50]">
-                                            <Check size={12} strokeWidth={3} />
+                            <MotionStagger staggerDelay={0.08} className="space-y-3.5 mb-10">
+                                {buyerPerks.map((item, idx) => (
+                                    <MotionStaggerItem key={idx} direction="left" distance={15}>
+                                        <div className="flex items-start gap-3 text-xs sm:text-sm text-gray-200">
+                                            <div className="w-5 h-5 rounded-full bg-[#4CAF50]/25 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#4CAF50] shadow-sm">
+                                                <Check size={12} strokeWidth={3} />
+                                            </div>
+                                            <span>{item}</span>
                                         </div>
-                                        <span>{item}</span>
-                                    </li>
+                                    </MotionStaggerItem>
                                 ))}
-                            </ul>
+                            </MotionStagger>
                         </div>
 
                         <div>
                             <Link href="/products" className="block w-full">
-                                <Button className="w-full bg-[#4CAF50] hover:bg-[#43A047] text-white py-3.5 text-base font-semibold shadow-xl shadow-green-900/40 rounded-full flex items-center justify-center gap-2 group-hover:scale-[1.01] transition-transform">
-                                    <span>Explore Export Catalog</span>
-                                    <ArrowRight size={16} />
-                                </Button>
+                                <motion.div
+                                    whileHover={{ scale: 1.02, y: -2 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                                >
+                                    <Button className="w-full bg-[#4CAF50] hover:bg-[#43A047] text-white py-3.5 text-base font-semibold shadow-xl shadow-green-900/40 rounded-full flex items-center justify-center gap-2 transition-colors">
+                                        <span>Explore Export Catalog</span>
+                                        <ArrowRight size={16} />
+                                    </Button>
+                                </motion.div>
                             </Link>
                             <p className="text-center text-[11px] text-gray-400 mt-3">
                                 No advance fees required • Instant catalog inspection
                             </p>
                         </div>
-                    </div>
+                    </motion.div>
 
                     {/* Card 2: For Farmers & Cooperatives */}
-                    <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.03] border border-white/10 rounded-3xl p-8 sm:p-12 shadow-2xl backdrop-blur-md flex flex-col justify-between hover:border-[#e8b84a]/50 transition-all duration-300 group">
+                    <motion.div
+                        initial={{ opacity: 0, x: 45 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true, amount: 0.15 }}
+                        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                        whileHover={{ y: -6, borderColor: "rgba(232, 184, 74, 0.55)" }}
+                        className="bg-gradient-to-br from-white/[0.08] to-white/[0.03] border border-white/10 rounded-3xl p-8 sm:p-12 shadow-2xl backdrop-blur-md flex flex-col justify-between transition-colors duration-300 group"
+                    >
                         <div>
                             {/* Top Badge & Icon */}
                             <div className="flex items-center justify-between mb-8">
@@ -105,36 +150,38 @@ export function DualGateway() {
                             </p>
 
                             {/* Value Propositions */}
-                            <ul className="space-y-3.5 mb-10">
-                                {[
-                                    "Direct access to global buyers in Europe, Asia & the Americas",
-                                    "Guaranteed prompt bank payments in Naira upon delivery",
-                                    "Free on-site harvest inspection, grading & bagging support",
-                                    "Transparent commodity pricing benchmarked to global rates",
-                                    "Zero listing fees or upfront onboarding charges",
-                                ].map((item, idx) => (
-                                    <li key={idx} className="flex items-start gap-3 text-xs sm:text-sm text-gray-200">
-                                        <div className="w-5 h-5 rounded-full bg-[#c8960a]/20 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#e8b84a]">
-                                            <Check size={12} strokeWidth={3} />
+                            <MotionStagger staggerDelay={0.08} className="space-y-3.5 mb-10">
+                                {farmerPerks.map((item, idx) => (
+                                    <MotionStaggerItem key={idx} direction="left" distance={15}>
+                                        <div className="flex items-start gap-3 text-xs sm:text-sm text-gray-200">
+                                            <div className="w-5 h-5 rounded-full bg-[#c8960a]/25 flex items-center justify-center flex-shrink-0 mt-0.5 text-[#e8b84a] shadow-sm">
+                                                <Check size={12} strokeWidth={3} />
+                                            </div>
+                                            <span>{item}</span>
                                         </div>
-                                        <span>{item}</span>
-                                    </li>
+                                    </MotionStaggerItem>
                                 ))}
-                            </ul>
+                            </MotionStagger>
                         </div>
 
                         <div>
                             <Link href="/signup" className="block w-full">
-                                <Button className="w-full bg-[#c8960a] hover:bg-[#a67c00] text-white py-3.5 text-base font-semibold shadow-xl shadow-amber-950/40 rounded-full flex items-center justify-center gap-2 group-hover:scale-[1.01] transition-transform">
-                                    <span>Join as a Producer</span>
-                                    <ArrowRight size={16} />
-                                </Button>
+                                <motion.div
+                                    whileHover={{ scale: 1.02, y: -2 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                                >
+                                    <Button className="w-full bg-[#c8960a] hover:bg-[#a67c00] text-white py-3.5 text-base font-semibold shadow-xl shadow-amber-950/40 rounded-full flex items-center justify-center gap-2 transition-colors">
+                                        <span>Join as a Producer</span>
+                                        <ArrowRight size={16} />
+                                    </Button>
+                                </motion.div>
                             </Link>
                             <p className="text-center text-[11px] text-gray-400 mt-3">
                                 Cooperative leaders & individual commercial farms welcome
                             </p>
                         </div>
-                    </div>
+                    </motion.div>
 
                 </div>
 

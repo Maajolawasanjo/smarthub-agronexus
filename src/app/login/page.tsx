@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Eye, EyeOff, Mail, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
@@ -25,12 +26,20 @@ function Field({ label, error, children }: {
     <div className="space-y-1.5">
       <label className="text-xs font-semibold text-gray-600 ml-1">{label}</label>
       {children}
-      {error && (
-        <div className="flex items-center gap-1 ml-1">
-          <AlertCircle size={11} className="text-red-500 shrink-0" />
-          <p className="text-[11px] text-red-500">{error}</p>
-        </div>
-      )}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, y: -4 }}
+            animate={{ opacity: 1, height: "auto", y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center gap-1 ml-1 overflow-hidden"
+          >
+            <AlertCircle size={11} className="text-red-500 shrink-0" />
+            <p className="text-[11px] text-red-500">{error}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -119,11 +128,9 @@ export default function LoginPage() {
         return;
       }
 
-      // Success: Hydrate user context from backend response
       setUserFromAuth(data.user);
       toast(`Welcome back, ${data.user.fullName || "User"}!`, "success");
 
-      // Redirect by role with appropriate messaging
       const userRole = data.user.role?.toUpperCase();
       if (userRole === "FARMER") {
         toast(`Welcome back, ${data.user.fullName || "Farmer"}! Redirecting to Farmer Portal...`, "success");
@@ -147,56 +154,82 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] flex flex-col items-center justify-center p-4 font-sans">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg border border-gray-100 p-6 md:p-10 relative">
-
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 p-6 md:p-10 relative"
+      >
         {/* Back */}
-        <Link href="/" className="absolute top-5 left-5 text-gray-400 hover:text-[#1B4D28] transition-colors">
-          <ArrowLeft size={22} />
+        <Link href="/" className="absolute top-5 left-5 text-gray-400 hover:text-[#1B4D28] transition-colors group">
+          <motion.div whileHover={{ x: -3 }} whileTap={{ scale: 0.9 }}>
+            <ArrowLeft size={22} />
+          </motion.div>
         </Link>
 
         {/* Logo + Title */}
         <div className="flex flex-col items-center mb-6">
-          <div className="h-10 w-16 bg-gray-100 rounded-sm relative overflow-hidden mb-3">
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            className="h-10 w-16 bg-gray-100 rounded-sm relative overflow-hidden mb-3 shadow-sm"
+          >
             <Image src="/LOGO.jpg" alt="Smarthub Agrochain" fill className="object-cover" />
-          </div>
+          </motion.div>
           <h1 className="text-2xl font-bold text-[#343A40] tracking-tight">Sign In</h1>
         </div>
 
-        {/* Role Tabs */}
-        <div className="flex rounded-full border border-gray-200 p-1 mb-7 bg-gray-50">
-          {(["buyer", "farmer"] as Tab[]).map(t => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => {
-                setTab(t);
-                setForm({ email: "", password: "" });
-                setErrors({});
-                setTouched({});
-                setServerError(null);
-              }}
-              className={cn(
-                "flex-1 py-2 rounded-full text-xs font-semibold transition-all duration-200",
-                tab === t
-                  ? "bg-[#1B4D28] text-white shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              )}
-            >
-              {t === "buyer" ? "Buyer Sign In" : "Farmer Sign In"}
-            </button>
-          ))}
+        {/* Role Tabs with Sliding Indicator Pill */}
+        <div className="flex rounded-full border border-gray-200 p-1 mb-7 bg-gray-50 relative">
+          {(["buyer", "farmer"] as Tab[]).map(t => {
+            const isActive = tab === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  setTab(t);
+                  setForm({ email: "", password: "" });
+                  setErrors({});
+                  setTouched({});
+                  setServerError(null);
+                }}
+                className={`relative flex-1 py-2 rounded-full text-xs font-semibold transition-colors duration-200 cursor-pointer ${
+                  isActive ? "text-white" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="loginTabPill"
+                    className="absolute inset-0 bg-[#1B4D28] rounded-full shadow-sm z-0"
+                    transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                  />
+                )}
+                <span className="relative z-10">
+                  {t === "buyer" ? "Buyer Sign In" : "Farmer Sign In"}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Server Error Alert */}
-        {serverError && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2">
-            <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-700 leading-snug">{serverError}</p>
-          </div>
-        )}
+        {/* Server Error Alert with Shake animation */}
+        <AnimatePresence>
+          {serverError && (
+            <motion.div
+              initial={{ opacity: 0, y: -6, x: 0 }}
+              animate={{ opacity: 1, y: 0, x: [0, -6, 6, -4, 4, 0] }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.4 }}
+              className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 flex items-start gap-2"
+            >
+              <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700 leading-snug">{serverError}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
-
           {/* Email */}
           <Field label="Email" error={touched.email ? errors.email : undefined}>
             <div className="relative">
@@ -233,7 +266,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPw(!showPw)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -242,20 +275,22 @@ export default function LoginPage() {
 
           {/* Submit */}
           <div className="pt-2">
-            <button
+            <motion.button
+              whileHover={{ scale: isLoading ? 1 : 1.02, y: isLoading ? 0 : -1 }}
+              whileTap={{ scale: isLoading ? 1 : 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
               type="submit"
               disabled={isLoading}
               className={cn(
-                "w-full py-3.5 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2",
+                "w-full py-3.5 rounded-full font-bold text-sm transition-colors duration-200 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-green-900/20",
                 isLoading
                   ? "bg-[#1B4D28]/70 text-white cursor-not-allowed"
-                  : "bg-[#1B4D28] hover:bg-[#153b1e] active:scale-[0.98] text-white shadow-lg shadow-green-900/20"
+                  : "bg-[#1B4D28] hover:bg-[#153b1e] text-white"
               )}
             >
               {isLoading ? <><Spinner /> Authenticating…</> : "Sign In"}
-            </button>
+            </motion.button>
           </div>
-
         </form>
 
         {/* Footer */}
@@ -263,8 +298,7 @@ export default function LoginPage() {
           Don&apos;t have an account yet?{" "}
           <Link href="/signup" className="font-bold text-[#1B4D28] hover:underline">Sign Up</Link>
         </p>
-
-      </div>
+      </motion.div>
     </div>
   );
 }
