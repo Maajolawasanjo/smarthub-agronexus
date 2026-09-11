@@ -39,40 +39,37 @@ export default function ProductsShowroom() {
         <main className="min-h-screen bg-[#EEF2EE] font-sans antialiased">
             <Navbar />
 
-            {/* ─── Immersive Showroom Hero ─── */}
-            <section className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden font-sans">
-                <div className="absolute inset-0 z-0">
-                    <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-black/80 z-10" />
-                    <div className="absolute inset-0 bg-black/20 z-10" />
-                    <Image
-                        src="/landing-hero-drone.jpg"
-                        alt="Agricultural drone spraying a green crop field"
-                        fill
-                        className="object-cover object-center"
-                        priority
-                    />
+            {/* ─── Products Hero (Dark Gradient) ─── */}
+            <section className="relative w-full flex flex-col items-center justify-center overflow-hidden font-sans bg-gradient-to-br from-[#0a1f0f] via-[#112818] to-[#0d0d0d] pt-32 pb-24 md:pt-40 md:pb-32">
+                {/* Subtle decorative elements */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#4CAF50]/5 rounded-full blur-3xl" />
+                    <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-[#1B4D28]/10 rounded-full blur-3xl" />
                 </div>
-                <div className="relative z-20 text-center px-6 max-w-5xl mx-auto flex flex-col items-center pt-24 pb-28 md:pb-24">
-                    <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-light text-white tracking-tight leading-[1.1] mb-6 md:mb-8 drop-shadow-2xl">
-                        Premium B2B Produce. <br />
-                        <span className="block mt-1 md:mt-2 text-[#4CAF50] font-normal">Directly Sourced &amp; Certified</span>
+
+                <div className="relative z-10 text-center px-6 max-w-5xl mx-auto flex flex-col items-center">
+                    <span className="inline-block px-4 py-1.5 bg-[#4CAF50]/10 border border-[#4CAF50]/20 rounded-full text-[#81C784] text-xs font-bold tracking-wider uppercase mb-6">
+                        🌿 Verified Export Commodities
+                    </span>
+                    <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold text-white tracking-tight leading-[1.1] mb-6 md:mb-8">
+                        Our Export Catalog
                     </h1>
-                    <p className="text-base sm:text-lg md:text-2xl text-gray-100 max-w-3xl mx-auto leading-relaxed drop-shadow-lg font-light mb-8 md:mb-12">
+                    <p className="text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed font-light mb-8 md:mb-10">
                         Browse our vetted catalog of Nigerian Cash Crops. Double-verified by third-party laboratories to meet strict EU, US, and Asian import standards.
                     </p>
                     <a href="#catalog" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-base md:text-lg font-medium rounded-full transition-all shadow-xl shadow-green-900/30 transform hover:scale-105 inline-block">
-                        Explore Catalog
+                        Explore Catalog ↓
                     </a>
                 </div>
 
                 {/* Partner Logos Banner */}
-                <div className="absolute bottom-5 z-20 w-full flex justify-center items-center px-4">
-                    <div className="flex items-center justify-center gap-6 md:gap-14 flex-wrap max-w-xs sm:max-w-none">
-                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={65} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/VISTA.png" alt="Vista" width={70} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={90} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
+                <div className="relative z-10 mt-16 w-full flex justify-center items-center px-4">
+                    <div className="flex items-center justify-center gap-6 md:gap-14 flex-wrap max-w-xs sm:max-w-none opacity-60">
+                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain invert" />
+                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={65} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain invert" />
+                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain invert" />
+                        <Image src="/logos/VISTA.png" alt="Vista" width={70} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain invert" />
+                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={90} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain invert" />
                     </div>
                 </div>
             </section>
