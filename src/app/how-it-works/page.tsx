@@ -110,30 +110,28 @@ export default function HowItWorks() {
         <main className="min-h-screen bg-[#EEF2EE] font-sans antialiased">
             <Navbar />
 
-            {/* ─── Premium Glassmorphic Hero ─── */}
-            <section className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden font-sans">
-                <div className="absolute inset-0 z-0">
-                    <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-black/80 z-10" />
-                    <div className="absolute inset-0 bg-black/20 z-10" />
-                    <Image
-                        src="/how-it-works-hero.jpg"
-                        alt="Creative workspace desk flatlay with plants and laptop"
-                        fill
-                        className="object-cover object-center"
-                        priority
-                    />
+            {/* ─── How It Works Hero (Gold Gradient) ─── */}
+            <section className="relative w-full flex flex-col items-center justify-center overflow-hidden font-sans bg-gradient-to-br from-[#2a1a00] via-[#3d2800] to-[#1a1200] pt-40 pb-24 md:pt-48 md:pb-32">
+                {/* Subtle decorative elements */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div className="absolute top-0 right-1/4 w-96 h-96 bg-[#c8960a]/5 rounded-full blur-3xl" />
+                    <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-[#a67c00]/8 rounded-full blur-3xl" />
                 </div>
-                <div className="relative z-20 text-center px-6 max-w-5xl mx-auto flex flex-col items-center pt-24 pb-28 md:pb-24">
-                    <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-light text-white tracking-tight leading-[1.1] mb-6 md:mb-8 drop-shadow-2xl">
+
+                <div className="relative z-10 text-center px-6 max-w-5xl mx-auto flex flex-col items-center">
+                    <span className="inline-block px-4 py-1.5 bg-[#c8960a]/10 border border-[#c8960a]/20 rounded-full text-[#e8b84a] text-xs font-bold tracking-wider uppercase mb-8">
+                        ⚡ How Agrochain Works
+                    </span>
+                    <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light text-white tracking-tight leading-[1.15] mb-6 md:mb-8">
                         Transparent Sourcing. <br />
-                        <span className="block mt-1 md:mt-2 text-[#4CAF50] font-normal">Globally Verified Sourcing</span>
+                        <span className="text-[#e8b84a]">Globally Verified.</span>
                     </h1>
-                    <p className="text-base sm:text-lg md:text-2xl text-gray-100 max-w-3xl mx-auto leading-relaxed drop-shadow-lg font-light mb-8 md:mb-12">
+                    <p className="text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed font-light mb-8 md:mb-10">
                         Agrochain connects international grain, nut, and oilseed importers directly to verified farms in Nigeria. Explore our visual workflow below.
                     </p>
                     <div className="flex flex-col sm:flex-row items-center gap-4">
-                        <a href="#workflow" className="px-8 py-3 bg-[#4CAF50] hover:bg-[#43A047] text-white text-base md:text-lg font-medium rounded-full transition-all shadow-xl shadow-green-900/30 transform hover:scale-105 inline-block">
-                            Explore Workflow
+                        <a href="#workflow" className="px-8 py-3 bg-[#c8960a] hover:bg-[#a67c00] text-white text-base md:text-lg font-medium rounded-full transition-all shadow-xl shadow-amber-900/30 transform hover:scale-105 inline-block">
+                            Explore Workflow ↓
                         </a>
                         <a href="#estimator" className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-base md:text-lg font-medium rounded-full backdrop-blur-sm transition-all hover:scale-105 inline-block">
                             Cost Estimator
@@ -141,14 +139,15 @@ export default function HowItWorks() {
                     </div>
                 </div>
 
-                {/* Partner Logos Banner */}
-                <div className="absolute bottom-5 z-20 w-full flex justify-center items-center px-4">
-                    <div className="flex items-center justify-center gap-6 md:gap-14 flex-wrap max-w-xs sm:max-w-none">
-                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={65} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/VISTA.png" alt="Vista" width={70} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={90} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
+                {/* Partner Logos */}
+                <div className="relative z-10 mt-14 w-full flex flex-col items-center px-4">
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-widest mb-4">Trusted by global commodity traders</p>
+                    <div className="flex items-center justify-center gap-8 md:gap-12 flex-wrap">
+                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={90} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={75} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={90} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/VISTA.png" alt="Vista" width={80} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={100} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
                     </div>
                 </div>
             </section>

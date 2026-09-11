@@ -58,45 +58,44 @@ export default function ContactPage() {
         <main className="min-h-screen bg-[var(--background)] font-sans">
             <Navbar />
 
-            {/* --- Hero Section --- */}
-            <section className="relative min-h-[95vh] w-full flex flex-col items-center justify-center overflow-hidden">
-                {/* Background Layer */}
-                <div className="absolute inset-0 z-0">
-                    <div className="absolute inset-0 bg-black/40 z-10" />
-                    <Image
-                        src="/contact-hero.jpg"
-                        alt="Farmers Harvesting"
-                        fill
-                        className="object-cover object-center"
-                        priority
-                    />
+            {/* --- Hero Section (Gold Gradient) --- */}
+            <section className="relative w-full flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#2a1a00] via-[#3d2800] to-[#1a1200] pt-40 pb-24 md:pt-48 md:pb-32">
+                {/* Subtle decorative elements */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                    <div className="absolute top-0 left-1/3 w-96 h-96 bg-[#c8960a]/5 rounded-full blur-3xl" />
+                    <div className="absolute bottom-0 right-1/3 w-80 h-80 bg-[#a67c00]/8 rounded-full blur-3xl" />
                 </div>
 
                 {/* Hero Content */}
-                <div className="relative z-20 text-center px-6 max-w-6xl mx-auto flex flex-col items-center justify-center h-full pt-32 pb-28 md:pb-20">
-                    <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 md:mb-8 drop-shadow-2xl text-balance leading-tight">
-                        Buy Fresh Farm Produce Directly from Source at the Best Price.
+                <div className="relative z-10 text-center px-6 max-w-5xl mx-auto flex flex-col items-center">
+                    <span className="inline-block px-4 py-1.5 bg-[#c8960a]/10 border border-[#c8960a]/20 rounded-full text-[#e8b84a] text-xs font-bold tracking-wider uppercase mb-8">
+                        📞 Get In Touch
+                    </span>
+                    <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light text-white tracking-tight leading-[1.15] mb-6 md:mb-8">
+                        Buy Fresh Farm Produce <br />
+                        <span className="text-[#e8b84a]">Directly from Source.</span>
                     </h1>
-                    <p className="text-base md:text-2xl text-gray-50 max-w-4xl mx-auto leading-relaxed drop-shadow-lg mb-8 md:mb-10 font-light">
+                    <p className="text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed font-light mb-8 md:mb-10">
                         Agrochain connects international buyers with premium-quality agricultural goods sourced and verified by our team in Nigeria.
                     </p>
                     <div className="mb-4">
                         <Link href="/products">
-                            <Button className="bg-[#4CAF50] hover:bg-[#43A047] px-8 py-3 md:px-10 md:py-4 text-base md:text-xl font-medium shadow-2xl transform hover:scale-105 transition-all">
-                                Explore Product
+                            <Button className="bg-[#c8960a] hover:bg-[#a67c00] px-8 py-3 md:px-10 md:py-4 text-base md:text-xl font-medium shadow-2xl shadow-amber-900/30 transform hover:scale-105 transition-all">
+                                Explore Products
                             </Button>
                         </Link>
                     </div>
                 </div>
 
-                {/* Partner Logos Strip */}
-                <div className="absolute bottom-5 z-20 w-full flex justify-center items-center px-4">
-                    <div className="flex items-center justify-center gap-6 md:gap-14 flex-wrap max-w-xs sm:max-w-none">
-                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={65} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={80} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/VISTA.png" alt="Vista" width={70} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
-                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={90} height={28} className="h-6 sm:h-7 md:h-9 w-auto object-contain mix-blend-screen opacity-90" />
+                {/* Partner Logos */}
+                <div className="relative z-10 mt-14 w-full flex flex-col items-center px-4">
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-widest mb-4">Trusted by global commodity traders</p>
+                    <div className="flex items-center justify-center gap-8 md:gap-12 flex-wrap">
+                        <Image src="/logos/CARGIL LOGO.png" alt="Cargill" width={90} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/LDC.png" alt="Louis Dreyfus Company" width={75} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/CARGO.png" alt="Cargo Lab" width={90} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/VISTA.png" alt="Vista" width={80} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
+                        <Image src="/logos/kuehne-nagel-logo.png" alt="Kuehne+Nagel" width={100} height={32} className="h-7 md:h-8 w-auto object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity" />
                     </div>
                 </div>
             </section>
