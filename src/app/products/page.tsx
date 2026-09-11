@@ -40,7 +40,7 @@ export default function ProductsShowroom() {
             <Navbar />
 
             {/* ─── Products Hero (Dark Gradient) ─── */}
-            <section className="relative w-full flex flex-col items-center justify-center overflow-hidden font-sans bg-gradient-to-br from-[#0a1f0f] via-[#112818] to-[#0d0d0d] pt-32 pb-24 md:pt-40 md:pb-32">
+            <section className="relative w-full flex flex-col items-center justify-center overflow-hidden font-sans bg-gradient-to-br from-[#0a1f0f] via-[#112818] to-[#0d0d0d] pt-40 pb-32 md:pt-52 md:pb-44">
                 {/* Subtle decorative elements */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#4CAF50]/5 rounded-full blur-3xl" />
@@ -48,10 +48,10 @@ export default function ProductsShowroom() {
                 </div>
 
                 <div className="relative z-10 text-center px-6 max-w-5xl mx-auto flex flex-col items-center">
-                    <span className="inline-block px-4 py-1.5 bg-[#4CAF50]/10 border border-[#4CAF50]/20 rounded-full text-[#81C784] text-xs font-bold tracking-wider uppercase mb-6">
+                    <span className="inline-block px-4 py-1.5 bg-[#4CAF50]/10 border border-[#4CAF50]/20 rounded-full text-[#81C784] text-xs font-bold tracking-wider uppercase mb-8">
                         🌿 Verified Export Commodities
                     </span>
-                    <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold text-white tracking-tight leading-[1.1] mb-6 md:mb-8">
+                    <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-light text-white tracking-tight leading-[1.15] mb-6 md:mb-8">
                         Our Export Catalog
                     </h1>
                     <p className="text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed font-light mb-8 md:mb-10">
