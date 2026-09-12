@@ -17,7 +17,7 @@ import {
   ArrowLeft,
   AlertCircle,
   KeyRound,
-  Fingerprint,
+  Shield,
 } from "lucide-react";
 
 export default function AdminLoginPage() {
@@ -67,7 +67,7 @@ export default function AdminLoginPage() {
       }
 
       setUserFromAuth(data.user);
-      setSuccessToast(`Welcome back, ${data.user.fullName || "Administrator"}. Initializing session...`);
+      setSuccessToast(`Welcome back, ${data.user.fullName || "Administrator"}! Initializing dashboard...`);
 
       setTimeout(() => {
         router.replace("/admin/overview");
@@ -81,18 +81,17 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full relative flex items-center justify-center bg-[#070D08] px-4 py-12 font-sans overflow-hidden">
-      {/* Dynamic Background Effects */}
+    <div className="min-h-screen w-full relative flex items-center justify-center bg-[#F4F7F4] px-4 py-12 font-sans overflow-hidden">
+      {/* Soft Ambient Background Elements */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-gradient-to-b from-emerald-600/15 via-emerald-800/10 to-transparent blur-3xl rounded-full" />
-        <div className="absolute -bottom-40 right-10 w-[500px] h-[500px] bg-emerald-950/20 blur-3xl rounded-full" />
-        <div className="absolute top-1/3 left-10 w-[400px] h-[400px] bg-emerald-900/10 blur-3xl rounded-full" />
+        <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-gradient-to-b from-[#1B4D28]/10 via-[#1B4D28]/5 to-transparent blur-3xl rounded-full" />
+        <div className="absolute -bottom-32 right-10 w-[500px] h-[500px] bg-[#1B4D28]/5 blur-3xl rounded-full" />
         {/* Subtle grid pattern */}
         <div
-          className="absolute inset-0 opacity-[0.03]"
+          className="absolute inset-0 opacity-[0.4]"
           style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)`,
-            backgroundSize: "32px 32px",
+            backgroundImage: `radial-gradient(circle at 1px 1px, #CBD5E1 1px, transparent 0)`,
+            backgroundSize: "28px 28px",
           }}
         />
       </div>
@@ -104,9 +103,9 @@ export default function AdminLoginPage() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-6 z-50 bg-[#122E1A] text-emerald-100 px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/30 backdrop-blur-xl"
+            className="fixed top-6 z-50 bg-[#1B4D28] text-white px-6 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-[#2C5E39]"
           >
-            <CheckCircle2 size={20} className="text-emerald-400 flex-shrink-0 animate-bounce" />
+            <CheckCircle2 size={20} className="text-[#4CAF50] flex-shrink-0 animate-bounce" />
             <span className="text-xs sm:text-sm font-semibold tracking-wide">{successToast}</span>
           </motion.div>
         )}
@@ -118,27 +117,27 @@ export default function AdminLoginPage() {
         <div className="mb-6 flex items-center justify-between">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-xs font-medium text-emerald-400/80 hover:text-emerald-300 transition-colors group"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 hover:text-[#1B4D28] transition-colors group"
           >
             <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-            <span>Return to Public Marketplace</span>
+            <span>Return to Marketplace</span>
           </Link>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/20 text-[10px] font-semibold text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Encrypted Gateway</span>
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-[11px] font-bold text-[#1B4D28]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#1B4D28] animate-pulse" />
+            <span>Secure Admin Gateway</span>
           </div>
         </div>
 
-        {/* Card Component */}
+        {/* Card Component (Clean Light Luxury) */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="bg-[#0E1A11]/90 backdrop-blur-2xl rounded-3xl border border-emerald-500/20 shadow-[0_20px_70px_-15px_rgba(0,0,0,0.8)] overflow-hidden p-8 sm:p-9"
+          transition={{ duration: 0.35 }}
+          className="bg-white rounded-3xl border border-gray-200/80 shadow-[0_20px_60px_-15px_rgba(27,77,40,0.08)] p-8 sm:p-9"
         >
           {/* Header & Logo */}
           <div className="flex flex-col items-center text-center mb-8">
-            <div className="relative h-16 w-16 bg-gradient-to-br from-emerald-400/20 to-emerald-950/80 rounded-2xl p-1 shadow-xl ring-2 ring-emerald-500/30 flex items-center justify-center mb-4">
+            <div className="relative h-16 w-16 bg-emerald-50/60 rounded-2xl p-1 shadow-sm border border-emerald-100 flex items-center justify-center mb-4">
               <Image
                 src="/LOGO.jpg"
                 alt="SmartHub AgroChain"
@@ -147,11 +146,11 @@ export default function AdminLoginPage() {
                 priority
               />
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-              <span>Admin Control Plane</span>
+            <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+              Admin Control Plane
             </h1>
-            <p className="text-xs text-emerald-200/60 mt-1.5 max-w-[320px]">
-              Governance, Treasury, &amp; Product Moderation Portal
+            <p className="text-xs text-gray-500 mt-1 max-w-[320px]">
+              Marketplace governance, treasury float, &amp; produce moderation desk
             </p>
           </div>
 
@@ -164,9 +163,9 @@ export default function AdminLoginPage() {
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                 className="overflow-hidden"
               >
-                <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-3 text-xs text-red-300">
-                  <AlertCircle size={18} className="text-red-400 flex-shrink-0 mt-0.5" />
-                  <span className="font-medium leading-relaxed">{error}</span>
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3 text-xs text-red-700">
+                  <AlertCircle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+                  <span className="font-semibold leading-relaxed">{error}</span>
                 </div>
               </motion.div>
             )}
@@ -176,7 +175,7 @@ export default function AdminLoginPage() {
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             {/* Email Field */}
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-300/80">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
                 Administrator Email
               </label>
               <div className="relative">
@@ -187,11 +186,11 @@ export default function AdminLoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@smarthubagro.com"
-                  className="w-full bg-[#08120A] border border-emerald-500/25 text-white placeholder:text-emerald-300/25 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all"
+                  className="w-full bg-gray-50/60 border border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:bg-white focus:border-[#1B4D28] focus:ring-2 focus:ring-[#1B4D28]/10 transition-all font-medium"
                 />
                 <Mail
                   size={17}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400/50"
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
                 />
               </div>
             </div>
@@ -199,10 +198,10 @@ export default function AdminLoginPage() {
             {/* Password Field */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-300/80">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
                   Master Password Key
                 </label>
-                <span className="text-[10px] text-emerald-400/50">256-bit Encrypted</span>
+                <span className="text-[10px] text-gray-400 font-medium">256-bit Encrypted</span>
               </div>
               <div className="relative">
                 <input
@@ -212,17 +211,17 @@ export default function AdminLoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full bg-[#08120A] border border-emerald-500/25 text-white placeholder:text-emerald-300/25 rounded-xl pl-10 pr-11 py-3 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all font-mono"
+                  className="w-full bg-gray-50/60 border border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-xl pl-10 pr-11 py-3 text-sm focus:outline-none focus:bg-white focus:border-[#1B4D28] focus:ring-2 focus:ring-[#1B4D28]/10 transition-all font-mono"
                 />
                 <Lock
                   size={17}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400/50"
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400/50 hover:text-emerald-300 transition-colors p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1 cursor-pointer"
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -234,7 +233,7 @@ export default function AdminLoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-[#22C55E] to-[#15803D] hover:from-[#26D968] hover:to-[#169145] text-white py-3.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-emerald-950/80 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="w-full bg-[#1B4D28] hover:bg-[#143d20] text-white py-3.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-[#1B4D28]/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {loading ? (
                   <div className="flex items-center gap-2">
@@ -252,17 +251,17 @@ export default function AdminLoginPage() {
             </div>
           </form>
 
-          {/* Security Disclaimer */}
-          <div className="mt-8 pt-6 border-t border-emerald-500/10 flex items-start gap-3 text-emerald-400/60">
-            <Fingerprint size={20} className="flex-shrink-0 text-emerald-500/60 mt-0.5" />
-            <p className="text-[10px] leading-relaxed">
-              <strong className="text-emerald-400/80">Authorized Personnel Only:</strong> All login attempts, administrative decisions, and financial operations are cryptographically signed and logged in the immutable audit ledger.
+          {/* Security Notice Box */}
+          <div className="mt-8 pt-6 border-t border-gray-100 flex items-start gap-3 text-gray-500">
+            <Shield size={18} className="flex-shrink-0 text-[#1B4D28] mt-0.5" />
+            <p className="text-[11px] leading-relaxed">
+              <strong className="text-gray-700">Authorized Personnel Only:</strong> Administrative sessions are protected with HTTP-only tokens and logged in the immutable audit trail.
             </p>
           </div>
         </motion.div>
 
         {/* Footer Note */}
-        <p className="text-center text-[11px] text-emerald-400/40 mt-6 font-medium">
+        <p className="text-center text-[11px] text-gray-400 mt-6 font-medium">
           SmartHub AgroChain &bull; Enterprise Governance Platform
         </p>
       </div>
