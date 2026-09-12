@@ -85,15 +85,45 @@ export async function POST(
       if (order.payment) {
         await tx.payment.update({
           where: { id: order.payment.id },
-          data: { paymentStatus: "FAILED" },
+          data: {
+            paymentStatus: order.payment.paymentStatus === "PAID" ? "REFUNDED" : "FAILED",
+          },
         });
       }
     });
 
-    // 3. If funds were deducted to escrow (PAID via WALLET), refund buyer wallet
-    if (order.payment?.paymentMethod === "WALLET" || order.payment?.paymentStatus === "PAID") {
-      await WalletService.executeRefund(session.userId, totalAmount, order.id);
+    // 3. Payment-Source Aware Refund Routing
+    const buyerUserId = order.buyer.userId;
+    if (order.payment?.paymentMethod === "WALLET") {
+      // Wallet-paid order: unlock buyer's locked escrow funds back to available balance
+      await WalletService.executeWalletEscrowRefund(buyerUserId, totalAmount, order.id);
+    } else if (order.payment?.paymentMethod === "CARD" && order.payment?.paymentStatus === "PAID") {
+      // Card-paid order that was already captured: initiate gateway refund or credit store balance
+      await WalletService.executeGatewayCardRefund(
+        buyerUserId,
+        order.id,
+        order.payment.transactionRef || order.orderNumber,
+        totalAmount
+      );
     }
+    // Note: If CARD payment was PENDING, no funds were captured so no wallet refund is executed.
+
+    const { recordAuditEvent } = await import("@/lib/audit");
+    await recordAuditEvent({
+      category: "ORDER",
+      severity: "INFO",
+      action: "ORDER_CANCELLED_REFUNDED",
+      actorId: session.userId,
+      actorEmail: session.email,
+      resourceType: "ORDER",
+      resourceId: order.id,
+      metadata: {
+        orderNumber: order.orderNumber,
+        refundedAmount: totalAmount,
+        recipientUserId: buyerUserId,
+      },
+      req,
+    });
 
     const res = NextResponse.json(
       createSuccessResponse({
@@ -101,8 +131,9 @@ export async function POST(
         orderNumber: order.orderNumber,
         status: "CANCELLED",
         refundedAmount: totalAmount,
+        refundRecipientUserId: buyerUserId,
         formattedRefundedAmount: WalletService.formatNGN(totalAmount),
-        message: "Order cancelled successfully. Funds refunded to wallet and inventory restored.",
+        message: "Order cancelled successfully. Funds refunded to buyer wallet and inventory restored.",
       })
     );
     return attachTraceHeaders(res, traceCtx);

@@ -26,6 +26,8 @@ model User {
   preferences           UserPreferences?
   reviewedVerifications Verification[] @relation("VerificationReviewer")
   wallet                Wallet?
+  addresses             BuyerAddress[]
+  moderatedProducts     Product[]        @relation("ProductModerator")
 }
 
 model FarmerProfile {
@@ -41,6 +43,7 @@ model FarmerProfile {
   updatedAt          DateTime           @updatedAt
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   products           Product[]
+  sellerOrders       SellerOrder[]
   verification       Verification?
 }
 
@@ -91,19 +94,27 @@ model Product {
   description     String?
   price           Decimal        @db.Decimal(10, 2)
   unit            ProductUnit
+  status          ProductStatus  @default(PENDING_APPROVAL)
+  rejectionReason String?
+  moderationNotes String?
+  moderatedAt     DateTime?
+  moderatedById   String?
   harvestDate     DateTime?
-  isAvailable     Boolean        @default(true)
+  isAvailable     Boolean        @default(false)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   inventory       Inventory?
   orderItems      OrderItem[]
   category        Category       @relation(fields: [categoryId], references: [id])
   farmerProfile   FarmerProfile  @relation(fields: [farmerProfileId], references: [id], onDelete: Cascade)
+  moderatedBy     User?          @relation("ProductModerator", fields: [moderatedById], references: [id])
   images          ProductImage[]
   reviews         Review[]
 
   @@index([farmerProfileId])
   @@index([categoryId])
+  @@index([status])
+  @@index([moderatedById])
 }
 
 model ProductImage {
@@ -127,35 +138,43 @@ model Inventory {
 }
 
 model Order {
-  id          String       @id @default(cuid())
-  orderNumber String       @unique
-  buyerId     String
-  totalAmount Decimal      @db.Decimal(10, 2)
-  status      OrderStatus  @default(PENDING)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  delivery    Delivery?
-  disputes    Dispute[]
-  buyer       BuyerProfile @relation(fields: [buyerId], references: [id])
-  orderItems  OrderItem[]
-  payment     Payment?
+  id                String         @id @default(cuid())
+  orderNumber       String         @unique
+  buyerId           String
+  shippingAddressId String?
+  totalAmount       Decimal        @db.Decimal(10, 2)
+  status            OrderStatus    @default(PENDING)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  delivery          Delivery?
+  disputes          Dispute[]
+  buyer             BuyerProfile   @relation(fields: [buyerId], references: [id])
+  shippingAddress   BuyerAddress?  @relation(fields: [shippingAddressId], references: [id])
+  orderItems        OrderItem[]
+  sellerOrders      SellerOrder[]
+  payment           Payment?
+  reviews           Review[]
 
   @@index([buyerId])
+  @@index([shippingAddressId])
 }
 
 model OrderItem {
-  id        String   @id @default(cuid())
-  orderId   String
-  productId String
-  quantity  Int
-  unitPrice Decimal  @db.Decimal(10, 2)
-  subtotal  Decimal  @db.Decimal(10, 2)
-  createdAt DateTime @default(now())
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
+  id            String       @id @default(cuid())
+  orderId       String
+  productId     String
+  sellerOrderId String?
+  quantity      Int
+  unitPrice     Decimal      @db.Decimal(10, 2)
+  subtotal      Decimal      @db.Decimal(10, 2)
+  createdAt     DateTime     @default(now())
+  order         Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product      @relation(fields: [productId], references: [id])
+  sellerOrder   SellerOrder? @relation(fields: [sellerOrderId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([productId])
+  @@index([sellerOrderId])
 }
 
 model Payment {
@@ -223,14 +242,17 @@ model Review {
   id        String       @id @default(cuid())
   buyerId   String
   productId String
+  orderId   String?
   rating    Rating
   comment   String?
   createdAt DateTime     @default(now())
   buyer     BuyerProfile @relation(fields: [buyerId], references: [id])
   product   Product      @relation(fields: [productId], references: [id])
+  order     Order?       @relation(fields: [orderId], references: [id])
 
   @@unique([buyerId, productId])
   @@index([productId])
+  @@index([orderId])
 }
 
 model Dispute {
@@ -249,6 +271,72 @@ model Dispute {
 
   @@index([orderId])
   @@index([userId])
+}
+
+model SellerOrder {
+  id                String            @id @default(cuid())
+  sellerOrderNumber String            @unique
+  orderId           String
+  farmerProfileId   String
+  subtotal          Decimal           @db.Decimal(10, 2)
+  shippingFee       Decimal           @default(0.00) @db.Decimal(10, 2)
+  totalAmount       Decimal           @db.Decimal(10, 2)
+  status            SellerOrderStatus @default(PENDING)
+  trackingNumber    String?
+  dispatchNotes     String?
+  shippedAt         DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  farmerProfile     FarmerProfile     @relation(fields: [farmerProfileId], references: [id])
+  orderItems        OrderItem[]
+
+  @@index([orderId])
+  @@index([farmerProfileId])
+  @@index([status])
+}
+
+model BuyerAddress {
+  id            String   @id @default(cuid())
+  userId        String
+  label         String   @default("Home")
+  recipientName String
+  phoneNumber   String
+  addressLine   String
+  city          String
+  state         String
+  lga           String
+  postalCode    String?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders        Order[]
+
+  @@index([userId])
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum SellerOrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  READY_FOR_PICKUP
+  IN_TRANSIT
+  DELIVERED
+  COMPLETED
+  CANCELLED
 }
 
 enum Role {

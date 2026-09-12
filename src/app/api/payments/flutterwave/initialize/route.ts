@@ -6,13 +6,71 @@ export async function POST(req: Request) {
   try {
     const session = await getSession();
     const body = await req.json().catch(() => ({}));
-    const { items, totalAmount } = body;
+    const { items, orderId, totalAmount } = body;
 
     const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
     if (!secretKey) {
       return NextResponse.json(
         { error: "Flutterwave secret key is not configured on the server." },
         { status: 500 }
+      );
+    }
+
+    // Recalculate price total on the server — never trust client-provided totalAmount
+    let serverVerifiedTotal = 0;
+    let validatedOrderId = orderId || null;
+
+    if (orderId) {
+      const existingOrder = await prisma.order.findUnique({
+        where: { id: orderId },
+      });
+      if (!existingOrder) {
+        return NextResponse.json(
+          { error: "Order not found for payment initialization." },
+          { status: 404 }
+        );
+      }
+      serverVerifiedTotal = Number(existingOrder.totalAmount);
+    } else if (Array.isArray(items) && items.length > 0) {
+      const productIds = items.map((i: any) => i.productId || i.id).filter(Boolean);
+      const dbProducts = await prisma.product.findMany({
+        where: { id: { in: productIds } },
+        include: { inventory: true },
+      });
+
+      let subtotal = 0;
+      for (const item of items) {
+        const pid = item.productId || item.id;
+        const dbProduct = dbProducts.find((p) => p.id === pid);
+        if (!dbProduct) {
+          return NextResponse.json(
+            { error: `Produce listing ${pid} was not found in catalog.` },
+            { status: 404 }
+          );
+        }
+        if (!dbProduct.isAvailable) {
+          return NextResponse.json(
+            { error: `Produce '${dbProduct.name}' is currently unavailable.` },
+            { status: 400 }
+          );
+        }
+        const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+        subtotal += Number(dbProduct.price) * qty;
+      }
+      const shippingFee = 400; // Flat standard platform shipping
+      serverVerifiedTotal = subtotal + shippingFee;
+    } else {
+      return NextResponse.json(
+        { error: "Valid items or orderId are required to initialize payment." },
+        { status: 400 }
+      );
+    }
+
+    // Enforce serverVerifiedTotal > 0
+    if (serverVerifiedTotal <= 0) {
+      return NextResponse.json(
+        { error: "Calculated checkout total must be greater than zero." },
+        { status: 400 }
       );
     }
 
@@ -36,7 +94,7 @@ export async function POST(req: Request) {
 
     const flwPayload = {
       tx_ref: txRef,
-      amount: totalAmount || 100,
+      amount: serverVerifiedTotal,
       currency: "NGN",
       redirect_url: `${appUrl}/api/payments/flutterwave/verify`,
       customer: {
@@ -45,7 +103,9 @@ export async function POST(req: Request) {
       },
       meta: {
         userId: session?.userId || "guest",
-        itemsCount: items?.length || 0,
+        orderId: validatedOrderId,
+        itemsCount: Array.isArray(items) ? items.length : 0,
+        serverVerifiedTotal,
       },
       customizations: {
         title: "SmartHub AgroChain Payment",

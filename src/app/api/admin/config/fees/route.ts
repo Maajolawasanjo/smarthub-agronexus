@@ -6,8 +6,8 @@ import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 // In-memory / dynamic config storage with baseline defaults
 let platformFeeConfig = {
   platformCommissionRatePercent: 5.0, // 5% marketplace commission
-  escrowFeePercent: 1.5, // 1.5% escrow management fee
-  vatRatePercent: 7.5, // 7.5% Statutory VAT
+  escrowFeePercent: 0.0, // Escrow management included in platform commission (authoritative model)
+  vatRatePercent: 7.5, // 7.5% Statutory VAT on commission
   currency: "NGN",
   updatedAt: new Date().toISOString(),
   updatedBy: "SYSTEM_INIT",

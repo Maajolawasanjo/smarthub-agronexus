@@ -90,6 +90,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             certification: "Certified Export Grade",
             sku: `PROD-${product.id.substring(0, 6)}`,
             brand: product.farmer.farmName,
+            farmerProfileId: product.farmer.id,
+            farmerName: product.farmer.farmName,
             moq: product.specifications.minOrderQty,
             grade: product.specifications.grade,
             packaging: product.specifications.packaging,
@@ -188,7 +190,14 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                             ₦{product.price.toLocaleString()} / {product.unit.toLowerCase() === "kg" ? "KG" : product.unit}
                         </span>
                         <p className="text-xs text-gray-500 font-medium">
-                            Producer: <span className="font-bold text-gray-800">{product.farmer.farmName}</span> ({product.farmer.farmAddress || `${product.farmer.state}, ${product.farmer.lga}`})
+                            Producer:{" "}
+                            <Link
+                                href={`/farmers/${product.farmer.id}`}
+                                className="font-bold text-[#1B4D28] hover:underline"
+                            >
+                                {product.farmer.farmName}
+                            </Link>{" "}
+                            ({product.farmer.farmAddress || `${product.farmer.state}, ${product.farmer.lga}`})
                         </p>
                     </div>
 

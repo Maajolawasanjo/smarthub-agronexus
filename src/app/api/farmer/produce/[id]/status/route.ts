@@ -51,12 +51,26 @@ export async function PATCH(
       return attachTraceHeaders(res, traceCtx);
     }
 
+    // Block unapproved produce from being activated into the showroom
+    if (targetStatus === "ACTIVE" && product.status !== "APPROVED" && session.role !== "ADMIN") {
+      const res = NextResponse.json(
+        createErrorResponse(
+          "APPROVAL_REQUIRED",
+          `Produce listing cannot be activated because its moderation status is '${product.status}'. Only produce approved by platform compliance can be activated.`
+        ),
+        { status: 403 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
     const isAvailable = targetStatus === "ACTIVE";
+    const newStatus = targetStatus === "ARCHIVED" ? "ARCHIVED" : product.status;
 
     const updatedProduct = await prisma.product.update({
       where: { id: productId },
       data: {
         isAvailable,
+        status: newStatus,
       },
     });
 

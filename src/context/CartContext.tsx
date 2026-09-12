@@ -23,6 +23,8 @@ export interface Product {
     moq?: string;
     grade?: string;
     packaging?: string;
+    farmerProfileId?: string;
+    farmerName?: string;
 }
 
 export interface CartItem extends Product {

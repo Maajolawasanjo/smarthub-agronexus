@@ -40,10 +40,35 @@ export async function POST(req: Request) {
       );
     }
 
-    const farmerProfile = await prisma.farmerProfile.findUnique({
+    let farmerProfile = await prisma.farmerProfile.findUnique({
       where: { userId: session.userId },
       include: { user: true },
     });
+
+    if (!farmerProfile && session.role === "ADMIN") {
+      if (body.farmerProfileId) {
+        farmerProfile = await prisma.farmerProfile.findUnique({
+          where: { id: body.farmerProfileId },
+          include: { user: true },
+        });
+      } else if (body.farmerName) {
+        farmerProfile = await prisma.farmerProfile.findFirst({
+          where: {
+            OR: [
+              { farmName: { contains: body.farmerName, mode: "insensitive" } },
+              { user: { fullName: { contains: body.farmerName, mode: "insensitive" } } },
+            ],
+          },
+          include: { user: true },
+        });
+      }
+      if (!farmerProfile) {
+        farmerProfile = await prisma.farmerProfile.findFirst({
+          where: { verificationStatus: "APPROVED" },
+          include: { user: true },
+        });
+      }
+    }
 
     if (!farmerProfile) {
       return NextResponse.json(
@@ -164,6 +189,7 @@ export async function POST(req: Request) {
         description: description?.trim() || `${name} produced for wholesale export.`,
         price: parseFloat(price.toString()),
         unit: validUnit,
+        status: "PENDING_APPROVAL",
         isAvailable: false,
         images: imageList.length > 0
           ? {

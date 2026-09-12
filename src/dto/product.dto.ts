@@ -7,6 +7,9 @@ export interface ProductDTO {
   price: number;
   unit: string;
   isAvailable: boolean;
+  status?: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "SUSPENDED" | "ARCHIVED";
+  rejectionReason?: string | null;
+  moderationNotes?: string | null;
   harvestDate?: string;
   createdAt: string;
   category: {

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { WalletService } from "@/services/wallet.service";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
+import { reconstructGrossFromPayout } from "@/lib/settlement";
 
 // GET /api/admin/finance — Authoritative SQL Aggregation for Financial Operations
 export async function GET(req: Request) {
@@ -36,16 +37,15 @@ export async function GET(req: Request) {
       const totalFrozenDisputeFunds = Number(walletAgg._sum.frozen || 0);
       const totalWalletsCount = walletAgg._count.id;
 
-      // 2. Aggregate Platform Revenue (2.5% fee retained on ESCROW_RELEASE transactions)
+      // 2. Aggregate Platform Revenue (Canonical Settlement Engine)
       const releaseTxns = await prisma.walletTransaction.findMany({
         where: { type: "ESCROW_RELEASE", status: "SUCCESS" },
       });
 
-      // Each ESCROW_RELEASE amount = totalOrder * 0.975. So platform fee = amount / 0.975 * 0.025
       const totalPlatformRevenue = releaseTxns.reduce((sum, tx) => {
         const farmerCredit = Number(tx.amount);
-        const fee = (farmerCredit / 0.975) * 0.025;
-        return sum + fee;
+        const { platformFee } = reconstructGrossFromPayout(farmerCredit);
+        return sum + platformFee;
       }, 0);
 
       // 3. Aggregate Total Deposits & Total Withdrawals

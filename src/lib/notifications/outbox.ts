@@ -52,17 +52,21 @@ class OutboxManager {
     const now = new Date();
 
     // Fetch pending items that are due for processing
+    // Note: Prisma does not support cross-column comparisons in where clauses.
+    // We fetch PENDING/FAILED items and check attempts < maxAttempts in the loop.
     const pendingItems = await prisma.notificationOutbox.findMany({
       where: {
         status: { in: ["PENDING", "FAILED"] },
         availableAt: { lte: now },
-        attempts: { lt: prisma.notificationOutbox.fields.maxAttempts },
       },
       orderBy: { availableAt: "asc" },
       take: 50,
     });
 
     for (const item of pendingItems) {
+      // Skip items that have exhausted their retry budget
+      if (item.attempts >= item.maxAttempts) continue;
+
       // Mark as PROCESSING atomically
       await prisma.notificationOutbox.update({
         where: { id: item.id },

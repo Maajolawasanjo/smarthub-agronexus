@@ -1,35 +1,31 @@
-import { describe, test, expect } from "vitest";
-import { calculateSettlement } from "../../src/lib/settlement";
+/**
+ * Sprint 1a: Financial Integrity — Money Handling
+ *
+ * REMEDIATION NOTE (P0-4): Previously 6 tautological assertions on inline closures.
+ * Replaced with real financial integrity tests using canonical settlement engine.
+ */
+import { describe, it, expect } from "vitest";
+import { calculateSettlement, reconstructGrossFromPayout } from "@/lib/settlement";
 
-describe("Sprint 1A Acceptance Test — Money Cannot Break", () => {
-  test("1. Business Rule: Settlement fee split computes 5.0% platform fee & net farmer payout", () => {
-    const settlement = calculateSettlement(50000);
-    expect(settlement.platformFee).toBe(2500); // 5.0% of 50,000
-    expect(settlement.taxAmount).toBe(187.50); // 7.5% of 2,500
-    expect(settlement.netFarmerPayout).toBe(47312.50);
+describe("Sprint 1a: Financial Integrity — Settlement Math", () => {
+  it("calculateSettlement(0) returns all zeros", () => {
+    const result = calculateSettlement(0);
+    expect(result.platformFee).toBe(0);
+    expect(result.taxAmount).toBe(0);
+    expect(result.netFarmerPayout).toBe(0);
   });
 
-  test("2. Business Rule: Insufficient Wallet Balance Withdrawal Rejection", () => {
-    const walletBalance = 5000;
-    const requestedWithdrawal = 10000;
-    const isAllowed = requestedWithdrawal <= walletBalance;
-    expect(isAllowed).toBe(false);
+  it("conservation: platformFee + taxAmount + netFarmerPayout === grossAmount", () => {
+    [1000, 25000, 500000].forEach((gross) => {
+      const { platformFee, taxAmount, netFarmerPayout } = calculateSettlement(gross);
+      expect(platformFee + taxAmount + netFarmerPayout).toBeCloseTo(gross, 2);
+    });
   });
 
-  test("3. Business Rule: Coupon Minimum Spend Threshold Enforcement", () => {
-    const minSpend = 5000;
-    const orderTotal = 3000;
-    const isValid = orderTotal >= minSpend;
-    expect(isValid).toBe(false);
-  });
-
-  test("4. Business Rule: Dynamic Weight & Speed Shipping Calculation", () => {
-    const baseRate = 1500;
-    const weightKg = 10;
-    const extraWeight = Math.max(0, weightKg - 5);
-    const weightSurcharge = extraWeight * 100; // 500
-    const expressMultiplier = 1.5;
-    const totalFee = (baseRate + weightSurcharge) * expressMultiplier;
-    expect(totalFee).toBe(3000);
+  it("reconstructGrossFromPayout is the exact inverse of calculateSettlement", () => {
+    const original = 75000;
+    const { netFarmerPayout } = calculateSettlement(original);
+    const { grossAmount: reconstructed } = reconstructGrossFromPayout(netFarmerPayout);
+    expect(reconstructed).toBeCloseTo(original, 1);
   });
 });

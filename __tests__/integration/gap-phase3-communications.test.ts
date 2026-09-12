@@ -1,4 +1,51 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+const outboxDb: any[] = [];
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    notificationOutbox: {
+      create: vi.fn(async ({ data }: any) => {
+        const item = {
+          id: "outbox-" + (outboxDb.length + 1),
+          ...data,
+          attempts: 0,
+          status: data.status || "PENDING",
+          availableAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        outboxDb.push(item);
+        return item;
+      }),
+      findMany: vi.fn(async ({ where }: any) => {
+        return outboxDb.filter((i) =>
+          where?.status?.in ? where.status.in.includes(i.status) : true
+        );
+      }),
+      update: vi.fn(async ({ where, data }: any) => {
+        const item = outboxDb.find((i) => i.id === where.id);
+        if (item) {
+          if (data.attempts?.increment) item.attempts += 1;
+          Object.assign(item, data);
+        }
+        return item;
+      }),
+      count: vi.fn(async ({ where }: any) => {
+        if (!where || Object.keys(where).length === 0) return outboxDb.length;
+        return outboxDb.filter((i) => !where.status || i.status === where.status)
+          .length;
+      }),
+      fields: { maxAttempts: 3 },
+    },
+    user: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    notification: {
+      create: vi.fn().mockResolvedValue({ id: "notif-1" }),
+    },
+  },
+}));
+
 import { ResendEmailAdapter, TermiiSMSAdapter } from "../../src/lib/notifications/adapters";
 import { notificationOutbox } from "../../src/lib/notifications/outbox";
 
@@ -30,7 +77,7 @@ describe("Gap Closure Phase 3 — Communications & Driver Operations Tests", () 
   });
 
   it("3. Outbox Pattern: Enqueue & Retry Queue Processing", async () => {
-    notificationOutbox.enqueueEmail({
+    await notificationOutbox.enqueueEmail({
       to: "buyer@agronexus.com",
       subject: "Order Placed",
       template: "ORDER_PLACED",

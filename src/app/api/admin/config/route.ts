@@ -14,7 +14,7 @@ let systemControlCenterConfig = {
   marketplaceMaintenanceMode: false,
   registrationEnabled: true,
   reviewModerationMode: "AUTO_PUBLISH", // "AUTO_PUBLISH" | "MANUAL_REVIEW"
-  supportedPaymentProviders: ["AGROPAY_ESCROW", "PAYSTACK", "FLUTTERWAVE"],
+  supportedPaymentProviders: ["AGROPAY_ESCROW", "FLUTTERWAVE"],
   supportedCurrencies: ["NGN"],
   updatedAt: new Date().toISOString(),
   updatedBy: "SYSTEM_INIT",

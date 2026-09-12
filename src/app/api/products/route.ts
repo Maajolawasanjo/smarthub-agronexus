@@ -17,8 +17,9 @@ export async function GET(req: Request) {
     const limit = Math.max(1, Math.min(50, Number(searchParams.get("limit") || "12")));
     const skip = (page - 1) * limit;
 
-    // Build Prisma where clause
+    // Build Prisma where clause — strictly filter approved & active produce
     const whereClause: any = {
+      status: "APPROVED",
       isAvailable: true,
       farmerProfile: {
         verificationStatus: "APPROVED",

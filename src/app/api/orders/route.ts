@@ -172,6 +172,7 @@ export async function POST(req: Request) {
         data: {
           orderNumber,
           buyerId: buyerProfile.id,
+          shippingAddressId: body.shippingAddressId || null,
           totalAmount,
           status: "PENDING",
           orderItems: {
@@ -196,13 +197,50 @@ export async function POST(req: Request) {
         include: {
           orderItems: {
             include: {
-              product: { select: { name: true } },
+              product: { select: { id: true, name: true, farmerProfileId: true } },
             },
           },
           payment: true,
           delivery: true,
         },
       });
+
+      // 5. Multi-Vendor Sub-Orders: Partition OrderItems by Farmer into SellerOrders
+      const farmerItemsMap = new Map<string, string[]>();
+      for (const oi of createdOrder.orderItems) {
+        const fId = oi.product.farmerProfileId;
+        if (!farmerItemsMap.has(fId)) {
+          farmerItemsMap.set(fId, []);
+        }
+        farmerItemsMap.get(fId)!.push(oi.id);
+      }
+
+      let sellerIndex = 1;
+      for (const [farmerId, oiIds] of farmerItemsMap.entries()) {
+        const subtotalForFarmer = createdOrder.orderItems
+          .filter((oi) => oiIds.includes(oi.id))
+          .reduce((sum, oi) => sum + Number(oi.subtotal), 0);
+
+        const sellerOrderNumber = `${orderNumber}-S${sellerIndex}`;
+        sellerIndex++;
+
+        const sellerOrder = await tx.sellerOrder.create({
+          data: {
+            sellerOrderNumber,
+            orderId: createdOrder.id,
+            farmerProfileId: farmerId,
+            subtotal: subtotalForFarmer,
+            totalAmount: subtotalForFarmer,
+            status: "PENDING",
+          },
+        });
+
+        // Link OrderItems to their discrete SellerOrder
+        await tx.orderItem.updateMany({
+          where: { id: { in: oiIds } },
+          data: { sellerOrderId: sellerOrder.id },
+        });
+      }
 
       return createdOrder;
     });

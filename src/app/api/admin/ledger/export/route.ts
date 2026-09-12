@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
+import { calculateSettlement } from "@/lib/settlement";
 
 // GET /api/admin/ledger/export — Multi-Format Financial Ledger Exporter (CSV / JSON)
 export async function GET(req: Request) {
@@ -24,9 +25,10 @@ export async function GET(req: Request) {
 
     const ledgerItems = orders.map((o) => {
       const grossAmount = Number(o.totalAmount);
-      const platformFee = Number((grossAmount * 0.05).toFixed(2));
-      const vat = Number((grossAmount * 0.075).toFixed(2));
-      const netPayout = Number((grossAmount - platformFee).toFixed(2));
+      const settlement = calculateSettlement(grossAmount);
+      const platformFee = settlement.platformFee;
+      const vat = settlement.taxAmount;
+      const netPayout = settlement.netFarmerPayout;
       const transactionRef = o.payment?.transactionRef || `REF-${o.id.slice(0, 8)}`;
       const timestamp = new Date(o.createdAt).toISOString();
 

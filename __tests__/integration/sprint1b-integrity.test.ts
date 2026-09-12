@@ -1,25 +1,24 @@
-import { describe, test, expect } from "vitest";
-import crypto from "crypto";
+/**
+ * Sprint 1b: Data Integrity
+ *
+ * REMEDIATION NOTE (P0-4): Previously 4 tautological assertions on inline closures.
+ * Replaced with real integrity tests.
+ */
+import { describe, it, expect } from "vitest";
+import { calculateSettlement } from "@/lib/settlement";
+import { config } from "@/lib/config";
 
-function hashPassword(password: string): string {
-  return crypto.pbkdf2Sync(password, "agrosalt", 1000, 64, "sha512").toString("hex");
-}
-
-describe("Sprint 1B Acceptance Test — User Data Integrity", () => {
-  test("1. Business Rule: Password hashing via crypto PBKDF2", () => {
-    const rawPassword = "SecurePassword123!";
-    const hashedPassword = hashPassword(rawPassword);
-
-    expect(hashedPassword).not.toBe(rawPassword);
-    expect(hashPassword(rawPassword)).toBe(hashedPassword);
+describe("Sprint 1b: Platform Config & Data Integrity", () => {
+  it("config.fees.platformFeeRate is 0.05 (5%)", () => {
+    expect(config.fees.platformFeeRate).toBe(0.05);
   });
 
-  test("2. Business Rule: Profile field email validation logic", () => {
-    const validEmail = "farmer@agrochain.com";
-    const invalidEmail = "invalid-email-string";
+  it("config.fees.vatRate is 0.075 (7.5%)", () => {
+    expect(config.fees.vatRate).toBe(0.075);
+  });
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    expect(emailRegex.test(validEmail)).toBe(true);
-    expect(emailRegex.test(invalidEmail)).toBe(false);
+  it("settlement with very small amount (₦1) still produces valid breakdown", () => {
+    const { platformFee, taxAmount, netFarmerPayout, grossAmount } = calculateSettlement(1);
+    expect(platformFee + taxAmount + netFarmerPayout).toBeCloseTo(grossAmount, 1);
   });
 });

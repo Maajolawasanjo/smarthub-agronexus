@@ -88,8 +88,10 @@ export async function middleware(req: NextRequest) {
   const isDashboardRoute = pathname.startsWith("/dashboard");
   const isFarmerRoute = pathname.startsWith("/farmer");
   const isAdminRoute = pathname.startsWith("/admin") && pathname !== "/admin/login";
+  const isAdminApi = pathname.startsWith("/api/admin");
+  const isFarmerApi = pathname.startsWith("/api/farmer");
 
-  if (!isDashboardRoute && !isFarmerRoute && !isAdminRoute) {
+  if (!isDashboardRoute && !isFarmerRoute && !isAdminRoute && !isAdminApi && !isFarmerApi) {
     return response;
   }
 
@@ -97,7 +99,21 @@ export async function middleware(req: NextRequest) {
   // Use cryptographic verification — never trust a token without checking the signature
   const session = token ? await verifyEdgeSessionToken(token) : null;
 
+  const isApiRequest = isAdminApi || isFarmerApi;
+
   if (!session) {
+    if (isApiRequest) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Authentication required to access this resource.",
+          },
+        },
+        { status: 401 }
+      );
+    }
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
@@ -106,6 +122,36 @@ export async function middleware(req: NextRequest) {
   const userRole = session.role?.toUpperCase();
 
   // Role-Based Authorization Enforcement & Portal Isolation
+  if (isAdminApi) {
+    if (userRole !== "ADMIN") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Administrative privileges required.",
+          },
+        },
+        { status: 403 }
+      );
+    }
+  }
+
+  if (isFarmerApi) {
+    if (userRole !== "FARMER" && userRole !== "ADMIN") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "FORBIDDEN",
+            message: "Farmer merchant privileges required.",
+          },
+        },
+        { status: 403 }
+      );
+    }
+  }
+
   if (isFarmerRoute) {
     if (userRole === "BUYER") return NextResponse.redirect(new URL("/dashboard", req.url));
     if (userRole === "ADMIN") return NextResponse.redirect(new URL("/admin/overview", req.url));
@@ -132,5 +178,8 @@ export const config = {
     "/dashboard/:path*",
     "/farmer/:path*",
     "/admin/:path*",
+    "/api/admin/:path*",
+    "/api/farmer/:path*",
   ],
 };
+

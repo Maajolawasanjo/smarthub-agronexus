@@ -18,30 +18,13 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { amount, method = "VIRTUAL_ACCOUNT", simulateWebhook = false } = body;
+    const { amount, method = "VIRTUAL_ACCOUNT" } = body;
     const numAmount = parseFloat(amount);
 
     if (isNaN(numAmount) || numAmount <= 0) {
       const res = NextResponse.json(
         createErrorResponse("INVALID_AMOUNT", "Deposit amount must be greater than zero"),
         { status: 400 }
-      );
-      return attachTraceHeaders(res, traceCtx);
-    }
-
-    // Direct simulated instant deposit completion (for testing/demo)
-    if (simulateWebhook) {
-      const txRef = `DEP-SIM-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-      const result = await WalletService.executeDeposit(session.userId, numAmount, txRef);
-
-      const res = NextResponse.json(
-        createSuccessResponse({
-          status: "SUCCESS",
-          transactionRef: txRef,
-          amountCredited: numAmount,
-          newBalance: Number(result.updatedWallet.balance),
-          message: `Wallet successfully credited with ${WalletService.formatNGN(numAmount)}`,
-        })
       );
       return attachTraceHeaders(res, traceCtx);
     }

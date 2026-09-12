@@ -54,6 +54,21 @@ export function calculateSettlement(
 }
 
 /**
+ * Mathematically reconstructs the original gross commodity amount from the net farmer payout,
+ * accounting for both the platform fee and statutory 7.5% VAT on the fee.
+ * Formula: gross = netPayout / (1 - (feeRate * (1 + taxRate)))
+ */
+export function reconstructGrossFromPayout(
+  netFarmerPayout: number,
+  feeRateOverride?: number
+): SettlementBreakdown {
+  const platformFeeRate = feeRateOverride ?? STANDARD_PLATFORM_FEE_RATE;
+  const effectiveDeductionFactor = platformFeeRate * (1 + STANDARD_TAX_RATE);
+  const grossAmount = Number((netFarmerPayout / (1 - effectiveDeductionFactor)).toFixed(2));
+  return calculateSettlement(grossAmount, platformFeeRate);
+}
+
+/**
  * Generates official financial receipt object
  */
 export function generateReceipt(

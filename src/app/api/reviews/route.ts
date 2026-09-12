@@ -3,34 +3,30 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
+import { recordAuditEvent } from "@/lib/audit";
 
-const RATING_MAP: Record<number, "ONE" | "TWO" | "THREE" | "FOUR" | "FIVE"> = {
+const RATING_MAP: Record<number | string, "ONE" | "TWO" | "THREE" | "FOUR" | "FIVE"> = {
   1: "ONE",
   2: "TWO",
   3: "THREE",
   4: "FOUR",
   5: "FIVE",
+  ONE: "ONE",
+  TWO: "TWO",
+  THREE: "THREE",
+  FOUR: "FOUR",
+  FIVE: "FIVE",
 };
 
-// POST /api/reviews — Submit verified purchaser product review
+// POST /api/reviews — Submit verified buyer review on delivered produce
 export async function POST(req: Request) {
   const traceCtx = createTraceContext(req);
-
   try {
     const session = await getSession();
-    if (!session) {
-      const res = NextResponse.json(createErrorResponse("UNAUTHORIZED", "Authentication required"), { status: 401 });
-      return attachTraceHeaders(res, traceCtx);
-    }
-
-    const body = await req.json();
-    const { productId, ratingScore, comment } = body;
-
-    const numRating = Number(ratingScore);
-    if (!productId || isNaN(numRating) || numRating < 1 || numRating > 5) {
+    if (!session?.userId) {
       const res = NextResponse.json(
-        createErrorResponse("INVALID_INPUT", "productId and valid ratingScore (1-5) are required"),
-        { status: 400 }
+        createErrorResponse("UNAUTHORIZED", "Authentication required to submit a review."),
+        { status: 401 }
       );
       return attachTraceHeaders(res, traceCtx);
     }
@@ -40,84 +36,169 @@ export async function POST(req: Request) {
     });
 
     if (!buyerProfile) {
-      const res = NextResponse.json(createErrorResponse("NOT_FOUND", "Buyer profile required to submit review"), { status: 404 });
-      return attachTraceHeaders(res, traceCtx);
-    }
-
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-      include: { farmerProfile: true },
-    });
-
-    if (!product) {
-      const res = NextResponse.json(createErrorResponse("NOT_FOUND", "Product not found"), { status: 404 });
-      return attachTraceHeaders(res, traceCtx);
-    }
-
-    // Business Rule: Farmer cannot review their own product
-    if (product.farmerProfile.userId === session.userId) {
       const res = NextResponse.json(
-        createErrorResponse("FORBIDDEN", "Farmers cannot leave reviews on their own produce listings"),
+        createErrorResponse("FORBIDDEN", "Only buyers can review produce."),
         { status: 403 }
       );
       return attachTraceHeaders(res, traceCtx);
     }
 
-    // Business Rule: Verified purchaser check (Order must contain product and be DELIVERED/COMPLETED)
-    const verifiedOrder = await prisma.order.findFirst({
+    const body = await req.json().catch(() => ({}));
+    const { productId, orderId, rating, comment } = body;
+
+    if (!productId || !rating) {
+      const res = NextResponse.json(
+        createErrorResponse("BAD_REQUEST", "Product ID and rating (1-5) are required."),
+        { status: 400 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    const mappedRating = RATING_MAP[rating];
+    if (!mappedRating) {
+      const res = NextResponse.json(
+        createErrorResponse("INVALID_RATING", "Rating must be between 1 and 5."),
+        { status: 400 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    // Verify verified purchase: check that buyer ordered this product and it was delivered
+    if (orderId) {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { orderItems: true },
+      });
+
+      if (!order) {
+        const res = NextResponse.json(
+          createErrorResponse("NOT_FOUND", "Referenced order not found."),
+          { status: 404 }
+        );
+        return attachTraceHeaders(res, traceCtx);
+      }
+
+      if (order.buyerId !== buyerProfile.id) {
+        const res = NextResponse.json(
+          createErrorResponse("FORBIDDEN", "You can only review produce from your own orders."),
+          { status: 403 }
+        );
+        return attachTraceHeaders(res, traceCtx);
+      }
+
+      const hasItem = order.orderItems.some((oi) => oi.productId === productId);
+      if (!hasItem) {
+        const res = NextResponse.json(
+          createErrorResponse("BAD_REQUEST", "Produce was not part of the specified order."),
+          { status: 400 }
+        );
+        return attachTraceHeaders(res, traceCtx);
+      }
+
+      if (order.status !== "DELIVERED" && order.status !== "COMPLETED") {
+        const res = NextResponse.json(
+          createErrorResponse(
+            "ORDER_NOT_DELIVERED",
+            "Reviews can only be submitted after produce has been delivered."
+          ),
+          { status: 400 }
+        );
+        return attachTraceHeaders(res, traceCtx);
+      }
+    }
+
+    const review = await prisma.review.upsert({
       where: {
-        buyerId: buyerProfile.id,
-        orderItems: { some: { productId } },
-        status: { in: ["DELIVERED", "COMPLETED"] },
+        buyerId_productId: {
+          buyerId: buyerProfile.id,
+          productId,
+        },
       },
-    });
-
-    if (!verifiedOrder) {
-      const res = NextResponse.json(
-        createErrorResponse(
-          "PURCHASE_REQUIRED",
-          "Only buyers with a delivered or completed order can review this produce item"
-        ),
-        { status: 403 }
-      );
-      return attachTraceHeaders(res, traceCtx);
-    }
-
-    // Business Rule: Unique review per buyer per product
-    const existingReview = await prisma.review.findUnique({
-      where: { buyerId_productId: { buyerId: buyerProfile.id, productId } },
-    });
-
-    if (existingReview) {
-      const res = NextResponse.json(
-        createErrorResponse("DUPLICATE_REVIEW", "You have already reviewed this produce item"),
-        { status: 409 }
-      );
-      return attachTraceHeaders(res, traceCtx);
-    }
-
-    const ratingEnum = RATING_MAP[numRating];
-
-    const review = await prisma.review.create({
-      data: {
+      update: {
+        rating: mappedRating,
+        comment: comment ? comment.trim() : null,
+        orderId: orderId || undefined,
+      },
+      create: {
         buyerId: buyerProfile.id,
         productId,
-        rating: ratingEnum,
-        comment: comment?.trim() || null,
+        orderId: orderId || undefined,
+        rating: mappedRating,
+        comment: comment ? comment.trim() : null,
       },
+      include: {
+        product: { select: { name: true } },
+      },
+    });
+
+    await recordAuditEvent({
+      category: "SYSTEM",
+      severity: "INFO",
+      action: "REVIEW_SUBMITTED",
+      actorId: session.userId,
+      actorEmail: session.email,
+      resourceType: "REVIEW",
+      resourceId: review.id,
+      metadata: {
+        productId,
+        productName: review.product.name,
+        rating: mappedRating,
+        hasComment: Boolean(comment),
+      },
+      req,
     });
 
     const res = NextResponse.json(
       createSuccessResponse({
+        message: "Review submitted successfully.",
         review,
-        message: "Thank you! Your product review has been published.",
       }),
       { status: 201 }
     );
     return attachTraceHeaders(res, traceCtx);
-  } catch (err: any) {
+  } catch (error: any) {
+    console.error("Error submitting review:", error);
     const res = NextResponse.json(
-      createErrorResponse("REVIEW_SUBMISSION_FAILED", err.message || "Failed to submit review"),
+      createErrorResponse("INTERNAL_SERVER_ERROR", "Failed to submit review."),
+      { status: 500 }
+    );
+    return attachTraceHeaders(res, traceCtx);
+  }
+}
+
+// GET /api/reviews — Retrieve reviews for a product
+export async function GET(req: Request) {
+  const traceCtx = createTraceContext(req);
+  try {
+    const { searchParams } = new URL(req.url);
+    const productId = searchParams.get("productId");
+
+    if (!productId) {
+      const res = NextResponse.json(
+        createErrorResponse("BAD_REQUEST", "productId query parameter is required."),
+        { status: 400 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    const reviews = await prisma.review.findMany({
+      where: { productId },
+      include: {
+        buyer: {
+          include: {
+            user: { select: { fullName: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const res = NextResponse.json(createSuccessResponse({ reviews }), { status: 200 });
+    return attachTraceHeaders(res, traceCtx);
+  } catch (error: any) {
+    console.error("Error fetching reviews:", error);
+    const res = NextResponse.json(
+      createErrorResponse("INTERNAL_SERVER_ERROR", "Failed to fetch reviews."),
       { status: 500 }
     );
     return attachTraceHeaders(res, traceCtx);

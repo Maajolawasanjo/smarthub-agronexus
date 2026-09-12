@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
@@ -19,11 +19,52 @@ const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 export default function ProductsShowroom() {
     const [activeCategory, setActiveCategory] = useState<string>("All Commodities");
+    const [liveProducts, setLiveProducts] = useState<ShowcaseProduct[]>([]);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+
+    useEffect(() => {
+        async function fetchLiveProducts() {
+            try {
+                const res = await fetch("/api/products");
+                if (res.ok) {
+                    const data = await res.json();
+                    const items = data.items || [];
+                    if (items.length > 0) {
+                        const mapped: ShowcaseProduct[] = items.map((p: any) => ({
+                            id: p.id,
+                            name: p.name,
+                            description: p.description || "Certified Nigerian export commodity.",
+                            price: Number(p.price) || 0,
+                            unit: p.unit || "TON",
+                            category: p.category?.name || "Grains & Cereals",
+                            farmName: p.farmer?.farmName || "Verified Producer Cluster",
+                            state: p.farmer?.state || "Nigeria",
+                            verificationStatus: "APPROVED" as const,
+                            availableQty: p.inventory?.availableQty ?? 100,
+                            stockStatus: (p.inventory?.availableQty ?? 0) > 0 ? ("IN_STOCK" as const) : ("LOW_STOCK" as const),
+                            primaryImage: p.images?.[0] || "/images/produce/sorghum.jpg",
+                            seasonMonths: [0, 1, 2, 9, 10, 11],
+                        }));
+                        setLiveProducts(mapped);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load live products on showroom:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        fetchLiveProducts();
+    }, []);
+
+    const allProducts = useMemo(() => {
+        return liveProducts.length > 0 ? liveProducts : SHOWCASE_PRODUCTS;
+    }, [liveProducts]);
 
     const filteredProducts = useMemo(() => {
-        if (activeCategory === "All Commodities") return SHOWCASE_PRODUCTS;
-        return SHOWCASE_PRODUCTS.filter((p) => p.category === activeCategory);
-    }, [activeCategory]);
+        if (activeCategory === "All Commodities") return allProducts;
+        return allProducts.filter((p) => p.category === activeCategory);
+    }, [activeCategory, allProducts]);
 
     /** Count products per category for the tab badges */
     const categoryCounts = useMemo(() => {
@@ -31,11 +72,11 @@ export default function ProductsShowroom() {
         for (const cat of SHOWCASE_CATEGORIES) {
             counts[cat] =
                 cat === "All Commodities"
-                    ? SHOWCASE_PRODUCTS.length
-                    : SHOWCASE_PRODUCTS.filter((p) => p.category === cat).length;
+                    ? allProducts.length
+                    : allProducts.filter((p) => p.category === cat).length;
         }
         return counts;
-    }, []);
+    }, [allProducts]);
 
     return (
         <main className="min-h-screen bg-[#EEF2EE] font-sans antialiased overflow-hidden">
@@ -368,7 +409,7 @@ function ProductCard({ item }: { item: ShowcaseProduct }) {
                     <div className="grid grid-cols-2 gap-2 border-t border-gray-100 pt-4">
                         <div className="bg-[#EEF2EE]/45 border border-gray-100/50 rounded-xl p-2.5 group-hover:bg-green-50/40 transition-colors">
                             <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Price</p>
-                            <p className="text-[10px] font-bold text-gray-800 leading-tight truncate">${item.price.toLocaleString()} / {item.unit}</p>
+                            <p className="text-[10px] font-bold text-gray-800 leading-tight truncate">₦{item.price.toLocaleString()} / {item.unit}</p>
                         </div>
                         <div className="bg-[#EEF2EE]/45 border border-gray-100/50 rounded-xl p-2.5 group-hover:bg-green-50/40 transition-colors">
                             <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-0.5 truncate">Available Quantity</p>
@@ -388,13 +429,13 @@ function ProductCard({ item }: { item: ShowcaseProduct }) {
 
             {/* Card Footer Actions with spring micro-interactions */}
             <div className="px-5 pb-5 sm:px-6 sm:pb-6 flex flex-col gap-2">
-                <Link href="/signup" className="w-full">
+                <Link href={`/products/${item.id}`} className="w-full">
                     <motion.div
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         transition={{ type: "spring", stiffness: 400, damping: 17 }}
                     >
-                        <Button className="bg-[#1B4D28] hover:bg-[#143d20] border border-[#2C5E39] text-white w-full py-2 rounded-full text-[11px] font-bold shadow-md">
+                        <Button className="bg-[#1B4D28] hover:bg-[#143d20] border border-[#2C5E39] text-white w-full py-2 rounded-full text-[11px] font-bold shadow-md cursor-pointer">
                             View Product Details
                         </Button>
                     </motion.div>

@@ -18,39 +18,56 @@ function TrackingContent() {
     const [isLoading, setIsLoading] = useState(true);
     const [isReleasing, setIsReleasing] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [userOrders, setUserOrders] = useState<any[]>([]);
 
-    async function fetchFulfillmentData() {
-        setIsLoading(true);
+    async function fetchUserOrders() {
         try {
-            let targetId = orderIdParam;
-
-            if (!targetId) {
-                const listRes = await fetch("/api/orders?limit=1");
-                if (listRes.ok) {
-                    const listData = await listRes.json();
-                    if (listData.orders && listData.orders.length > 0) {
-                        targetId = listData.orders[0].id;
+            const listRes = await fetch("/api/orders?limit=10");
+            if (listRes.ok) {
+                const listData = await listRes.json();
+                if (listData.orders && listData.orders.length > 0) {
+                    setUserOrders(listData.orders);
+                    if (!orderIdParam && !fulfillment) {
+                        loadFulfillment(listData.orders[0].id);
                     }
                 }
             }
+        } catch (err) {
+            console.error("Failed to load user orders list", err);
+        }
+    }
 
-            if (targetId) {
-                const res = await fetch(`/api/fulfillment/${targetId}`);
-                if (res.ok) {
-                    const data: FulfillmentDTO = await res.json();
-                    setFulfillment(data);
-                }
+    async function loadFulfillment(targetId: string) {
+        setIsLoading(true);
+        try {
+            const res = await fetch(`/api/fulfillment/${targetId}`);
+            if (res.ok) {
+                const data: FulfillmentDTO = await res.json();
+                setFulfillment(data);
+            } else {
+                toast("Fulfillment tracking record not found for this order.", "error");
             }
         } catch (err) {
             console.error("Failed to load fulfillment tracking data", err);
+            toast("Error loading fulfillment tracking data.", "error");
         } finally {
             setIsLoading(false);
         }
     }
 
     useEffect(() => {
-        fetchFulfillmentData();
+        fetchUserOrders();
+        if (orderIdParam) {
+            loadFulfillment(orderIdParam);
+        }
     }, [orderIdParam]);
+
+    const handleSearchSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (searchQuery.trim()) {
+            loadFulfillment(searchQuery.trim());
+        }
+    };
 
     async function handleConfirmDeliveryAndReleaseEscrow() {
         if (!fulfillment?.order.id) return;
@@ -64,7 +81,7 @@ function TrackingContent() {
 
             if (res.ok) {
                 toast("Delivery confirmed! Escrow payment released to farmer.", "success");
-                await fetchFulfillmentData();
+                await loadFulfillment(fulfillment.order.id);
             } else {
                 const errData = await res.json();
                 toast(errData.error || "Confirmation failed.", "error");
@@ -85,17 +102,43 @@ function TrackingContent() {
                         {fulfillment ? `Order #${fulfillment.order.orderNumber}` : "Select an order to track real-time fulfillment"}
                     </p>
                 </div>
-                <div className="relative w-full md:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <form onSubmit={handleSearchSubmit} className="relative w-full md:w-72 flex items-center">
+                    <Search className="absolute left-3 text-gray-400" size={16} />
                     <input
                         type="text"
-                        placeholder="Search Order Number..."
+                        placeholder="Search Order No. (e.g. AGRO-...)"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 rounded-full border border-gray-200 text-sm focus:outline-none focus:border-[#1B4D28]"
+                        className="w-full pl-10 pr-16 py-2 rounded-full border border-gray-200 text-xs focus:outline-none focus:border-[#1B4D28]"
                     />
-                </div>
+                    <button
+                        type="submit"
+                        className="absolute right-1 px-3 py-1 bg-[#1B4D28] text-white text-xs font-bold rounded-full hover:bg-[#143d20] cursor-pointer"
+                    >
+                        Track
+                    </button>
+                </form>
             </div>
+
+            {/* Quick Order Switcher if multiple orders exist */}
+            {userOrders.length > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs">
+                    <span className="font-bold text-gray-500 whitespace-nowrap">Recent Orders:</span>
+                    {userOrders.map((ord) => (
+                        <button
+                            key={ord.id}
+                            onClick={() => loadFulfillment(ord.id)}
+                            className={`px-3 py-1.5 rounded-xl font-semibold border transition-all whitespace-nowrap cursor-pointer ${
+                                fulfillment?.order.id === ord.id
+                                    ? "bg-[#1B4D28] text-white border-[#1B4D28] shadow-sm"
+                                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                            }`}
+                        >
+                            #{ord.orderNumber} ({ord.status})
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {isLoading ? (
                 <div className="p-16 text-center text-gray-400 bg-white rounded-2xl border border-gray-100 flex flex-col items-center justify-center">

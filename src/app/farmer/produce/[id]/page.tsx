@@ -17,9 +17,25 @@ import {
     Printer,
 } from "lucide-react";
 import Link from "next/link";
-import { useProduce, ProduceListing } from "@/context/ProduceContext";
 import { useUser } from "@/context/UserContext";
 import { cn } from "@/lib/utils";
+
+export interface ProduceListingDetail {
+    id: string;
+    produceType: string;
+    variety: string;
+    quantity: string;
+    unit: string;
+    askingPrice: string;
+    harvestDate: string;
+    farmLocation: string;
+    notes: string;
+    images: string[];
+    submittedAt: string;
+    status: "Pending" | "Active" | "Sold" | "Cancelled";
+    rejectionReason?: string | null;
+    moderationNotes?: string | null;
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -75,7 +91,7 @@ const STATUS_CONFIG = {
     },
 } as const;
 
-function StatusBadge({ status }: { status: ProduceListing["status"] }) {
+function StatusBadge({ status }: { status: ProduceListingDetail["status"] }) {
     const cfg = STATUS_CONFIG[status];
     const Icon = cfg.icon;
     return (
@@ -153,50 +169,55 @@ function NotFound() {
 
 export default function ProduceDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const { getListingById } = useProduce();
     const { user } = useUser();
 
-    const [listing, setListing] = useState<ProduceListing | undefined>(undefined);
+    const [listing, setListing] = useState<ProduceListingDetail | undefined>(undefined);
     const [loaded, setLoaded] = useState(false);
     const [activeImg, setActiveImg] = useState(0);
 
     useEffect(() => {
         let isMounted = true;
-        const found = getListingById(id);
-        if (found) {
-            setListing(found);
-            setLoaded(true);
-        } else {
-            fetch(`/api/products/${id}`)
-                .then((res) => (res.ok ? res.json() : null))
-                .then((data) => {
-                    if (!isMounted) return;
-                    if (data && data.id) {
-                        setListing({
-                            id: data.id,
-                            produceType: data.name,
-                            variety: data.name,
-                            quantity: String(data.inventory?.availableQty || 0),
-                            unit: data.unit || "KG",
-                            askingPrice: String(data.price),
-                            harvestDate: data.harvestDate || new Date().toISOString(),
-                            farmLocation: data.farmer?.state || "Nigeria",
-                            notes: data.description || "",
-                            images: data.images?.map((img: any) => img.imageUrl) || [data.primaryImage].filter(Boolean),
-                            status: data.isAvailable ? "Active" : "Pending",
-                            submittedAt: data.createdAt || new Date().toISOString(),
-                        });
-                    }
-                })
-                .catch(() => {})
-                .finally(() => {
-                    if (isMounted) setLoaded(true);
-                });
-        }
+        fetch(`/api/products/${id}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+                if (!isMounted) return;
+                if (data && data.id) {
+                    const mappedStatus: "Pending" | "Active" | "Sold" | "Cancelled" =
+                        data.status === "APPROVED" && data.isAvailable
+                            ? "Active"
+                            : data.status === "REJECTED" || data.status === "SUSPENDED"
+                            ? "Cancelled"
+                            : (data.inventory?.availableQty <= 0 && data.status === "APPROVED")
+                            ? "Sold"
+                            : "Pending";
+
+                    setListing({
+                        id: data.id,
+                        produceType: data.name,
+                        variety: data.name,
+                        quantity: String(data.inventory?.availableQty ?? 0),
+                        unit: data.unit || "KG",
+                        askingPrice: String(data.price),
+                        harvestDate: data.harvestDate || data.createdAt || new Date().toISOString(),
+                        farmLocation: data.farmer?.farmAddress || data.farmer?.state || "Nigeria",
+                        notes: data.description || "",
+                        images: data.images?.map((img: any) => img.imageUrl) || [data.primaryImage].filter(Boolean),
+                        status: mappedStatus,
+                        submittedAt: data.createdAt || new Date().toISOString(),
+                        rejectionReason: data.rejectionReason,
+                        moderationNotes: data.moderationNotes,
+                    });
+                }
+            })
+            .catch((err) => console.error("Error loading produce:", err))
+            .finally(() => {
+                if (isMounted) setLoaded(true);
+            });
+
         return () => {
             isMounted = false;
         };
-    }, [id, getListingById]);
+    }, [id]);
 
     if (!loaded) {
         return (
@@ -252,18 +273,45 @@ export default function ProduceDetailPage({ params }: { params: Promise<{ id: st
 
             <div className="space-y-5">
 
-                {/* ── SUCCESS BANNER ── */}
-                <div className="bg-gradient-to-r from-[#1B4D28] to-[#2d7a44] rounded-[20px] p-5 flex items-center gap-4 text-white">
-                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 size={22} className="text-white" />
+                {/* ── STATUS BANNER ── */}
+                {listing.status === "Pending" && (
+                    <div className="bg-gradient-to-r from-amber-600 to-amber-700 rounded-[20px] p-5 flex items-center gap-4 text-white shadow-sm">
+                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                            <Clock size={22} className="text-white" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-sm">Under Quality Review</p>
+                            <p className="text-xs text-white/80 mt-0.5">
+                                This produce listing is awaiting quality inspection & approval from the SmartHub Admin team.
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="font-bold text-sm">Produce Submitted Successfully!</p>
-                        <p className="text-xs text-white/70 mt-0.5">
-                            Your produce has been listed and is awaiting review by the Agronexus team.
-                        </p>
+                )}
+                {listing.status === "Active" && (
+                    <div className="bg-gradient-to-r from-[#1B4D28] to-[#2d7a44] rounded-[20px] p-5 flex items-center gap-4 text-white shadow-sm">
+                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+                            <CheckCircle2 size={22} className="text-white" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-sm">Listing Approved & Live</p>
+                            <p className="text-xs text-white/80 mt-0.5">
+                                Verified and active on the public SmartHub agricultural marketplace.
+                            </p>
+                        </div>
                     </div>
-                </div>
+                )}
+                {listing.rejectionReason && (
+                    <div className="bg-red-50 border border-red-200 rounded-[20px] p-5 flex items-start gap-4 text-red-900 shadow-sm">
+                        <AlertCircle size={22} className="text-red-600 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-bold text-sm text-red-900">Moderation Rejection Notice</p>
+                            <p className="text-xs text-red-700 mt-1 leading-relaxed">
+                                {listing.rejectionReason}
+                            </p>
+                            <p className="text-[11px] text-red-500 mt-1">Please update your crop batch specifications or contact platform support.</p>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── TITLE + STATUS CARD ── */}
                 <div className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-6 md:p-8">

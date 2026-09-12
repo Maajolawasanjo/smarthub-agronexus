@@ -11,7 +11,18 @@ vi.mock("@/lib/session", () => ({
 describe("Phase 3 Hardening Integration Suite", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
-    (notificationOutbox as any).queue = [];
+    const outboxStore: any[] = [];
+    (vi.spyOn(prisma.notificationOutbox, "create") as any).mockImplementation(async ({ data }: any) => {
+      const rec = { id: "outbox-" + (outboxStore.length + 1), ...data, attempts: 0, createdAt: new Date(), updatedAt: new Date(), availableAt: new Date() };
+      outboxStore.push(rec);
+      return rec as any;
+    });
+    (vi.spyOn(prisma.notificationOutbox, "findMany") as any).mockImplementation(async () => outboxStore as any);
+    (vi.spyOn(prisma.notificationOutbox, "update") as any).mockImplementation(async ({ where, data }: any) => {
+      const rec = outboxStore.find(r => r.id === where.id);
+      if (rec) Object.assign(rec, data);
+      return rec as any;
+    });
   });
 
   describe("MKT-001: Farmer Verification Guard", () => {
@@ -143,7 +154,17 @@ describe("Phase 3 Hardening Integration Suite", () => {
         createdAt: new Date(),
       } as any);
 
-      notificationOutbox.enqueueEmail({
+      // Mock the email adapter to return success
+      const adapterMod = await import("@/lib/notifications/adapters");
+      vi.spyOn(adapterMod.defaultEmailAdapter, "sendEmail").mockResolvedValue({
+        success: true,
+        messageId: "test-msg-id",
+        provider: "Resend",
+        timestamp: new Date().toISOString(),
+      });
+
+      // MUST await — enqueueEmail is async and writes to outboxStore
+      await notificationOutbox.enqueueEmail({
         to: "test@agro.ng",
         subject: "Order Status Update",
         template: "ORDER_SHIPPED",

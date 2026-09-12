@@ -276,6 +276,8 @@ export default function DashboardProductsPage() {
                                                         certification: "Certified Export Grade",
                                                         sku: `PROD-${product.id.substring(0, 6)}`,
                                                         brand: product.farmer.farmName,
+                                                        farmerProfileId: product.farmer.id,
+                                                        farmerName: product.farmer.farmName,
                                                         moq: `1 ${product.unit}`,
                                                         grade: "Grade A",
                                                         packaging: "Export Bags",

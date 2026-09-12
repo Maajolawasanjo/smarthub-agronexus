@@ -395,15 +395,52 @@ export class WalletService {
       } catch (err: unknown) {
         const error = err as { message?: string };
         if (error.message?.startsWith("BANK_TRANSFER_FAILED")) throw err;
-        console.error("[FLUTTERWAVE_TRANSFER_EXCEP]", err);
+        // Network / runtime exception — rollback pendingWithdrawal so funds are not trapped
+        console.error("[FLUTTERWAVE_TRANSFER_EXCEP] Network exception during transfer, rolling back:", err);
+        await prisma.$transaction([
+          prisma.wallet.update({
+            where: { id: wallet.id },
+            data: {
+              balance: { increment: amount },
+              pendingWithdrawal: { decrement: amount },
+            },
+          }),
+          prisma.walletTransaction.update({
+            where: { id: txRecord.id },
+            data: {
+              status: "FAILED",
+              description: `[FAILED] Network exception during Flutterwave transfer (funds restored to balance): ${(err as Error).message || "Unknown error"}`,
+            },
+          }),
+        ]);
+        throw new Error(`WITHDRAWAL_NETWORK_ERROR: Transfer attempt failed. Funds have been restored to your wallet balance.`);
       }
+    } else if (process.env.NODE_ENV === "production") {
+      // Production without key is a critical financial misconfiguration: restore funds and fail immediately
+      await prisma.$transaction([
+        prisma.wallet.update({
+          where: { id: wallet.id },
+          data: {
+            balance: { increment: amount },
+            pendingWithdrawal: { decrement: amount },
+          },
+        }),
+        prisma.walletTransaction.update({
+          where: { id: txRecord.id },
+          data: {
+            status: "FAILED",
+            description: "[FAILED] Payout gateway unconfigured in production environment.",
+          },
+        }),
+      ]);
+      throw new Error("GATEWAY_UNCONFIGURED: Banking payout service is not configured in production.");
     } else {
-      // In development/test mode without API key, set to PROCESSING
+      // In development/test mode without API key, set to PROCESSING with clear notice
       await prisma.walletTransaction.update({
         where: { id: txRecord.id },
         data: {
           status: "PROCESSING",
-          description: `[PROCESSING] Mock transfer accepted, pending webhook callback (${txRef})`,
+          description: `[DEV_MODE] Mock transfer accepted without gateway key (${txRef})`,
         },
       });
     }
@@ -472,18 +509,25 @@ export class WalletService {
 
   /**
    * Executes atomic order cancellation refund back to buyer wallet.
-   * Ledger: REFUND — escrow decrements, balance increments (returns locked funds to buyer).
+   * Ledger: REFUND — escrow decrements safely (never negative), balance increments.
+   * If escrow is 0 (e.g. card order refunded as platform store credit), funds balance directly without negative escrow.
    */
-  public static async executeRefund(userId: string, amount: number, orderId: string) {
+  public static async executeRefund(userId: string, amount: number, orderId: string, isStoreCredit: boolean = false) {
     const wallet = await this.getOrCreateWallet(userId);
     const txRef = `REF-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+
+    const currentEscrow = Number(wallet.escrow);
+    // Escrow decrement is safely clamped to available escrow so it NEVER goes negative
+    const escrowDecrement = isStoreCredit ? 0 : Math.min(currentEscrow, amount);
+
+    const orderRef = String(orderId || "").slice(0, 8);
 
     const [updatedWallet, txRecord] = await prisma.$transaction([
       prisma.wallet.update({
         where: { id: wallet.id },
         data: {
-          escrow:  { decrement: amount },  // ← Release from escrow
-          balance: { increment: amount },   // ← Return to buyer's available balance
+          escrow:  { decrement: escrowDecrement },  // ← Safe release: never negative
+          balance: { increment: amount },           // ← Return to buyer's available balance
         },
       }),
       prisma.walletTransaction.create({
@@ -492,7 +536,9 @@ export class WalletService {
           type: "REFUND",
           amount,
           reference: txRef,
-          description: `Refund credited for cancelled Order #${orderId.slice(0, 8)}`,
+          description: escrowDecrement > 0
+            ? `Refund credited for cancelled Order #${orderRef} (Escrow released: ₦${escrowDecrement})`
+            : `Store credit refund for cancelled Order #${orderRef}`,
           status: "SUCCESS",
         },
       }),
@@ -500,6 +546,119 @@ export class WalletService {
 
     return { updatedWallet, txRecord };
   }
+
+  /**
+   * Dedicated wallet-source refund: unlocks buyer escrow back to available balance.
+   */
+  public static async executeWalletEscrowRefund(userId: string, amount: number, orderId: string) {
+    return this.executeRefund(userId, amount, orderId, false);
+  }
+
+  /**
+   * Dedicated card/gateway refund.
+   * SUCCESS path: Flutterwave refunds the card — we record the audit entry and return.
+   * FAILURE path: We persist REQUIRES_MANUAL_REVIEW and throw — we NEVER mint internal wallet
+   *               balance as implicit compensation for a failed card refund.
+   * To explicitly grant store credit, call executeStoreCreditRefund() separately.
+   */
+  public static async executeGatewayCardRefund(
+    userId: string,
+    orderId: string,
+    transactionRef: string,
+    amount: number
+  ) {
+    const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
+    if (secretKey && transactionRef) {
+      try {
+        const flwRes = await fetch(`https://api.flutterwave.com/v3/transactions/${transactionRef}/refund`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ amount }),
+        });
+        const flwData = await flwRes.json();
+        if (flwRes.ok && flwData.status === "success") {
+          // Gateway refund accepted — record audit ledger entry, do NOT touch wallet balance
+          const wallet = await this.getOrCreateWallet(userId);
+          await prisma.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: "REFUND",
+              amount,
+              reference: `FLW-REFUND-${transactionRef}`,
+              description: `Gateway card refund processed for Order #${orderId} via Flutterwave`,
+              status: "SUCCESS",
+            },
+          });
+          console.log(`[FLUTTERWAVE_REFUND_SUCCESS] Refunded ₦${amount} to card for Order #${orderId}`);
+          return { gatewayRefunded: true, transactionRef };
+        }
+
+        // Gateway returned non-success status
+        const errMsg = flwData?.message || "Gateway returned non-success status";
+        console.error(`[FLUTTERWAVE_REFUND_FAILED] Order #${orderId}: ${errMsg}`);
+        await this.persistManualReviewFlag(userId, orderId, amount, `Gateway rejection: ${errMsg}`);
+        throw new Error(`CARD_REFUND_FAILED: ${errMsg}. Manual review required.`);
+
+      } catch (err: unknown) {
+        const error = err as { message?: string };
+        // Re-throw expected failures without masking
+        if (error.message?.startsWith("CARD_REFUND_FAILED")) throw err;
+        // Network / runtime exception — flag for manual review, do NOT mint balance
+        const networkMsg = error.message || "Unknown network error";
+        console.error("[FLUTTERWAVE_REFUND_EXCEPTION] Network error during card refund:", networkMsg);
+        await this.persistManualReviewFlag(userId, orderId, amount, `Network exception: ${networkMsg}`);
+        throw new Error(`CARD_REFUND_FAILED: Network exception during gateway refund. Manual review required.`);
+      }
+    }
+
+    // No gateway key configured — flag immediately for manual review
+    await this.persistManualReviewFlag(userId, orderId, amount, "Gateway not configured (missing FLUTTERWAVE_SECRET_KEY)");
+    throw new Error("CARD_REFUND_FAILED: Gateway not configured. Manual review required.");
+  }
+
+  /**
+   * Persist a REQUIRES_MANUAL_REVIEW ledger entry for a failed card refund.
+   * This is a private helper; call executeStoreCreditRefund() to explicitly grant store credit.
+   */
+  private static async persistManualReviewFlag(
+    userId: string,
+    orderId: string,
+    amount: number,
+    reason: string
+  ) {
+    try {
+      const wallet = await this.getOrCreateWallet(userId);
+      await prisma.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: "REFUND",
+          amount,
+          reference: `MANUAL-${orderId}-${Date.now()}`,
+          description: `[REQUIRES_MANUAL_REVIEW] Card refund failed for Order #${orderId}. Reason: ${reason}`,
+          status: "FAILED",
+        },
+      });
+    } catch (flagErr) {
+      console.error("[MANUAL_REVIEW_FLAG_ERROR] Failed to persist manual review flag:", flagErr);
+    }
+  }
+
+  /**
+   * Explicitly grant store credit (wallet balance) to a buyer.
+   * Must only be called after admin authorisation, NOT as an automatic fallback for gateway failures.
+   */
+  public static async executeStoreCreditRefund(
+    userId: string,
+    amount: number,
+    orderId: string,
+    adminNotes: string
+  ) {
+    return this.executeRefund(userId, amount, orderId, true);
+  }
+
 
   /**
    * Fetch active Escrow orders and calculations from PostgreSQL
@@ -563,61 +722,213 @@ export class WalletService {
   }
 
   /**
-   * Release Escrow funds to farmer wallet upon confirmed delivery.
-   * Ledger: ESCROW_RELEASE — buyer escrow decrements, farmer wallet balance increments (minus platform fee).
-   * Flutterwave is NOT called here. Farmer controls when to bank-withdraw.
+   * Release Escrow funds to farmer wallet(s) upon confirmed delivery.
+   * Multi-vendor hardened:
+   * - If the order contains multiple SellerOrders, settles EACH farmer independently
+   *   based on their specific subtotal and items.
+   * - Atomically credits each farmer's wallet with (grossAmount - commission - VAT).
+   * - Creates distinct ESCROW_RELEASE transactions for each seller sub-order.
+   * - Decrements buyer's escrow by the exact aggregate settled (never negative).
+   * - Marks SellerOrders and parent Order as COMPLETED.
    */
-  public static async executeEscrowRelease(userId: string, dbOrderId: string) {
+  public static async executeEscrowRelease(
+    userIdOrOrderId: string,
+    maybeOrderId?: string,
+    targetSellerOrderId?: string
+  ) {
+    const effectiveOrderId = maybeOrderId || userIdOrOrderId;
     const order = await prisma.order.findUnique({
-      where: { id: dbOrderId },
-      include: { orderItems: { include: { product: { include: { farmerProfile: true } } } } },
+      where: { id: effectiveOrderId },
+      include: {
+        buyer: true,
+        sellerOrders: {
+          include: {
+            farmerProfile: {
+              include: { user: true },
+            },
+          },
+        },
+        orderItems: {
+          include: {
+            product: {
+              include: { farmerProfile: true },
+            },
+          },
+        },
+      },
     });
 
     if (!order) throw new Error("ORDER_NOT_FOUND");
 
-    const totalAmount = Number(order.totalAmount);
-    const { netFarmerPayout: farmerAmount, platformFee } = calculateSettlement(totalAmount);
+    const buyerUserId = order.buyer?.userId || (maybeOrderId ? userIdOrOrderId : (order as any).buyerId);
+    const buyerWallet = await this.getOrCreateWallet(buyerUserId);
 
-    const farmerUserId = order.orderItems[0]?.product?.farmerProfile?.userId;
-    const buyerWallet = await this.getOrCreateWallet(userId);
+    // Determine seller orders to settle
+    let sellerOrdersToSettle = order.sellerOrders || [];
+    if (targetSellerOrderId) {
+      sellerOrdersToSettle = sellerOrdersToSettle.filter((so) => so.id === targetSellerOrderId);
+      if (sellerOrdersToSettle.length === 0) {
+        throw new Error("SELLER_ORDER_NOT_FOUND");
+      }
+    } else {
+      // Settle all uncompleted seller orders
+      sellerOrdersToSettle = sellerOrdersToSettle.filter((so) => so.status !== "COMPLETED");
+    }
 
-    if (farmerUserId) {
-      const farmerWallet = await this.getOrCreateWallet(farmerUserId);
-      const txRef = `REL-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    // Legacy fallback if no SellerOrders exist on order
+    if (sellerOrdersToSettle.length === 0 && (!order.sellerOrders || order.sellerOrders.length === 0)) {
+      const farmerMap = new Map<string, number>();
+      for (const item of order.orderItems) {
+        const fUserId = item.product.farmerProfile?.userId;
+        if (fUserId) {
+          const sub = Number(item.subtotal);
+          farmerMap.set(fUserId, (farmerMap.get(fUserId) || 0) + sub);
+        }
+      }
+
+      let totalGrossSettled = 0;
+      const settlementOps: any[] = [];
+
+      for (const [farmerUserId, grossAmount] of farmerMap.entries()) {
+        const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
+        totalGrossSettled += grossAmount;
+        const farmerWallet = await this.getOrCreateWallet(farmerUserId);
+        const txRef = `REL-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+
+        settlementOps.push(
+          prisma.wallet.update({
+            where: { id: farmerWallet.id },
+            data: { balance: { increment: netFarmerPayout } },
+          }),
+          prisma.walletTransaction.create({
+            data: {
+              walletId: farmerWallet.id,
+              type: "ESCROW_RELEASE",
+              amount: netFarmerPayout,
+              reference: txRef,
+              description: `Escrow released for Order #${order.orderNumber} (Gross: ₦${grossAmount}, Fee: ₦${platformFee})`,
+              status: "SUCCESS",
+            },
+          })
+        );
+      }
+
+      const currentEscrow = Number(buyerWallet.escrow);
+      const escrowDecrement = Math.min(currentEscrow, totalGrossSettled);
 
       await prisma.$transaction([
-        // Mark order as completed
         prisma.order.update({
-          where: { id: dbOrderId },
+          where: { id: order.id },
           data: { status: "COMPLETED" },
         }),
-        // Decrement buyer's escrow column (money leaves escrow)
         prisma.wallet.update({
           where: { id: buyerWallet.id },
-          data: { escrow: { decrement: totalAmount } },
+          data: { escrow: { decrement: escrowDecrement } },
         }),
-        // Credit farmer wallet with amount minus platform commission
+        ...settlementOps,
+      ]);
+
+      return { success: true, settledCount: farmerMap.size, totalGrossSettled };
+    }
+
+    if (sellerOrdersToSettle.length === 0) {
+      return { success: true, message: "All seller sub-orders already settled.", totalGrossSettled: 0 };
+    }
+
+    // MULTI-VENDOR SETTLEMENT VIA SELLER_ORDERS:
+    // - grossAmount (subtotal): commodity value only — used for commission calculation
+    // - fullOrderAmount (totalAmount): commodity + shipping — used to drain buyer's locked escrow
+    let totalGrossSettled = 0;    // commissionable gross (subtotal only)
+    let totalEscrowToRelease = 0; // full amount to drain from buyer escrow (includes shipping pass-through)
+    const settlementOps: any[] = [];
+    const settledSellerOrderIds: string[] = [];
+
+    for (const sellerOrder of sellerOrdersToSettle) {
+      const farmerUserId = sellerOrder.farmerProfile?.userId;
+      if (!farmerUserId) continue;
+
+      const grossAmount = Number(sellerOrder.subtotal);       // Commission base: commodity only
+      const fullOrderAmount = Number(sellerOrder.totalAmount); // Includes shipping pass-through
+      const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
+      totalGrossSettled += grossAmount;
+      totalEscrowToRelease += fullOrderAmount; // Release full locked amount from buyer escrow
+      settledSellerOrderIds.push(sellerOrder.id);
+
+      const farmerWallet = await this.getOrCreateWallet(farmerUserId);
+      const txRef = `REL-${sellerOrder.sellerOrderNumber}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+
+      // 1. Mark SellerOrder as COMPLETED
+      settlementOps.push(
+        prisma.sellerOrder.update({
+          where: { id: sellerOrder.id },
+          data: {
+            status: "COMPLETED",
+            deliveredAt: sellerOrder.deliveredAt || new Date(),
+          },
+        })
+      );
+
+      // 2. Credit farmer wallet with net payout (commodity settlement; shipping is a pass-through)
+      settlementOps.push(
         prisma.wallet.update({
           where: { id: farmerWallet.id },
-          data: { balance: { increment: farmerAmount } },
-        }),
-        // Ledger entry on farmer's wallet
+          data: { balance: { increment: netFarmerPayout } },
+        })
+      );
+
+      // 3. Ledger entry on farmer's wallet
+      settlementOps.push(
         prisma.walletTransaction.create({
           data: {
             walletId: farmerWallet.id,
             type: "ESCROW_RELEASE",
-            amount: farmerAmount,
+            amount: netFarmerPayout,
             reference: txRef,
-            description: `Escrow released for Order #${order.orderNumber} (${config.fees.platformFeeRate * 100}% fee: ${this.formatNGN(platformFee)} retained)`,
+            description: `Escrow payout for Sub-Order #${sellerOrder.sellerOrderNumber} (Order #${order.orderNumber}). Commodity gross: ₦${grossAmount}, Fee: ₦${platformFee}`,
             status: "SUCCESS",
           },
-        }),
-      ]);
-
-      console.log(`[ESCROW_RELEASE] Order #${order.orderNumber}: ₦${farmerAmount} → Farmer Wallet | ₦${platformFee} → Platform Revenue`);
+        })
+      );
     }
 
-    return { success: true };
+    // 4. Decrement buyer's escrow column safely (full locked amount including shipping)
+    const currentEscrow = Number(buyerWallet.escrow);
+    const escrowDecrement = Math.min(currentEscrow, totalEscrowToRelease);
+
+
+    settlementOps.push(
+      prisma.wallet.update({
+        where: { id: buyerWallet.id },
+        data: { escrow: { decrement: escrowDecrement } },
+      })
+    );
+
+    // 5. If all seller orders for this order are completed, mark master Order as COMPLETED
+    const allSellerOrders = order.sellerOrders || [];
+    const remainingPending = allSellerOrders.filter(
+      (so) => !settledSellerOrderIds.includes(so.id) && so.status !== "COMPLETED"
+    );
+
+    if (remainingPending.length === 0) {
+      settlementOps.push(
+        prisma.order.update({
+          where: { id: effectiveOrderId },
+          data: { status: "COMPLETED" },
+        })
+      );
+    }
+
+    await prisma.$transaction(settlementOps);
+
+    console.log(
+      `[MULTI_VENDOR_ESCROW_RELEASE] Order #${order.orderNumber}: Settled ${settledSellerOrderIds.length} seller orders. Total Gross: ₦${totalGrossSettled}`
+    );
+
+    return {
+      success: true,
+      settledSellerOrdersCount: settledSellerOrderIds.length,
+      totalGrossSettled,
+    };
   }
 
   /**

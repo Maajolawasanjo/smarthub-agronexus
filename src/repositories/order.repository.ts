@@ -2,8 +2,10 @@ import { prisma } from "@/lib/prisma";
 
 export class OrderRepository {
   static async findById(id: string) {
-    return prisma.order.findUnique({
-      where: { id },
+    return prisma.order.findFirst({
+      where: {
+        OR: [{ id }, { orderNumber: id }],
+      },
       include: {
         buyer: { include: { user: true } },
         orderItems: {

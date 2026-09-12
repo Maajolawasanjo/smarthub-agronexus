@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useProduce } from "@/context/ProduceContext";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 
@@ -88,7 +87,6 @@ function FieldLabel({ label, error }: { label: string; error?: string }) {
 
 export default function SubmitProducePage() {
     const router = useRouter();
-    const { addListing } = useProduce();
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -183,19 +181,6 @@ export default function SubmitProducePage() {
             if (!data?.product?.id) {
                 throw new Error("Invalid response from produce server.");
             }
-
-            // Also keep local ProduceContext in sync for fast farmer view
-            addListing({
-                produceType: form.produceType,
-                variety: form.variety,
-                quantity: form.quantity,
-                unit: form.unit,
-                askingPrice: form.askingPrice,
-                harvestDate: form.harvestDate,
-                farmLocation: form.farmLocation,
-                notes: form.notes,
-                images,
-            });
 
             toast("Produce submitted successfully for quality inspection!", "success");
             router.push(`/farmer/produce/${data.product.id}`);

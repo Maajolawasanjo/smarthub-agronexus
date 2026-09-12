@@ -6,19 +6,29 @@ export async function GET(req: Request) {
   try {
     const session = await getSession();
     if (!session || session.role !== "ADMIN") {
-      // Check if fallback admin bypass or session is present
-      const authHeader = req.headers.get("authorization");
-      if (!authHeader && (!session || session.role !== "ADMIN")) {
-        return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-      }
+      return NextResponse.json({ error: "Unauthorized. Admin privileges required." }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const status = searchParams.get("status");
+    const categoryId = searchParams.get("categoryId");
+
+    const whereClause: any = {};
+    if (status) {
+      whereClause.status = status.toUpperCase();
+    }
+    if (categoryId) {
+      whereClause.categoryId = categoryId;
     }
 
     const products = await executeWithDbRetry(() =>
       prisma.product.findMany({
+        where: whereClause,
         include: {
           category: true,
           farmerProfile: {
             include: {
+              verification: true,
               user: {
                 select: {
                   id: true,
@@ -28,6 +38,12 @@ export async function GET(req: Request) {
                   isActive: true,
                 },
               },
+            },
+          },
+          moderatedBy: {
+            select: {
+              fullName: true,
+              email: true,
             },
           },
           images: true,

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useUser } from "@/context/UserContext";
 import { Switch } from "@/components/ui/Switch";
-import { ChevronDown, Camera, User, Mail, Phone, MapPin, Tractor, Eye, EyeOff, ShieldCheck, Bell, Smartphone } from "lucide-react";
+import { ChevronDown, Camera, User, Mail, Phone, MapPin, Tractor, Eye, EyeOff, ShieldCheck, Bell, Smartphone, Plus, Trash2, CheckCircle2, Building2 } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
@@ -57,9 +57,121 @@ export default function SettingsPage() {
     twoFactor: true,
   });
 
+  // ─── Address Book State ───────────────────────────────────────────────────
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const [showAddAddressForm, setShowAddAddressForm] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [newAddress, setNewAddress] = useState({
+    label: "Warehouse / Delivery Hub",
+    recipientName: "",
+    phoneNumber: "",
+    addressLine: "",
+    city: "",
+    state: "Lagos",
+    lga: "",
+    postalCode: "",
+    isDefault: false,
+  });
+
+  const fetchAddresses = async () => {
+    setLoadingAddresses(true);
+    try {
+      const res = await fetch("/api/user/addresses");
+      const json = await res.json();
+      if (json.success && json.data?.addresses) {
+        setAddresses(json.data.addresses);
+      } else if (json.addresses) {
+        setAddresses(json.addresses);
+      }
+    } catch (err) {
+      console.error("Error fetching addresses:", err);
+    } finally {
+      setLoadingAddresses(false);
+    }
+  };
+
+  const handleAddAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAddress.recipientName.trim() || !newAddress.phoneNumber.trim() || !newAddress.addressLine.trim() || !newAddress.state.trim() || !newAddress.lga.trim()) {
+      toast("Please provide recipient name, phone, address, state, and LGA.", "error");
+      return;
+    }
+    setSavingAddress(true);
+    try {
+      const res = await fetch("/api/user/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newAddress),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast("Delivery destination saved successfully!", "success");
+        setShowAddAddressForm(false);
+        setNewAddress({
+          label: "Warehouse / Delivery Hub",
+          recipientName: "",
+          phoneNumber: "",
+          addressLine: "",
+          city: "",
+          state: "Lagos",
+          lga: "",
+          postalCode: "",
+          isDefault: false,
+        });
+        await fetchAddresses();
+      } else {
+        toast(json.error?.message || "Failed to save address", "error");
+      }
+    } catch {
+      toast("Error saving delivery destination", "error");
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  const handleSetDefaultAddress = async (id: string) => {
+    try {
+      const res = await fetch("/api/user/addresses", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, isDefault: true }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast("Default delivery address set.", "success");
+        await fetchAddresses();
+      } else {
+        toast(json.error?.message || "Failed to update default address", "error");
+      }
+    } catch {
+      toast("Error setting default address", "error");
+    }
+  };
+
+  const handleDeleteAddress = async (id: string) => {
+    if (!confirm("Are you sure you want to remove this delivery destination?")) return;
+    try {
+      const res = await fetch(`/api/user/addresses?id=${id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast("Delivery address deleted.", "success");
+        await fetchAddresses();
+      } else {
+        toast(json.error?.message || "Failed to delete address", "error");
+      }
+    } catch {
+      toast("Error deleting address", "error");
+    }
+  };
+
   // ─── Sync from UserContext on mount ───────────────────────────────────────
   useEffect(() => {
     if (user) {
+      fetchAddresses();
+
       setFormData({
         fullName: user.fullName || user.name || "",
         email: user.email || "",
@@ -440,7 +552,224 @@ export default function SettingsPage() {
         </form>
       </div>
 
-      {/* ── 2. Change Password ──────────────────────────────────────────────── */}
+      {/* ── 2. Saved Delivery Destinations & Warehouses ─────────────────────── */}
+      <div className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-6 md:p-8 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
+              <MapPin size={18} className="text-[#1B4D28]" /> Saved Delivery Destinations & Warehouses
+            </h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Manage fulfillment hubs, aggregation silos, and delivery addresses for expedited checkout and logistics tracking.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddAddressForm(prev => !prev)}
+            className="inline-flex items-center gap-2 bg-[#1B4D28] text-white px-5 py-2.5 rounded-full text-xs font-bold hover:bg-[#153a1e] transition-all cursor-pointer shadow-sm self-start sm:self-auto shrink-0"
+          >
+            <Plus size={14} />
+            {showAddAddressForm ? "Cancel" : "Add Destination"}
+          </button>
+        </div>
+
+        {/* Add Address Form Accordion */}
+        {showAddAddressForm && (
+          <form onSubmit={handleAddAddress} className="p-5 bg-gray-50/80 border border-gray-200/80 rounded-2xl space-y-4 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#1B4D28] pb-1 border-b border-gray-200">
+              <Building2 size={15} /> New Delivery Hub / Address
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Hub / Address Label</label>
+                <input
+                  type="text"
+                  value={newAddress.label}
+                  onChange={e => setNewAddress(a => ({ ...a, label: e.target.value }))}
+                  placeholder="e.g. Lagos Warehouse, Farm Gate"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-[#1B4D28]"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Recipient / Contact Name</label>
+                <input
+                  type="text"
+                  value={newAddress.recipientName}
+                  onChange={e => setNewAddress(a => ({ ...a, recipientName: e.target.value }))}
+                  placeholder="e.g. John Okoro"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-[#1B4D28]"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Phone Number</label>
+                <input
+                  type="tel"
+                  value={newAddress.phoneNumber}
+                  onChange={e => setNewAddress(a => ({ ...a, phoneNumber: e.target.value }))}
+                  placeholder="+234 800 000 0000"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-[#1B4D28]"
+                  required
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Street Address / Facility Location</label>
+                <input
+                  type="text"
+                  value={newAddress.addressLine}
+                  onChange={e => setNewAddress(a => ({ ...a, addressLine: e.target.value }))}
+                  placeholder="e.g. Plot 14, Commercial Agribusiness Estate"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-[#1B4D28]"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">City / District</label>
+                <input
+                  type="text"
+                  value={newAddress.city}
+                  onChange={e => setNewAddress(a => ({ ...a, city: e.target.value }))}
+                  placeholder="e.g. Ikeja"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-[#1B4D28]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">State</label>
+                <select
+                  value={newAddress.state}
+                  onChange={e => setNewAddress(a => ({ ...a, state: e.target.value }))}
+                  className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-[#1B4D28] cursor-pointer"
+                  required
+                >
+                  {NG_STATES.map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">LGA (Local Govt Area)</label>
+                <input
+                  type="text"
+                  value={newAddress.lga}
+                  onChange={e => setNewAddress(a => ({ ...a, lga: e.target.value }))}
+                  placeholder="e.g. Ikeja LGA"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-[#1B4D28]"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-700">Postal Code (Optional)</label>
+                <input
+                  type="text"
+                  value={newAddress.postalCode}
+                  onChange={e => setNewAddress(a => ({ ...a, postalCode: e.target.value }))}
+                  placeholder="e.g. 100001"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-[#1B4D28]"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={newAddress.isDefault}
+                  onChange={e => setNewAddress(a => ({ ...a, isDefault: e.target.checked }))}
+                  className="w-4 h-4 rounded text-[#1B4D28] focus:ring-[#1B4D28] accent-[#1B4D28] cursor-pointer"
+                />
+                <span className="text-xs text-gray-700 font-medium">Set as default destination for new checkouts</span>
+              </label>
+
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAddressForm(false)}
+                  className="px-5 py-2 text-xs font-bold text-gray-600 hover:text-gray-900 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingAddress}
+                  className="bg-[#1B4D28] text-white px-6 py-2 rounded-full text-xs font-bold hover:bg-[#153a1e] transition-all disabled:opacity-60 cursor-pointer shadow-sm"
+                >
+                  {savingAddress ? "Saving…" : "Save Address"}
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* Saved Addresses List */}
+        {loadingAddresses ? (
+          <div className="py-8 text-center text-xs text-gray-400">Loading saved delivery destinations…</div>
+        ) : addresses.length === 0 ? (
+          <div className="py-8 px-4 text-center border-2 border-dashed border-gray-200 rounded-2xl">
+            <Building2 size={32} className="mx-auto text-gray-300 mb-2" />
+            <p className="text-xs font-bold text-gray-600">No saved delivery destinations</p>
+            <p className="text-[11px] text-gray-400 max-w-sm mx-auto mt-0.5">
+              Add your delivery addresses or warehouse facilities to enable automated shipping quotes and fast checkout.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {addresses.map((addr) => (
+              <div
+                key={addr.id}
+                className={cn(
+                  "p-4 rounded-2xl border transition-all relative flex flex-col justify-between",
+                  addr.isDefault
+                    ? "border-[#1B4D28]/30 bg-emerald-50/20 shadow-sm"
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                )}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-800">
+                      {addr.label || "Delivery Destination"}
+                    </span>
+                    {addr.isDefault ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#1B4D28] bg-green-100/70 px-2 py-0.5 rounded-full">
+                        <CheckCircle2 size={12} /> Default
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleSetDefaultAddress(addr.id)}
+                        className="text-[11px] text-gray-400 hover:text-[#1B4D28] font-semibold underline transition-colors cursor-pointer"
+                      >
+                        Set as default
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-gray-900">
+                    {addr.recipientName} <span className="text-gray-400 font-normal">({addr.phoneNumber})</span>
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                    {addr.addressLine}, {addr.city ? addr.city + ", " : ""}{addr.lga}, {addr.state}
+                    {addr.postalCode ? ` (${addr.postalCode})` : ""}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 mt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAddress(addr.id)}
+                    className="inline-flex items-center gap-1 text-xs text-rose-600 hover:text-rose-700 font-semibold transition-colors cursor-pointer p-1"
+                    title="Delete Destination"
+                  >
+                    <Trash2 size={13} /> Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── 3. Change Password ──────────────────────────────────────────────── */}
       <div className="bg-white rounded-[24px] border border-gray-100 shadow-sm p-6 md:p-8 space-y-5">
         <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
           <ShieldCheck size={16} className="text-[#1B4D28]" /> Change Password

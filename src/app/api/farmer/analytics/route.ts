@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
+import { calculateSettlement } from "@/lib/settlement";
 
 // GET /api/farmer/analytics — Fetch deep SQL analytics for farmer dashboard
 export async function GET(req: Request) {
@@ -58,12 +59,11 @@ export async function GET(req: Request) {
     );
 
     const totalGrossRevenue = completedItems.reduce((sum, item) => sum + Number(item.subtotal), 0);
-    const PLATFORM_FEE_PCT = 0.025; // 2.5%
-    const VAT_PCT = 0.075; // 7.5%
+    const { platformFee, taxAmount, netFarmerPayout } = calculateSettlement(totalGrossRevenue);
 
-    const totalPlatformFees = totalGrossRevenue * PLATFORM_FEE_PCT;
-    const totalVatFees = totalGrossRevenue * VAT_PCT;
-    const totalNetPayout = totalGrossRevenue - totalPlatformFees;
+    const totalPlatformFees = platformFee;
+    const totalVatFees = taxAmount;
+    const totalNetPayout = netFarmerPayout;
 
     const totalOrdersCount = new Set(orderItems.map((i) => i.orderId)).size;
     const completedOrdersCount = new Set(completedItems.map((i) => i.orderId)).size;

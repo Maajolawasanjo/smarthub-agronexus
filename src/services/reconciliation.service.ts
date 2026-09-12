@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { config } from "@/lib/config";
 import { WalletService } from "@/services/wallet.service";
+import { reconstructGrossFromPayout } from "@/lib/settlement";
 
 export interface ReconciliationReport {
   timestamp: string;
@@ -190,18 +191,15 @@ export class ReconciliationService {
       }
     }
 
-    // ── 6. Check 5: Revenue Audit (2.5% retained) ──
+    // ── 6. Check 5: Revenue Audit (Canonical Settlement Engine) ──
     const releaseTxns = await prisma.walletTransaction.findMany({
       where: { type: "ESCROW_RELEASE", status: "SUCCESS" },
     });
 
     const totalPlatformRevenue = releaseTxns.reduce((sum, tx) => {
       const farmerCredit = Number(tx.amount);
-      const feeRate = config.fees.platformFeeRate; // Single Source of Truth from config
-      // Back-calculate the original gross amount, then compute the platform fee from it
-      const grossAmount = farmerCredit / (1 - feeRate);
-      const fee = grossAmount * feeRate;
-      return sum + fee;
+      const { platformFee } = reconstructGrossFromPayout(farmerCredit);
+      return sum + platformFee;
     }, 0);
 
     const isHealthy = discrepancies.length === 0;

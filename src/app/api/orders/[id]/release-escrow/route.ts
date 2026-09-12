@@ -72,7 +72,7 @@ export async function POST(
         orderId: order.id,
         orderNumber: order.orderNumber,
         status: "COMPLETED",
-        message: "Delivery confirmed! Escrow funds released to farmer wallet (minus 2.5% platform commission).",
+        message: "Delivery confirmed! Escrow funds released to farmer wallet (minus 5.0% platform commission).",
       })
     );
     return attachTraceHeaders(res, traceCtx);

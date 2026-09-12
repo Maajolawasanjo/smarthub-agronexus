@@ -15,6 +15,9 @@ import {
     LogOut,
     X,
     Wallet,
+    ShieldAlert,
+    FileCheck,
+    History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -29,8 +32,11 @@ const menuItems = [
     { name: "Treasury & Finance", href: "/admin/finance", icon: Wallet },
     { name: "Product Listings", href: "/admin/products", icon: Box },
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
+    { name: "Disputes & Escrow", href: "/admin/disputes", icon: ShieldAlert },
+    { name: "KYC Verifications", href: "/admin/verifications", icon: FileCheck },
     { name: "Users", href: "/admin/users", icon: Users },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart2 },
+    { name: "Audit Trail", href: "/admin/audit-logs", icon: History },
     { name: "Content", href: "/admin/content", icon: FileText },
     { name: "Notification", href: "/admin/notifications", icon: Bell },
     { name: "Settings", href: "/admin/settings", icon: Settings },

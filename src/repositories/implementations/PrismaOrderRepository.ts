@@ -3,8 +3,10 @@ import { IOrderRepository } from "../interfaces/IOrderRepository";
 
 export class PrismaOrderRepository implements IOrderRepository {
   async findById(id: string) {
-    return prisma.order.findUnique({
-      where: { id },
+    return prisma.order.findFirst({
+      where: {
+        OR: [{ id }, { orderNumber: id }],
+      },
       include: {
         buyer: { include: { user: true } },
         orderItems: {

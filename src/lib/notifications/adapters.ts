@@ -39,7 +39,7 @@ export class ResendEmailAdapter {
   }
 
   async sendEmail(payload: EmailPayload): Promise<DispatchResult> {
-    if (!this.apiKey) {
+    if (!this.apiKey || (process.env.NODE_ENV === "test" && !process.env.RESEND_LIVE_TEST)) {
       if (process.env.NODE_ENV === "test") {
         console.log(`[EmailAdapter:Resend] Sending '${payload.template}' email to ${payload.to}`);
         return {
@@ -65,7 +65,7 @@ export class ResendEmailAdapter {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "SmartHub AgroChain <notifications@smarthub.ng>",
+          from: process.env.RESEND_FROM_EMAIL || "SmartHub AgroChain <notifications@smarthubagrochain.online>",
           to: [payload.to],
           subject: payload.subject,
           html: `<p>${payload.subject}</p><pre>${JSON.stringify(payload.data || {}, null, 2)}</pre>`,

@@ -7,6 +7,8 @@ import {
   OrderTimelineEventDTO,
 } from "@/dto";
 import { notifyOrderStateChange } from "@/lib/notifications";
+import { recordAuditEvent } from "@/lib/audit";
+import { WalletService } from "@/services/wallet.service";
 
 // ────────────────────────────────────────────────────────────
 // Valid Status Transitions
@@ -325,25 +327,70 @@ export async function PUT(
 
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { orderItems: true, payment: true, delivery: true },
+      include: {
+        buyer: true,
+        orderItems: {
+          include: {
+            product: {
+              include: { farmerProfile: true },
+            },
+          },
+        },
+        payment: true,
+        delivery: true,
+      },
     });
 
     if (!order) {
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
 
-    // Validate transition
+    const upperStatus = newStatus.toUpperCase();
+
+    // Actor Role Authorization Matrix
+    const isBuyer = order.buyer.userId === session.userId;
+    const isFarmer = order.orderItems.some(
+      (item) => item.product.farmerProfile.userId === session.userId
+    );
+    const isAdmin = session.role === "ADMIN";
+
+    if (!isBuyer && !isFarmer && !isAdmin) {
+      return NextResponse.json(
+        { error: "Access denied. You are not authorized to update this order." },
+        { status: 403 }
+      );
+    }
+
+    // Role-specific allowed transitions
+    if (session.role === "BUYER" && !isAdmin) {
+      // Buyer can only complete delivery (COMPLETED) or cancel before confirmation (CANCELLED)
+      if (upperStatus !== "COMPLETED" && upperStatus !== "CANCELLED") {
+        return NextResponse.json(
+          { error: `Buyers can only complete or cancel orders, not transition to ${upperStatus}.` },
+          { status: 403 }
+        );
+      }
+    } else if (session.role === "FARMER" && !isAdmin) {
+      // Farmer can confirm, begin processing, mark ready for pickup, or cancel
+      const farmerAllowed = ["CONFIRMED", "PROCESSING", "READY_FOR_PICKUP", "CANCELLED"];
+      if (!farmerAllowed.includes(upperStatus)) {
+        return NextResponse.json(
+          { error: `Farmers can only advance orders to CONFIRMED, PROCESSING, READY_FOR_PICKUP, or CANCELLED.` },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Validate transition against state machine
     const allowedTransitions = VALID_TRANSITIONS[order.status] || [];
-    if (!allowedTransitions.includes(newStatus.toUpperCase())) {
+    if (!allowedTransitions.includes(upperStatus)) {
       return NextResponse.json(
         {
-          error: `Invalid status transition: ${order.status} → ${newStatus}. Allowed: ${allowedTransitions.join(", ") || "none"}.`,
+          error: `Invalid status transition: ${order.status} → ${upperStatus}. Allowed: ${allowedTransitions.join(", ") || "none"}.`,
         },
         { status: 400 }
       );
     }
-
-    const upperStatus = newStatus.toUpperCase();
 
     const updatedOrder = await prisma.$transaction(async (tx) => {
       // Update order status
@@ -352,7 +399,7 @@ export async function PUT(
         data: { status: upperStatus as any },
       });
 
-      // Handle CANCELLED — release inventory
+      // Handle CANCELLED — release inventory & update payment
       if (upperStatus === "CANCELLED") {
         for (const item of order.orderItems) {
           await tx.inventory.update({
@@ -363,22 +410,18 @@ export async function PUT(
             },
           });
         }
-        // Refund payment
         if (order.payment) {
           await tx.payment.update({
             where: { id: order.payment.id },
-            data: { paymentStatus: "REFUNDED" },
+            data: {
+              paymentStatus: order.payment.paymentStatus === "PAID" ? "REFUNDED" : "FAILED",
+            },
           });
         }
       }
 
-      // Handle CONFIRMED — mark payment as PAID
-      if (upperStatus === "CONFIRMED" && order.payment) {
-        await tx.payment.update({
-          where: { id: order.payment.id },
-          data: { paymentStatus: "PAID", paidAt: new Date() },
-        });
-      }
+      // Note: CONFIRMED no longer marks payment as PAID.
+      // Payment status is verified and managed exclusively via Payment/Escrow services and webhooks.
 
       // Handle DELIVERED — set delivery timestamp
       if (upperStatus === "DELIVERED" && order.delivery) {
@@ -419,6 +462,15 @@ export async function PUT(
       return updated;
     });
 
+    // When status transitions to COMPLETED, release escrow funds to farmer(s)
+    if (upperStatus === "COMPLETED") {
+      try {
+        await WalletService.executeEscrowRelease(order.buyer.userId, order.id);
+      } catch (escrowErr) {
+        console.error(`[ESCROW_RELEASE_ERROR] Order #${order.orderNumber}:`, escrowErr);
+      }
+    }
+
     // Fire Multi-Channel Notifications for Buyer & Farmer
     const fullOrderInfo = await prisma.order.findUnique({
       where: { id: updatedOrder.id },
@@ -441,6 +493,22 @@ export async function PUT(
         upperStatus
       ).catch((err) => console.error("Notification trigger error:", err));
     }
+
+    await recordAuditEvent({
+      category: "ORDER",
+      severity: "INFO",
+      action: "ORDER_STATUS_UPDATED",
+      actorId: session.userId,
+      actorEmail: session.email,
+      resourceType: "ORDER",
+      resourceId: updatedOrder.id,
+      metadata: {
+        orderNumber: updatedOrder.orderNumber,
+        previousStatus: order.status,
+        newStatus: upperStatus,
+      },
+      req,
+    });
 
     return NextResponse.json(
       {

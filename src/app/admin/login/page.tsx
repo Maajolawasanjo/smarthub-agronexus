@@ -2,6 +2,9 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "@/context/UserContext";
 import {
   ShieldCheck,
@@ -11,8 +14,11 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
+  ArrowLeft,
+  AlertCircle,
+  KeyRound,
+  Fingerprint,
 } from "lucide-react";
-import Image from "next/image";
 
 export default function AdminLoginPage() {
   const { setUserFromAuth } = useUser();
@@ -29,8 +35,8 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!email || !password) {
-      setError("Please fill out all credential fields.");
+    if (!email.trim() || !password) {
+      setError("Please provide all required administrator credentials.");
       return;
     }
 
@@ -43,7 +49,7 @@ export default function AdminLoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
+          email: email.trim(),
           password,
         }),
       });
@@ -51,141 +57,214 @@ export default function AdminLoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || "Authentication failed.");
+        setError(data.error || "Authentication failed. Invalid credentials.");
         return;
       }
 
       if (data.user?.role?.toUpperCase() !== "ADMIN") {
-        setError("Unauthorized access. Admin privileges required.");
+        setError("Access Denied: Account lacks administrative privileges.");
         return;
       }
 
       setUserFromAuth(data.user);
-      setSuccessToast("Access authorized! Initializing Admin Dashboard...");
+      setSuccessToast(`Welcome back, ${data.user.fullName || "Administrator"}. Initializing session...`);
 
       setTimeout(() => {
         router.replace("/admin/overview");
-      }, 1000);
-    } catch (err) {
+      }, 900);
+    } catch (err: any) {
       console.error("Admin login error:", err);
-      setError("Unable to authenticate. Connection error.");
+      setError("Network or server connection failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#EEF2EE] px-4 py-12 font-sans">
-      <div className="w-full max-w-md relative">
-        {/* Success Toast */}
-        {successToast && (
-          <div className="fixed top-6 right-6 z-50 bg-[#1B4D28] text-white px-6 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-[#2C5E39] animate-slideIn">
-            <CheckCircle2 size={20} className="text-[#4CAF50] flex-shrink-0" />
-            <span className="text-sm font-semibold">{successToast}</span>
-          </div>
-        )}
+    <div className="min-h-screen w-full relative flex items-center justify-center bg-[#070D08] px-4 py-12 font-sans overflow-hidden">
+      {/* Dynamic Background Effects */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-gradient-to-b from-emerald-600/15 via-emerald-800/10 to-transparent blur-3xl rounded-full" />
+        <div className="absolute -bottom-40 right-10 w-[500px] h-[500px] bg-emerald-950/20 blur-3xl rounded-full" />
+        <div className="absolute top-1/3 left-10 w-[400px] h-[400px] bg-emerald-900/10 blur-3xl rounded-full" />
+        {/* Subtle grid pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)`,
+            backgroundSize: "32px 32px",
+          }}
+        />
+      </div>
 
-        {/* Emerald dark green styled login card */}
-        <div className="bg-[#1B4D28] p-8 rounded-3xl border border-white/5 shadow-2xl space-y-6">
-          {/* Logo & Branding */}
-          <div className="flex flex-col items-center text-center space-y-3">
-            <div className="relative h-14 w-14 bg-white rounded-2xl overflow-hidden p-1 flex-shrink-0 shadow-lg ring-4 ring-white/5">
+      {/* Success Notification Banner */}
+      <AnimatePresence>
+        {successToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 z-50 bg-[#122E1A] text-emerald-100 px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/30 backdrop-blur-xl"
+          >
+            <CheckCircle2 size={20} className="text-emerald-400 flex-shrink-0 animate-bounce" />
+            <span className="text-xs sm:text-sm font-semibold tracking-wide">{successToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main Container */}
+      <div className="w-full max-w-[460px] relative z-10">
+        {/* Top Back Navigation */}
+        <div className="mb-6 flex items-center justify-between">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-xs font-medium text-emerald-400/80 hover:text-emerald-300 transition-colors group"
+          >
+            <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+            <span>Return to Public Marketplace</span>
+          </Link>
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/70 border border-emerald-500/20 text-[10px] font-semibold text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Encrypted Gateway</span>
+          </div>
+        </div>
+
+        {/* Card Component */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="bg-[#0E1A11]/90 backdrop-blur-2xl rounded-3xl border border-emerald-500/20 shadow-[0_20px_70px_-15px_rgba(0,0,0,0.8)] overflow-hidden p-8 sm:p-9"
+        >
+          {/* Header & Logo */}
+          <div className="flex flex-col items-center text-center mb-8">
+            <div className="relative h-16 w-16 bg-gradient-to-br from-emerald-400/20 to-emerald-950/80 rounded-2xl p-1 shadow-xl ring-2 ring-emerald-500/30 flex items-center justify-center mb-4">
               <Image
                 src="/LOGO.jpg"
-                alt="Smarthub Agrochain Logo"
+                alt="SmartHub AgroChain"
                 fill
                 className="object-cover rounded-xl"
+                priority
               />
             </div>
-            <div className="space-y-1">
-              <h2 className="text-lg font-black text-white tracking-tight">
-                Smarthub Agrochain
-              </h2>
-              <span className="inline-flex px-2.5 py-0.5 rounded-full bg-[#1B4D28] text-white text-[9px] font-bold uppercase tracking-wider">
-                Internal Admin Portal
-              </span>
-            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+              <span>Admin Control Plane</span>
+            </h1>
+            <p className="text-xs text-emerald-200/60 mt-1.5 max-w-[320px]">
+              Governance, Treasury, &amp; Product Moderation Portal
+            </p>
           </div>
 
-          {/* Error Banner */}
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3.5 flex items-start gap-2.5 text-xs font-semibold text-red-400">
-              <ShieldCheck
-                size={18}
-                className="text-red-400 mt-0.5 flex-shrink-0"
-              />
-              <span>{error}</span>
-            </div>
-          )}
+          {/* Error Message */}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: "auto", marginBottom: 20 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-3 text-xs text-red-300">
+                  <AlertCircle size={18} className="text-red-400 flex-shrink-0 mt-0.5" />
+                  <span className="font-medium leading-relaxed">{error}</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Login Form */}
           <form onSubmit={handleLoginSubmit} className="space-y-4">
-            {/* Email field */}
+            {/* Email Field */}
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-emerald-200/90 uppercase tracking-wider">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-300/80">
                 Administrator Email
               </label>
               <div className="relative">
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@smarthub.com"
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder:text-white/35 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-[#4CAF50] focus:ring-1 focus:ring-[#4CAF50]"
+                  placeholder="admin@smarthubagro.com"
+                  className="w-full bg-[#08120A] border border-emerald-500/25 text-white placeholder:text-emerald-300/25 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all"
                 />
                 <Mail
-                  size={18}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/50"
+                  size={17}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400/50"
                 />
               </div>
             </div>
 
-            {/* Password field */}
+            {/* Password Field */}
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-emerald-200/90 uppercase tracking-wider">
-                Password Key
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-300/80">
+                  Master Password Key
+                </label>
+                <span className="text-[10px] text-emerald-400/50">256-bit Encrypted</span>
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder:text-white/35 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:border-[#4CAF50] focus:ring-1 focus:ring-[#4CAF50]"
+                  className="w-full bg-[#08120A] border border-emerald-500/25 text-white placeholder:text-emerald-300/25 rounded-xl pl-10 pr-11 py-3 text-sm focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all font-mono"
                 />
                 <Lock
-                  size={18}
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/50"
+                  size={17}
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400/50"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/50 hover:text-white cursor-pointer"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400/50 hover:text-emerald-300 transition-colors p-1"
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-white hover:bg-gray-50 text-[#1B4D28] py-3 px-4 rounded-xl text-xs font-bold shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 mt-6"
-            >
-              {loading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#1B4D28]"></div>
-              ) : (
-                <>
-                  Authorize Access
-                  <ArrowRight size={14} />
-                </>
-              )}
-            </button>
+            {/* Authorize Button */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-[#22C55E] to-[#15803D] hover:from-[#26D968] hover:to-[#169145] text-white py-3.5 px-4 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-emerald-950/80 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    <span>Verifying Authority...</span>
+                  </div>
+                ) : (
+                  <>
+                    <KeyRound size={15} />
+                    <span>Authorize Access</span>
+                    <ArrowRight size={14} className="ml-1" />
+                  </>
+                )}
+              </button>
+            </div>
           </form>
-        </div>
+
+          {/* Security Disclaimer */}
+          <div className="mt-8 pt-6 border-t border-emerald-500/10 flex items-start gap-3 text-emerald-400/60">
+            <Fingerprint size={20} className="flex-shrink-0 text-emerald-500/60 mt-0.5" />
+            <p className="text-[10px] leading-relaxed">
+              <strong className="text-emerald-400/80">Authorized Personnel Only:</strong> All login attempts, administrative decisions, and financial operations are cryptographically signed and logged in the immutable audit ledger.
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Footer Note */}
+        <p className="text-center text-[11px] text-emerald-400/40 mt-6 font-medium">
+          SmartHub AgroChain &bull; Enterprise Governance Platform
+        </p>
       </div>
     </div>
   );

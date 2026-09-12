@@ -1,32 +1,21 @@
-import { describe, test, expect } from "vitest";
+/**
+ * Sprint 2: Commerce Operations
+ *
+ * REMEDIATION NOTE (P0-4): Previously 5 tautological assertions on inline closures.
+ * Replaced with real settlement engine tests.
+ */
+import { describe, it, expect } from "vitest";
+import { calculateSettlement } from "@/lib/settlement";
 
-describe("Sprint 2 Acceptance Test — Commerce & Orders", () => {
-  test("1. Business Rule: Order item quantity must be greater than zero", () => {
-    const items = [{ productId: "prod_1", quantity: 0 }];
-    const isValid = items.every((i) => i.quantity > 0);
-    expect(isValid).toBe(false);
+describe("Sprint 2: Commerce Settlement Accuracy", () => {
+  it("₦50,000 order: net payout is ₦47,312.50", () => {
+    const { netFarmerPayout } = calculateSettlement(50000);
+    expect(netFarmerPayout).toBeCloseTo(47312.5, 1);
   });
 
-  test("2. Business Rule: Order Status Filter Mapping", () => {
-    const statusMap = {
-      PENDING: "Pending",
-      CONFIRMED: "Pending",
-      IN_TRANSIT: "Pending",
-      DELIVERED: "Delivered",
-      COMPLETED: "Delivered",
-      CANCELLED: "Canceled",
-    };
-
-    expect(statusMap["DELIVERED"]).toBe("Delivered");
-    expect(statusMap["CANCELLED"]).toBe("Canceled");
-    expect(statusMap["PENDING"]).toBe("Pending");
-  });
-
-  test("3. Business Rule: Escrow release condition", () => {
-    const isBuyerConfirmed = true;
-    const isQualityInspected = true;
-    const canReleaseEscrow = isBuyerConfirmed && isQualityInspected;
-
-    expect(canReleaseEscrow).toBe(true);
+  it("₦250,000 order: platform fee is ₦12,500 and VAT is ₦937.50", () => {
+    const { platformFee, taxAmount } = calculateSettlement(250000);
+    expect(platformFee).toBeCloseTo(12500, 1);
+    expect(taxAmount).toBeCloseTo(937.5, 1);
   });
 });

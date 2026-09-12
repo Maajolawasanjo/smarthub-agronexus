@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
     X, CreditCard, Wallet, ShieldCheck,
-    Eye, EyeOff, Check, AlertCircle, Zap, ArrowRight, RefreshCw, Lock
+    Eye, EyeOff, Check, AlertCircle, Zap, ArrowRight, RefreshCw, Lock, MapPin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/context/CartContext";
@@ -327,7 +327,21 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
     const [isFetchingWallet, setIsFetchingWallet] = useState<boolean>(false);
 
-    // Fetch user's live wallet balance whenever modal opens
+    // Live Saved Addresses State from PostgreSQL
+    const [addresses, setAddresses] = useState<any[]>([]);
+    const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+
+    // Dynamic Shipping Calculation State (BUY-07)
+    const [shippingQuote, setShippingQuote] = useState<{
+        destinationState: string;
+        baseRate: number;
+        weightSurcharge: number;
+        totalShippingFee: number;
+        estimatedDeliveryTime: string;
+    } | null>(null);
+    const [isCalculatingShipping, setIsCalculatingShipping] = useState<boolean>(false);
+
+    // Fetch user's live wallet balance and saved addresses whenever modal opens
     useEffect(() => {
         if (isOpen) {
             setIsFetchingWallet(true);
@@ -342,8 +356,50 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                 })
                 .catch(() => setWalletBalance(0))
                 .finally(() => setIsFetchingWallet(false));
+
+            fetch("/api/user/addresses")
+                .then(res => res.json())
+                .then(data => {
+                    const addrList = data?.data?.addresses || data?.addresses || [];
+                    setAddresses(addrList);
+                    const defaultAddr = addrList.find((a: any) => a.isDefault) || addrList[0];
+                    if (defaultAddr) {
+                        setSelectedAddressId(defaultAddr.id);
+                    }
+                })
+                .catch((err) => console.error("Could not fetch delivery addresses:", err));
         }
     }, [isOpen]);
+
+    // Recalculate shipping whenever selected address changes
+    useEffect(() => {
+        if (!selectedAddressId || addresses.length === 0) {
+            setShippingQuote(null);
+            return;
+        }
+
+        const selectedAddr = addresses.find((a: any) => a.id === selectedAddressId);
+        if (selectedAddr?.state) {
+            setIsCalculatingShipping(true);
+            fetch("/api/shipping/calculate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    destinationState: selectedAddr.state,
+                    weightKg: 5,
+                    deliverySpeed: "STANDARD",
+                }),
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data?.success && data?.data) {
+                        setShippingQuote(data.data);
+                    }
+                })
+                .catch((err) => console.error("Failed to compute shipping quote:", err))
+                .finally(() => setIsCalculatingShipping(false));
+        }
+    }, [selectedAddressId, addresses]);
 
     // Unconditional Early Return ONLY AFTER all Hooks are defined
     if (!isOpen) return null;
@@ -376,6 +432,11 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                 return;
             }
 
+            const selectedAddress = addresses.find((a: any) => a.id === selectedAddressId);
+            const formattedShippingAddress = selectedAddress
+                ? `${selectedAddress.label ? `[${selectedAddress.label}] ` : ""}${selectedAddress.addressLine}, ${selectedAddress.city ? selectedAddress.city + ", " : ""}${selectedAddress.lga}, ${selectedAddress.state} (Recipient: ${selectedAddress.recipientName}, ${selectedAddress.phoneNumber})`
+                : "Lagos Port Terminal, Nigeria";
+
             // Handle Hosted Payment Gateway (Make Payment)
             if (method === "flutterwave" || method === "card") {
                 const flwRes = await fetch("/api/payments/flutterwave/initialize", {
@@ -384,6 +445,8 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                     body: JSON.stringify({
                         items: orderItems,
                         totalAmount: total,
+                        shippingAddress: formattedShippingAddress,
+                        shippingAddressId: selectedAddressId || undefined,
                     }),
                 });
 
@@ -403,7 +466,8 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     items: orderItems,
-                    shippingAddress: "Lagos Port Terminal, Nigeria",
+                    shippingAddress: formattedShippingAddress,
+                    shippingAddressId: selectedAddressId || undefined,
                     incoterm: "FOB",
                     paymentMethod: "WALLET",
                 }),
@@ -484,6 +548,59 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
 
                         {/* Scrollable Content */}
                         <div className="px-6 pb-8 overflow-y-auto pt-4">
+
+                            {/* Delivery Destination Selector */}
+                            <div className="mb-5 p-3.5 bg-gray-50 border border-gray-200 rounded-2xl">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
+                                        <MapPin size={14} className="text-[#1B4D28]" />
+                                        <span>Delivery Destination</span>
+                                    </div>
+                                    <span className="text-[11px] text-gray-400 font-medium">
+                                        {addresses.length} saved {addresses.length === 1 ? "address" : "addresses"}
+                                    </span>
+                                </div>
+                                {addresses.length > 0 ? (
+                                    <div className="space-y-2">
+                                        <select
+                                            value={selectedAddressId}
+                                            onChange={(e) => setSelectedAddressId(e.target.value)}
+                                            className="w-full text-xs font-semibold bg-white border border-gray-200 rounded-xl px-3 py-2 text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#1B4D28] cursor-pointer"
+                                        >
+                                            {addresses.map((addr) => (
+                                                <option key={addr.id} value={addr.id}>
+                                                    {addr.label ? `${addr.label} — ` : ""}{addr.addressLine}, {addr.city ? `${addr.city}, ` : ""}{addr.state} ({addr.recipientName})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {selectedAddressId && (() => {
+                                            const currentAddr = addresses.find(a => a.id === selectedAddressId);
+                                            return currentAddr ? (
+                                                <div className="bg-white/80 p-2.5 rounded-xl border border-gray-200/80 space-y-1 text-[11px]">
+                                                    <p className="text-gray-700 font-semibold truncate">
+                                                        Recipient: <span className="font-normal text-gray-600">{currentAddr.recipientName} ({currentAddr.phoneNumber})</span>
+                                                    </p>
+                                                    <p className="text-gray-500 truncate">
+                                                        {currentAddr.addressLine}, {currentAddr.city ? `${currentAddr.city}, ` : ""}{currentAddr.lga}, {currentAddr.state}
+                                                    </p>
+                                                    {isCalculatingShipping ? (
+                                                        <div className="pt-1 text-[11px] text-gray-400 italic">Calculating state logistics quote…</div>
+                                                    ) : shippingQuote ? (
+                                                        <div className="pt-1 mt-1 border-t border-gray-100 flex items-center justify-between text-xs font-semibold text-[#1B4D28]">
+                                                            <span>Logistics Rate: ₦{shippingQuote.totalShippingFee.toLocaleString("en-NG")}</span>
+                                                            <span className="text-gray-400 font-normal">ETA: {shippingQuote.estimatedDeliveryTime}</span>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            ) : null;
+                                        })()}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-500 italic">
+                                        Default destination: Lagos Port Terminal, Nigeria
+                                    </p>
+                                )}
+                            </div>
 
                             {/* Method Selector */}
                             <div className="grid grid-cols-2 gap-3 mb-6">

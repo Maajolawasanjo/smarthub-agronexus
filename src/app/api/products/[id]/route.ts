@@ -102,6 +102,9 @@ export async function GET(
       price: Number(product.price),
       unit: product.unit,
       isAvailable: product.isAvailable,
+      status: product.status,
+      rejectionReason: product.rejectionReason,
+      moderationNotes: product.moderationNotes,
       harvestDate: product.harvestDate ? product.harvestDate.toISOString() : undefined,
       createdAt: product.createdAt.toISOString(),
       category: {
@@ -173,13 +176,27 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { price, isAvailable, availableQty, name, description } = body;
+    const { price, isAvailable, availableQty, name, description, resubmitForApproval } = body;
 
     const productData: any = {};
     if (price !== undefined) productData.price = Number(price);
-    if (isAvailable !== undefined) productData.isAvailable = Boolean(isAvailable);
+    if (isAvailable !== undefined) {
+      if (Boolean(isAvailable) && product.status !== "APPROVED" && session.role !== "ADMIN") {
+        return NextResponse.json(
+          { error: "Cannot activate product: produce must be APPROVED by admin moderation before it can be made available for sale." },
+          { status: 400 }
+        );
+      }
+      productData.isAvailable = Boolean(isAvailable);
+    }
     if (name !== undefined) productData.name = String(name);
     if (description !== undefined) productData.description = String(description);
+
+    if (resubmitForApproval) {
+      productData.status = "PENDING_APPROVAL";
+      productData.rejectionReason = null;
+      productData.isAvailable = false;
+    }
 
     const updatedProduct = await prisma.product.update({
       where: { id },

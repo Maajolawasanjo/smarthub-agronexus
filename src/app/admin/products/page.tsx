@@ -101,34 +101,72 @@ export default function AdminProductsPage() {
         triggerToast(`Listing #${id} has been rejected.`);
     };
 
-    // Handle export B2B list
+    // Handle export B2B list to CSV
     const handleExport = () => {
+        if (!listings || listings.length === 0) {
+            triggerToast("No listings available to export.");
+            return;
+        }
+        const headers = ["ID", "Product", "Farmer", "Farmer Email", "Status", "Price", "Moisture", "Origin", "Organic", "Certificate"];
+        const rows = listings.map(l => [
+            `"${l.id}"`,
+            `"${(l.product || '').replace(/"/g, '""')}"`,
+            `"${(l.farmer || '').replace(/"/g, '""')}"`,
+            `"${(l.farmerEmail || '').replace(/"/g, '""')}"`,
+            `"${l.status || ''}"`,
+            `"${(l.price || '').replace(/"/g, '""')}"`,
+            `"${l.moisture || ''}"`,
+            `"${(l.origin || '').replace(/"/g, '""')}"`,
+            `"${l.organic || ''}"`,
+            `"${l.certificate || ''}"`
+        ]);
+        const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `marketplace_products_${new Date().toISOString().split("T")[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
         triggerToast("Product listings exported to CSV successfully!");
     };
 
-    // Handle adding new listing
-    const handleAddCrop = (e: React.FormEvent) => {
+    // Handle adding new listing via live API
+    const handleAddCrop = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!cropName || !farmerName || !cropPrice) return;
 
-        const newListing = {
-            id: Math.floor(10000 + Math.random() * 90000).toString(),
-            product: cropName,
-            farmer: farmerName,
-            status: "Pending",
-            price: cropPrice.startsWith("$") ? cropPrice : `$${cropPrice}`,
-            moisture: cropMoisture,
-            origin: cropOrigin,
-            organic: "Yes",
-            certificate: "Pending Review"
-        };
-
-        setListings([newListing, ...listings]);
-        setShowAddModal(false);
-        setCropName("");
-        setFarmerName("");
-        setCropPrice("");
-        triggerToast(`New listing for ${cropName} submitted successfully!`);
+        const cleanPrice = parseFloat(cropPrice.replace(/[^0-9.]/g, "")) || 0;
+        try {
+            const res = await fetch("/api/farmer/produce", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: cropName,
+                    farmerName: farmerName,
+                    price: cleanPrice,
+                    unit: "KG",
+                    stockQuantity: 100,
+                    description: `Verified ${cropName} from ${cropOrigin}`,
+                }),
+            });
+            if (res.ok) {
+                setShowAddModal(false);
+                setCropName("");
+                setFarmerName("");
+                setCropPrice("");
+                triggerToast(`New listing for ${cropName} submitted successfully!`);
+                fetchSubmissions();
+            } else {
+                const data = await res.json().catch(() => ({}));
+                triggerToast(data.error || "Failed to submit produce listing.");
+            }
+        } catch (err) {
+            console.error("Add crop error:", err);
+            triggerToast("Error communicating with server.");
+        }
     };
 
     // Tabs filter mappings
@@ -329,12 +367,12 @@ export default function AdminProductsPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                                        Price (per Ton)
+                                        Price (in ₦)
                                     </label>
                                     <input
                                         type="text"
                                         required
-                                        placeholder="e.g. $450.00"
+                                        placeholder="e.g. ₦450,000"
                                         value={cropPrice}
                                         onChange={(e) => setCropPrice(e.target.value)}
                                         className="w-full bg-gray-50 border border-gray-200 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#1B4D28] text-gray-700 font-semibold"

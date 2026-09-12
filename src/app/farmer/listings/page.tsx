@@ -30,6 +30,9 @@ interface ProduceItem {
   price: number;
   unit: string;
   isAvailable: boolean;
+  status?: "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "SUSPENDED" | "ARCHIVED";
+  rejectionReason?: string | null;
+  moderationNotes?: string | null;
   createdAt: string;
   description: string;
   category?: {
@@ -80,9 +83,13 @@ export default function FarmerListingsPage() {
   }, [fetchProduce]);
 
   // Toggle produce availability live
-  const handleToggleAvailability = async (id: string, currentStatus: boolean) => {
+  const handleToggleAvailability = async (id: string, currentStatus: boolean, moderationStatus?: string) => {
+    if (!currentStatus && moderationStatus !== "APPROVED") {
+      toast("Cannot activate: produce must be APPROVED by admin moderation first.", "error");
+      return;
+    }
     try {
-      const res = await fetch(`/api/products/${id}`, {
+      const res = await fetch(`/api/farmer/produce/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isAvailable: !currentStatus }),
@@ -176,9 +183,10 @@ export default function FarmerListingsPage() {
 
     const matchesStatus =
       filterStatus === "ALL" ||
-      (filterStatus === "APPROVED" && item.isAvailable) ||
-      (filterStatus === "PENDING" && !item.isAvailable) ||
-      (filterStatus === "PAUSED" && !item.isAvailable) ||
+      (filterStatus === "APPROVED" && item.status === "APPROVED" && item.isAvailable) ||
+      (filterStatus === "PENDING" && item.status === "PENDING_APPROVAL") ||
+      (filterStatus === "REJECTED" && item.status === "REJECTED") ||
+      (filterStatus === "PAUSED" && item.status === "APPROVED" && !item.isAvailable) ||
       (filterStatus === "LOW_STOCK" && (item.inventory?.availableQty ?? 0) <= 20);
 
     return matchesSearch && matchesCategory && matchesStatus;
@@ -293,9 +301,10 @@ export default function FarmerListingsPage() {
             >
               <option value="ALL">All Statuses</option>
               <option value="APPROVED">✅ Approved & Live</option>
-              <option value="PENDING">⏳ Pending Admin Inspection</option>
-              <option value="PAUSED">Paused Only</option>
-              <option value="LOW_STOCK">Low Stock Only</option>
+              <option value="PENDING">⏳ Under Quality Review</option>
+              <option value="REJECTED">❌ Inspection Rejected</option>
+              <option value="PAUSED">⏸️ Approved (Paused)</option>
+              <option value="LOW_STOCK">⚠️ Low Stock Only</option>
             </select>
           </div>
         </div>
@@ -426,23 +435,55 @@ export default function FarmerListingsPage() {
                       {/* Status & Approval Column */}
                       <td className="py-4 px-4">
                         <div className="flex flex-col gap-1.5">
-                          {item.isAvailable ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-[11px] font-extrabold w-fit shadow-xs">
-                              <ShieldCheck size={14} className="text-green-600" />
-                              Approved & Live
+                          {item.status === "APPROVED" ? (
+                            item.isAvailable ? (
+                              <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-[11px] font-extrabold w-fit shadow-xs">
+                                <ShieldCheck size={14} className="text-green-600" />
+                                Approved & Live
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 border border-gray-200 rounded-full text-[11px] font-extrabold w-fit shadow-xs">
+                                <CheckCircle2 size={14} className="text-gray-500" />
+                                Approved (Paused)
+                              </span>
+                            )
+                          ) : item.status === "REJECTED" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-red-50 text-red-700 border border-red-200 rounded-full text-[11px] font-extrabold w-fit shadow-xs"
+                              title={item.rejectionReason || "Listing rejected during quality inspection"}
+                            >
+                              <AlertCircle size={14} className="text-red-600" />
+                              Inspection Rejected
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[11px] font-extrabold w-fit shadow-xs" title="Pending Admin Quality Review">
+                            <span
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[11px] font-extrabold w-fit shadow-xs"
+                              title="Awaiting Admin Quality Moderation"
+                            >
                               <AlertCircle size={14} className="text-amber-600 animate-pulse" />
-                              Pending Admin Review
+                              Under Quality Review
                             </span>
                           )}
-                          <button
-                            onClick={() => handleToggleAvailability(item.id, item.isAvailable)}
-                            className="text-[10px] font-bold text-gray-500 hover:text-gray-800 underline transition-colors w-fit"
-                          >
-                            {item.isAvailable ? "Pause Listing" : "Request Re-Verification"}
-                          </button>
+
+                          {item.status === "APPROVED" ? (
+                            <button
+                              onClick={() => handleToggleAvailability(item.id, item.isAvailable, item.status)}
+                              className="text-[10px] font-bold text-gray-500 hover:text-gray-800 underline transition-colors w-fit cursor-pointer"
+                            >
+                              {item.isAvailable ? "Pause Listing" : "Make Live"}
+                            </button>
+                          ) : item.status === "REJECTED" ? (
+                            <Link
+                              href={`/farmer/produce/${item.id}`}
+                              className="text-[10px] font-bold text-red-600 hover:underline transition-colors w-fit"
+                            >
+                              View Rejection Reason
+                            </Link>
+                          ) : (
+                            <span className="text-[10px] font-semibold text-gray-400">
+                              Awaiting Moderator
+                            </span>
+                          )}
                         </div>
                       </td>
 

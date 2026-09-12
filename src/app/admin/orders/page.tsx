@@ -74,6 +74,32 @@ export default function AdminOrdersPage() {
     };
 
     const handleExport = () => {
+        if (!orders || orders.length === 0) {
+            triggerToast("No orders available to export.");
+            return;
+        }
+        const headers = ["Order Number", "Date", "Buyer", "Items", "Product", "Total Amount (NGN)", "Status", "Payment Status", "Delivery Status"];
+        const rows = orders.map(o => [
+            `"${o.orderNumber || o.id}"`,
+            `"${o.createdAt || ''}"`,
+            `"${(o.buyerName || '').replace(/"/g, '""')}"`,
+            `"${o.itemCount || 1}"`,
+            `"${(o.primaryProductName || '').replace(/"/g, '""')}"`,
+            `"${o.totalAmount || 0}"`,
+            `"${o.status || ''}"`,
+            `"${o.paymentStatus || ''}"`,
+            `"${o.deliveryStatus || ''}"`
+        ]);
+        const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `b2b_orders_${new Date().toISOString().split("T")[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
         triggerToast("B2B orders log successfully exported to CSV!");
     };
 
