@@ -191,7 +191,7 @@ export default function AdminUsersPage() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="border-b border-gray-100 bg-gray-50/50">
-                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Order ID</th>
+                                <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">User ID</th>
                                 <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Email</th>
                                 <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="py-4 px-6 text-xs font-bold text-gray-500 uppercase tracking-wider">Role</th>
