@@ -107,7 +107,7 @@ export default function CartPage() {
                     <p className="text-gray-500 mb-8 max-w-md text-center text-sm">
                         You haven't added any agricultural commodities to your cart yet. Explore certified produce from verified Nigerian farmers.
                     </p>
-                    <Link href="/products">
+                    <Link href="/dashboard/products">
                         <motion.div
                             whileHover={{ scale: 1.05, y: -2 }}
                             whileTap={{ scale: 0.96 }}
@@ -129,7 +129,7 @@ export default function CartPage() {
                             animate={{ opacity: 1, x: 0 }}
                             className="flex items-center gap-2 mb-8 text-sm"
                         >
-                            <Link href="/products" className="text-gray-500 hover:text-gray-900 flex items-center gap-1.5 transition-colors">
+                            <Link href="/dashboard/products" className="text-gray-500 hover:text-gray-900 flex items-center gap-1.5 transition-colors">
                                 <ArrowLeft size={16} />
                                 Back to Catalog
                             </Link>
@@ -186,22 +186,27 @@ export default function CartPage() {
                                                             className="flex flex-col sm:flex-row gap-4 sm:gap-6 py-5 relative group"
                                                         >
                                                             {/* Product Image */}
-                                                            <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 bg-gray-50 rounded-2xl overflow-hidden relative border border-gray-100">
+                                                            <Link
+                                                                href={`/dashboard/products/${item.id}`}
+                                                                className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 bg-gray-50 rounded-2xl overflow-hidden relative border border-gray-100 block cursor-pointer"
+                                                            >
                                                                 <Image
                                                                     src={item.image || "/vegetable-container-white.png"}
                                                                     alt={item.name}
                                                                     fill
                                                                     className="object-cover group-hover:scale-105 transition-transform duration-300"
                                                                 />
-                                                            </div>
+                                                            </Link>
 
                                                             {/* Product Details */}
                                                             <div className="flex-1 flex flex-col justify-between">
                                                                 <div className="flex justify-between items-start gap-4">
                                                                     <div>
-                                                                        <h4 className="font-bold text-gray-900 text-sm sm:text-base group-hover:text-[#1B4D28] transition-colors">
-                                                                            {item.name}
-                                                                        </h4>
+                                                                        <Link href={`/dashboard/products/${item.id}`}>
+                                                                            <h4 className="font-bold text-gray-900 text-sm sm:text-base group-hover:text-[#1B4D28] transition-colors cursor-pointer">
+                                                                                {item.name}
+                                                                            </h4>
+                                                                        </Link>
                                                                         <div className="flex flex-wrap items-center gap-1.5 mt-1 mb-2">
                                                                             <span className="inline-block px-2 py-0.5 bg-green-50 text-[#1B4D28] text-[10px] font-bold rounded-full">
                                                                                 In Stock ({item.stock || "Available"})
