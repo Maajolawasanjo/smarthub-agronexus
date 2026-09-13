@@ -36,6 +36,12 @@ export async function GET(req: Request) {
                   email: true,
                   phoneNumber: true,
                   isActive: true,
+                  createdAt: true,
+                },
+              },
+              _count: {
+                select: {
+                  products: true,
                 },
               },
             },

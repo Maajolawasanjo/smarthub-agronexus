@@ -181,6 +181,10 @@ export async function POST(req: Request) {
       ? images.filter((img): img is string => typeof img === "string" && img.length > 0)
       : imageUrl ? [imageUrl] : [];
 
+    const isAutoApproved = farmerProfile.verificationStatus === "APPROVED" || session.role === "ADMIN";
+    const productStatus = isAutoApproved ? "APPROVED" : "PENDING_APPROVAL";
+    const productAvailability = isAutoApproved;
+
     const newProduct = await prisma.product.create({
       data: {
         farmerProfileId: farmerProfile.id,
@@ -189,8 +193,10 @@ export async function POST(req: Request) {
         description: description?.trim() || `${name} produced for wholesale export.`,
         price: parseFloat(price.toString()),
         unit: validUnit,
-        status: "PENDING_APPROVAL",
-        isAvailable: false,
+        status: productStatus,
+        isAvailable: productAvailability,
+        moderatedAt: isAutoApproved ? new Date() : undefined,
+        moderationNotes: isAutoApproved ? "Auto-published for verified producer" : undefined,
         images: imageList.length > 0
           ? {
               create: imageList.map((imgUrl: string) => ({ imageUrl: imgUrl })),
@@ -212,8 +218,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        message: "Produce submitted successfully for quality inspection.",
+        message: isAutoApproved
+          ? "Produce published live to the showroom successfully!"
+          : "Produce submitted successfully for quality inspection.",
         product: newProduct,
+        isLive: isAutoApproved,
       },
       { status: 201 }
     );

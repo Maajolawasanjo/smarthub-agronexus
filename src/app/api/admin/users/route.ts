@@ -19,6 +19,30 @@ export async function GET() {
         role: true,
         isActive: true,
         createdAt: true,
+        farmerProfile: {
+          select: {
+            id: true,
+            farmName: true,
+            farmDescription: true,
+            farmAddress: true,
+            state: true,
+            lga: true,
+            verificationStatus: true,
+            _count: {
+              select: {
+                products: true,
+              },
+            },
+          },
+        },
+        buyerProfile: {
+          select: {
+            id: true,
+            address: true,
+            state: true,
+            lga: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });

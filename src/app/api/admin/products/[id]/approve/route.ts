@@ -27,7 +27,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const { isApproved = true, rejectionReason } = body;
+    const { action, isApproved, rejectionReason, reason } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -48,15 +48,43 @@ export async function PUT(
       );
     }
 
-    const isApprovedBool = Boolean(isApproved);
+    // Determine target status and availability based on action or legacy isApproved
+    let targetStatus: "APPROVED" | "REJECTED" | "SUSPENDED" = "APPROVED";
+    let targetAvailable = true;
+    let auditAction = "PRODUCT_APPROVED";
+    let statusMessage = "Produce approved and published to showroom.";
+    let notificationTitle = `Produce Approved: ${existingProduct.name}`;
+    let notificationMsg = `Your commodity listing "${existingProduct.name}" has been approved and is now live on the public marketplace.`;
+
+    if (action === "SUSPEND") {
+      targetStatus = "SUSPENDED";
+      targetAvailable = false;
+      auditAction = "PRODUCT_SUSPENDED";
+      statusMessage = "Produce listing suspended and withdrawn from showroom.";
+      notificationTitle = `Produce Listing Suspended: ${existingProduct.name}`;
+      notificationMsg = `Your commodity listing "${existingProduct.name}" has been suspended by administration. Reason: ${reason || rejectionReason || "Listing under administrative review."}`;
+    } else if (action === "REINSTATE") {
+      targetStatus = "APPROVED";
+      targetAvailable = true;
+      auditAction = "PRODUCT_REINSTATED";
+      statusMessage = "Produce listing reinstated and restored to showroom.";
+      notificationTitle = `Produce Listing Reinstated: ${existingProduct.name}`;
+      notificationMsg = `Your commodity listing "${existingProduct.name}" has been reinstated and is active on the public marketplace.`;
+    } else if (action === "REJECT" || (action === undefined && isApproved === false)) {
+      targetStatus = "REJECTED";
+      targetAvailable = false;
+      auditAction = "PRODUCT_REJECTED";
+      statusMessage = "Produce listing rejected.";
+      notificationTitle = `Produce Rejected: ${existingProduct.name}`;
+      notificationMsg = `Your commodity listing "${existingProduct.name}" was rejected. Reason: ${rejectionReason || reason || "Produce listing did not meet marketplace quality standards."}`;
+    }
+
     const updatedProduct = await prisma.product.update({
       where: { id },
       data: {
-        status: isApprovedBool ? "APPROVED" : "REJECTED",
-        isAvailable: isApprovedBool,
-        rejectionReason: isApprovedBool
-          ? null
-          : rejectionReason || "Produce listing did not meet marketplace quality standards.",
+        status: targetStatus,
+        isAvailable: targetAvailable,
+        rejectionReason: targetStatus === "APPROVED" ? null : (rejectionReason || reason || (targetStatus === "SUSPENDED" ? "Listing suspended by admin." : "Produce listing did not meet marketplace quality standards.")),
         moderatedAt: new Date(),
         moderatedById: session.userId,
       },
@@ -72,8 +100,8 @@ export async function PUT(
     // Record audit event for compliance
     await recordAuditEvent({
       category: "SYSTEM",
-      severity: "INFO",
-      action: isApproved ? "PRODUCT_APPROVED" : "PRODUCT_REJECTED",
+      severity: targetStatus === "SUSPENDED" ? "WARNING" : "INFO",
+      action: auditAction,
       actorId: session.userId,
       actorEmail: session.email,
       resourceType: "PRODUCT",
@@ -81,7 +109,8 @@ export async function PUT(
       metadata: {
         productName: existingProduct.name,
         farmerProfileId: existingProduct.farmerProfileId,
-        rejectionReason: rejectionReason || null,
+        targetStatus,
+        rejectionReason: rejectionReason || reason || null,
       },
       req,
     });
@@ -90,29 +119,140 @@ export async function PUT(
     if (existingProduct.farmerProfile?.userId) {
       await createNotification({
         userId: existingProduct.farmerProfile.userId,
-        title: isApprovedBool
-          ? `Produce Approved: ${existingProduct.name}`
-          : `Produce Rejected: ${existingProduct.name}`,
-        message: isApprovedBool
-          ? `Your commodity listing "${existingProduct.name}" has been approved and is now live on the public marketplace.`
-          : `Your commodity listing "${existingProduct.name}" was rejected. Reason: ${rejectionReason || "Produce listing did not meet marketplace quality standards."}`,
+        title: notificationTitle,
+        message: notificationMsg,
         type: "SYSTEM",
       });
     }
 
     return NextResponse.json(
       createSuccessResponse({
-        message: isApproved
-          ? "Produce approved and published to showroom."
-          : "Produce listing rejected.",
+        message: statusMessage,
         product: updatedProduct,
       }),
       { status: 200 }
     );
   } catch (error: any) {
-    console.error("Error approving product API:", error);
+    console.error("Error approving/moderating product API:", error);
     return NextResponse.json(
       createErrorResponse("INTERNAL_SERVER_ERROR", "Internal server error moderating produce."),
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSession();
+    if (!session?.userId || session.role !== "ADMIN") {
+      return NextResponse.json(
+        createErrorResponse("FORBIDDEN", "Administrative privileges required to delete produce listings."),
+        { status: 403 }
+      );
+    }
+
+    const { id } = await params;
+    if (!id) {
+      return NextResponse.json(
+        createErrorResponse("BAD_REQUEST", "Product ID is required."),
+        { status: 400 }
+      );
+    }
+
+    const existingProduct = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        orderItems: { select: { id: true } },
+        farmerProfile: true,
+      },
+    });
+
+    if (!existingProduct) {
+      return NextResponse.json(
+        createErrorResponse("NOT_FOUND", "Produce listing not found."),
+        { status: 404 }
+      );
+    }
+
+    // Safe deletion check: If orderItems exist, archive instead of hard delete to preserve financial ledger
+    const hasOrders = existingProduct.orderItems.length > 0;
+
+    if (hasOrders) {
+      const archivedProduct = await prisma.product.update({
+        where: { id },
+        data: {
+          status: "ARCHIVED",
+          isAvailable: false,
+          moderatedAt: new Date(),
+          moderatedById: session.userId,
+        },
+      });
+
+      await recordAuditEvent({
+        category: "SYSTEM",
+        severity: "WARNING",
+        action: "PRODUCT_ARCHIVED",
+        actorId: session.userId,
+        actorEmail: session.email,
+        resourceType: "PRODUCT",
+        resourceId: id,
+        metadata: {
+          productName: existingProduct.name,
+          farmerProfileId: existingProduct.farmerProfileId,
+          orderCount: existingProduct.orderItems.length,
+          note: "Soft-deleted to ARCHIVED status due to existing order history.",
+        },
+        req,
+      });
+
+      return NextResponse.json(
+        createSuccessResponse({
+          message: "Produce listing archived successfully (retained in ledger for order history).",
+          product: archivedProduct,
+          archived: true,
+        }),
+        { status: 200 }
+      );
+    }
+
+    // Hard delete when zero orders exist
+    await prisma.$transaction([
+      prisma.productImage.deleteMany({ where: { productId: id } }),
+      prisma.inventory.deleteMany({ where: { productId: id } }),
+      prisma.review.deleteMany({ where: { productId: id } }),
+      prisma.product.delete({ where: { id } }),
+    ]);
+
+    await recordAuditEvent({
+      category: "SYSTEM",
+      severity: "INFO",
+      action: "PRODUCT_DELETED",
+      actorId: session.userId,
+      actorEmail: session.email,
+      resourceType: "PRODUCT",
+      resourceId: id,
+      metadata: {
+        productName: existingProduct.name,
+        farmerProfileId: existingProduct.farmerProfileId,
+        note: "Permanently deleted listing with zero order history.",
+      },
+      req,
+    });
+
+    return NextResponse.json(
+      createSuccessResponse({
+        message: "Produce listing permanently deleted.",
+        deleted: true,
+      }),
+      { status: 200 }
+    );
+  } catch (error: any) {
+    console.error("Error deleting product API:", error);
+    return NextResponse.json(
+      createErrorResponse("INTERNAL_SERVER_ERROR", "Internal server error deleting produce listing."),
       { status: 500 }
     );
   }
