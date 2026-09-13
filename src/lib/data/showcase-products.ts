@@ -20,6 +20,11 @@ export interface ShowcaseProduct {
   availableQty: number;
   stockStatus: "IN_STOCK" | "LOW_STOCK";
   primaryImage: string;
+  moq?: number;
+  grade?: string;
+  condition?: string;
+  packaging?: string;
+  packageSize?: string;
   /** 0-indexed months where this commodity is in peak harvest/shipping season */
   seasonMonths: number[];
 }

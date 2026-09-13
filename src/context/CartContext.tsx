@@ -33,7 +33,7 @@ export interface CartItem extends Product {
 
 interface CartContextType {
     cartItems: CartItem[];
-    addToCart: (product: Product) => void;
+    addToCart: (product: Product, customQty?: number) => void;
     updateQuantity: (id: number | string, delta: number) => void;
     removeFromCart: (id: number | string) => void;
     clearCart: () => void;
@@ -70,7 +70,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("smarthub_cart", JSON.stringify(cartItems));
     }, [cartItems]);
 
-    const addToCart = (product: Product): void => {
+    const addToCart = (product: Product, customQty?: number): void => {
         // Boundary Guard: Reject invalid product objects immediately
         if (!product || product.id === null || product.id === undefined) {
             console.error("[CART_BOUNDARY_GUARD] Rejected product add: Missing product ID.", product);
@@ -82,14 +82,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
             throw new Error(`Cannot add item "${product.name || 'Produce'}" to cart: Invalid Product ID ("${product.id}").`);
         }
 
+        const minMoq = parseInt(product.moq || "1", 10) || 1;
+        const addQty = Math.max(minMoq, customQty !== undefined ? customQty : minMoq);
+
         setCartItems((prevItems) => {
             const existingItem = prevItems.find((item) => String(item.id) === idStr);
             if (existingItem) {
                 return prevItems.map((item) =>
-                    String(item.id) === idStr ? { ...item, quantity: item.quantity + 1 } : item
+                    String(item.id) === idStr ? { ...item, quantity: item.quantity + (customQty || 1) } : item
                 );
             }
-            return [...prevItems, { ...product, quantity: 1 }];
+            return [...prevItems, { ...product, quantity: addQty }];
         });
     };
 
@@ -97,7 +100,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setCartItems((prevItems) =>
             prevItems.map((item) => {
                 if (item.id === id) {
-                    const newQty = Math.max(0, item.quantity + delta);
+                    const minMoq = parseInt(item.moq || "1", 10) || 1;
+                    const nextQty = item.quantity + delta;
+                    if (nextQty <= 0) return { ...item, quantity: 0 };
+                    // Cannot decrement below MOQ
+                    const newQty = Math.max(minMoq, nextQty);
                     return { ...item, quantity: newQty };
                 }
                 return item;

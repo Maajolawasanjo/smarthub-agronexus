@@ -101,6 +101,18 @@ model Product {
   moderatedAt     DateTime?
   moderatedById   String?
   harvestDate     DateTime?
+  moq             Int            @default(1)
+  grade           String?
+  condition       String?
+  packaging       String?
+  packageSize     String?
+  availabilityStatus String?     @default("AVAILABLE_NOW")
+  availableFrom   DateTime?
+  storageCondition String?
+  storageNotes    String?
+  farmState       String?
+  farmLga         String?
+  farmCommunity   String?
   isAvailable     Boolean        @default(false)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt

@@ -6,6 +6,8 @@ import { notificationOutbox } from "@/lib/notifications/outbox";
 const mockSession = vi.fn();
 vi.mock("@/lib/session", () => ({
   getSession: () => mockSession(),
+  getFarmerSession: () => mockSession(),
+  getAdminSession: () => null,
 }));
 
 describe("Phase 3 Hardening Integration Suite", () => {

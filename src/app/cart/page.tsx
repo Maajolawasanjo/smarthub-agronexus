@@ -48,6 +48,17 @@ export default function CartPage() {
                 return;
             }
 
+            const belowMoqItem = cartItems.find(item => {
+                const minMoq = parseInt(item.moq || "1", 10) || 1;
+                return (Number(item.quantity) || 0) < minMoq;
+            });
+
+            if (belowMoqItem) {
+                setValidationError(`"${belowMoqItem.name}" requires a minimum order quantity of ${belowMoqItem.moq} ${belowMoqItem.unit || 'units'}. Please adjust quantity before checkout.`);
+                setIsValidating(false);
+                return;
+            }
+
             const itemsPayload = cartItems.map(item => ({
                 productId: String(item.id).trim(),
                 quantity: Number(item.quantity) || 1
@@ -191,9 +202,21 @@ export default function CartPage() {
                                                                         <h4 className="font-bold text-gray-900 text-sm sm:text-base group-hover:text-[#1B4D28] transition-colors">
                                                                             {item.name}
                                                                         </h4>
-                                                                        <span className="inline-block px-2 py-0.5 bg-green-50 text-[#1B4D28] text-[10px] font-bold rounded-full mt-1 mb-2">
-                                                                            In Stock ({item.stock || "Available"})
-                                                                        </span>
+                                                                        <div className="flex flex-wrap items-center gap-1.5 mt-1 mb-2">
+                                                                            <span className="inline-block px-2 py-0.5 bg-green-50 text-[#1B4D28] text-[10px] font-bold rounded-full">
+                                                                                In Stock ({item.stock || "Available"})
+                                                                            </span>
+                                                                            {item.grade && (
+                                                                                <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-full">
+                                                                                    {item.grade}
+                                                                                </span>
+                                                                            )}
+                                                                            {item.moq && parseInt(item.moq, 10) > 1 && (
+                                                                                <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 text-[10px] font-bold rounded-full">
+                                                                                    MOQ: {item.moq} {item.unit || "units"}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                         <div className="font-bold text-gray-900 text-base sm:text-lg">
                                                                             ₦{item.price.toLocaleString()}{" "}
                                                                             <span className="text-xs font-normal text-gray-500">
@@ -221,7 +244,9 @@ export default function CartPage() {
                                                                     <div className="flex items-center gap-3">
                                                                         <button
                                                                             onClick={() => updateQuantity(item.id, -1)}
-                                                                            className="w-7 h-7 rounded-full bg-[#1B4D28] text-white flex items-center justify-center hover:bg-[#143d20] transition-colors shadow-sm cursor-pointer"
+                                                                            disabled={item.quantity <= (parseInt(item.moq || "1", 10) || 1)}
+                                                                            className="w-7 h-7 rounded-full bg-[#1B4D28] text-white flex items-center justify-center hover:bg-[#143d20] transition-colors shadow-sm cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                                                            title={item.quantity <= (parseInt(item.moq || "1", 10) || 1) ? `Minimum Order Quantity is ${item.moq || 1}` : "Decrease quantity"}
                                                                             aria-label="Decrease quantity"
                                                                         >
                                                                             <Minus size={14} />

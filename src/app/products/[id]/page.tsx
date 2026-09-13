@@ -38,6 +38,7 @@ export default function PublicProductDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string>("");
+  const [purchaseQty, setPurchaseQty] = useState<number>(1);
 
   useEffect(() => {
     async function fetchProduct() {
@@ -52,6 +53,7 @@ export default function PublicProductDetailPage({
         const data: ProductDTO = await res.json();
         setProduct(data);
         setSelectedImage(data.primaryImage || data.images?.[0]?.imageUrl || "");
+        setPurchaseQty(data.moq || 1);
       } catch (err: any) {
         setError(err.message || "Failed to load product.");
       } finally {
@@ -63,6 +65,11 @@ export default function PublicProductDetailPage({
 
   const handleAddToCart = () => {
     if (!product) return;
+    const effectiveMoq = product.moq || 1;
+    if (purchaseQty < effectiveMoq) {
+      toast(`Minimum order quantity is ${effectiveMoq} ${product.unit}s.`, "error");
+      return;
+    }
     addToCart({
       id: product.id,
       name: product.name,
@@ -75,16 +82,16 @@ export default function PublicProductDetailPage({
       stock: product.inventory.availableQty,
       rating: 4.9,
       reviewsCount: 12,
-      certification: product.specifications.grade,
+      certification: product.grade || product.specifications.grade,
       sku: `PROD-${product.id.substring(0, 6)}`,
       brand: product.farmer.farmName,
       farmerProfileId: product.farmer.id,
       farmerName: product.farmer.farmName,
-      moq: product.specifications.minOrderQty,
-      grade: product.specifications.grade,
-      packaging: product.specifications.packaging,
-    });
-    toast(`${product.name} added to your wholesale cart!`, "success");
+      moq: String(product.moq || 1),
+      grade: product.grade || product.specifications.grade,
+      packaging: product.packaging || product.specifications.packaging,
+    }, purchaseQty);
+    toast(`${purchaseQty} ${product.unit}s of ${product.name} added to your cart!`, "success");
   };
 
   if (loading) {
@@ -244,20 +251,71 @@ export default function PublicProductDetailPage({
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-2.5 bg-gray-50 rounded-xl">
                   <p className="text-[10px] text-gray-400 font-semibold uppercase">Grade Standard</p>
-                  <p className="font-bold text-gray-800">{product.specifications.grade}</p>
+                  <p className="font-bold text-gray-800">{product.grade || product.specifications.grade}</p>
                 </div>
                 <div className="p-2.5 bg-gray-50 rounded-xl">
-                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Moisture Threshold</p>
-                  <p className="font-bold text-gray-800">{product.specifications.moisture}</p>
-                </div>
-                <div className="p-2.5 bg-gray-50 rounded-xl">
-                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Admixture Limit</p>
-                  <p className="font-bold text-gray-800">{product.specifications.admixture}</p>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Physical Condition</p>
+                  <p className="font-bold text-gray-800">{product.condition || product.specifications.condition || "Freshly Harvested"}</p>
                 </div>
                 <div className="p-2.5 bg-gray-50 rounded-xl">
                   <p className="text-[10px] text-gray-400 font-semibold uppercase">Packaging Format</p>
-                  <p className="font-bold text-gray-800">{product.specifications.packaging}</p>
+                  <p className="font-bold text-gray-800 truncate">{product.specifications.packaging}</p>
                 </div>
+                <div className="p-2.5 bg-gray-50 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Minimum Order (MOQ)</p>
+                  <p className="font-bold text-[#1B4D28]">{product.moq || 1} {product.unit}s</p>
+                </div>
+                <div className="p-2.5 bg-gray-50 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Harvest Date</p>
+                  <p className="font-bold text-gray-800">
+                    {product.harvestDate ? new Date(product.harvestDate).toLocaleDateString("en-GB") : "Current Season"}
+                  </p>
+                </div>
+                <div className="p-2.5 bg-gray-50 rounded-xl">
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Storage Method</p>
+                  <p className="font-bold text-gray-800 truncate">
+                    {product.storageCondition || product.specifications.storageCondition || "Ambient Store"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Wholesale Quantity & MOQ Selector */}
+            <div className="p-4 bg-white rounded-2xl border border-gray-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-gray-900 block">Wholesale Order Quantity</span>
+                  <span className="text-[11px] text-gray-500">
+                    Producer MOQ: <strong className="text-[#1B4D28]">{product.moq || 1} {product.unit}s</strong>
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPurchaseQty((prev) => Math.max(product.moq || 1, prev - 1))}
+                    disabled={purchaseQty <= (product.moq || 1)}
+                    className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
+                  >
+                    -
+                  </button>
+                  <span className="w-12 text-center font-black text-base text-gray-900">
+                    {purchaseQty}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPurchaseQty((prev) => Math.min(product.inventory.availableQty, prev + 1))}
+                    disabled={purchaseQty >= product.inventory.availableQty}
+                    className="w-8 h-8 rounded-full bg-[#1B4D28] text-white flex items-center justify-center font-bold hover:bg-[#153b1e] disabled:opacity-40 cursor-pointer"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-gray-100 text-xs font-semibold text-gray-600">
+                <span>Subtotal ({purchaseQty} {product.unit}s):</span>
+                <span className="text-base font-black text-[#1B4D28]">
+                  ₦{(product.price * purchaseQty).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
 
@@ -269,7 +327,7 @@ export default function PublicProductDetailPage({
                 className="w-full sm:flex-1 bg-[#1B4D28] hover:bg-[#153b1e] text-white py-4 px-6 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-900/20 transition-all active:scale-[0.99] cursor-pointer disabled:opacity-50"
               >
                 <ShoppingCart size={18} />
-                <span>Add to Wholesale Cart</span>
+                <span>Add {purchaseQty} {product.unit}s to Cart</span>
               </button>
               <Link
                 href="/cart"

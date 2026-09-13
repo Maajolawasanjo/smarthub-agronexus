@@ -144,6 +144,14 @@ export async function GET(req: Request) {
         },
         images: p.images.map((img: any) => ({ id: img.id, imageUrl: img.imageUrl })),
         primaryImage,
+        moq: p.moq || 1,
+        grade: p.grade,
+        condition: p.condition,
+        packaging: p.packaging,
+        packageSize: p.packageSize,
+        availabilityStatus: p.availabilityStatus,
+        farmState: p.farmState || p.farmerProfile?.state,
+        farmLga: p.farmLga || p.farmerProfile?.lga,
       };
     };
 

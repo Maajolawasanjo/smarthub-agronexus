@@ -28,22 +28,26 @@ export default function ProductsShowroom() {
                 const res = await fetch("/api/products");
                 if (res.ok) {
                     const data = await res.json();
-                    const items = data.items || [];
+                    const items = data.products || data.items || [];
                     if (items.length > 0) {
                         const mapped: ShowcaseProduct[] = items.map((p: any) => ({
                             id: p.id,
                             name: p.name,
                             description: p.description || "Certified Nigerian export commodity.",
                             price: Number(p.price) || 0,
-                            unit: p.unit || "TON",
-                            category: p.category?.name || "Grains & Cereals",
+                            unit: p.unit || "BAG",
+                            category: p.category?.name || "General Commodities",
                             farmName: p.farmer?.farmName || "Verified Producer Cluster",
-                            state: p.farmer?.state || "Nigeria",
+                            state: p.farmState || p.farmer?.state || "Nigeria",
                             verificationStatus: "APPROVED" as const,
                             availableQty: p.inventory?.availableQty ?? 100,
                             stockStatus: (p.inventory?.availableQty ?? 0) > 0 ? ("IN_STOCK" as const) : ("LOW_STOCK" as const),
-                            primaryImage: p.images?.[0] || "/images/produce/sorghum.jpg",
+                            primaryImage: p.images?.[0]?.imageUrl || p.primaryImage || "/images/produce/sorghum.jpg",
                             seasonMonths: [0, 1, 2, 9, 10, 11],
+                            moq: p.moq || 1,
+                            grade: p.grade || "Grade A",
+                            condition: p.condition || "Fresh",
+                            packaging: p.packaging || "Standard Bags",
                         }));
                         setLiveProducts(mapped);
                     }
@@ -378,9 +382,16 @@ function ProductCard({ item }: { item: ShowcaseProduct }) {
                         fill
                         className="object-cover scale-100 group-hover:scale-108 transition-transform duration-700 ease-out"
                     />
-                    <span className="absolute top-3 left-3 z-20 bg-[#1B4D28] text-white text-[9px] font-extrabold tracking-wider uppercase px-2.5 py-0.5 rounded-full border border-[#2C5E39] shadow-sm">
-                        {item.category}
-                    </span>
+                    <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 flex-wrap">
+                        <span className="bg-[#1B4D28] text-white text-[9px] font-extrabold tracking-wider uppercase px-2.5 py-0.5 rounded-full border border-[#2C5E39] shadow-sm">
+                            {item.category}
+                        </span>
+                        {item.grade && (
+                            <span className="bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                {item.grade}
+                            </span>
+                        )}
+                    </div>
                     <span className={`absolute top-3 right-3 z-20 text-[9px] font-extrabold tracking-wider uppercase px-2.5 py-0.5 rounded-full border shadow-sm ${
                         item.stockStatus === "IN_STOCK"
                             ? "bg-emerald-600 text-white border-emerald-700"
@@ -412,16 +423,16 @@ function ProductCard({ item }: { item: ShowcaseProduct }) {
                             <p className="text-[10px] font-bold text-gray-800 leading-tight truncate">₦{item.price.toLocaleString()} / {item.unit}</p>
                         </div>
                         <div className="bg-[#EEF2EE]/45 border border-gray-100/50 rounded-xl p-2.5 group-hover:bg-green-50/40 transition-colors">
-                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-0.5 truncate">Available Quantity</p>
-                            <p className="text-[10px] font-bold text-[#1B4D28] leading-tight truncate">{item.availableQty} {item.unit}s</p>
+                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-0.5 truncate">Min Order (MOQ)</p>
+                            <p className="text-[10px] font-bold text-[#1B4D28] leading-tight truncate">{item.moq || 1} {item.unit}s</p>
                         </div>
                         <div className="bg-[#EEF2EE]/45 border border-gray-100/50 rounded-xl p-2.5 group-hover:bg-green-50/40 transition-colors">
-                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Farm Location</p>
+                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Farm Origin</p>
                             <p className="text-[10px] font-bold text-gray-800 leading-tight truncate">{item.state}</p>
                         </div>
                         <div className="bg-[#EEF2EE]/45 border border-gray-100/50 rounded-xl p-2.5 group-hover:bg-green-50/40 transition-colors">
-                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Verification</p>
-                            <p className="text-[10px] font-bold text-[#1B4D28] leading-tight truncate">{item.verificationStatus}</p>
+                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">Packaging</p>
+                            <p className="text-[10px] font-bold text-gray-700 leading-tight truncate">{item.packaging || "Standard"}</p>
                         </div>
                     </div>
                 </div>

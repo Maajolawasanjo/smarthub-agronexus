@@ -21,6 +21,8 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/Toast";
 
@@ -35,6 +37,14 @@ interface ProduceItem {
   moderationNotes?: string | null;
   createdAt: string;
   description: string;
+  moq?: number;
+  grade?: string | null;
+  condition?: string | null;
+  packaging?: string | null;
+  packageSize?: string | null;
+  availabilityStatus?: string | null;
+  farmState?: string | null;
+  farmLga?: string | null;
   category?: {
     id: string;
     name: string;
@@ -46,13 +56,16 @@ interface ProduceItem {
   };
 }
 
-export default function FarmerListingsPage() {
+function FarmerListingsContent() {
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") === "drafts" ? "DRAFT" : "ALL";
+
   const [produce, setProduce] = useState<ProduceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("ALL");
-  const [filterStatus, setFilterStatus] = useState("ALL");
+  const [filterStatus, setFilterStatus] = useState(initialTab);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<number>(0);
   const [editQty, setEditQty] = useState<number>(0);
@@ -183,6 +196,7 @@ export default function FarmerListingsPage() {
 
     const matchesStatus =
       filterStatus === "ALL" ||
+      (filterStatus === "DRAFT" && item.status === "DRAFT") ||
       (filterStatus === "APPROVED" && item.status === "APPROVED" && item.isAvailable) ||
       (filterStatus === "PENDING" && item.status === "PENDING_APPROVAL") ||
       (filterStatus === "REJECTED" && item.status === "REJECTED") ||
@@ -300,6 +314,7 @@ export default function FarmerListingsPage() {
               className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-full text-xs font-bold text-gray-700 focus:outline-none focus:border-[#1B4D28]"
             >
               <option value="ALL">All Statuses</option>
+              <option value="DRAFT">📝 Saved Drafts</option>
               <option value="APPROVED">✅ Approved & Live</option>
               <option value="PENDING">⏳ Under Quality Review</option>
               <option value="REJECTED">❌ Inspection Rejected</option>
@@ -366,7 +381,22 @@ export default function FarmerListingsPage() {
                           </div>
                           <div>
                             <p className="text-sm font-extrabold text-gray-900">{item.name}</p>
-                            <p className="text-[11px] text-gray-400 truncate max-w-xs font-mono">
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              {item.grade && (
+                                <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-200">
+                                  {item.grade}
+                                </span>
+                              )}
+                              <span className="text-[10px] font-bold bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md">
+                                MOQ: {item.moq || 1} {item.unit}
+                              </span>
+                              {item.packaging && (
+                                <span className="text-[10px] font-medium text-gray-500 truncate max-w-[140px]">
+                                  {item.packaging}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-gray-400 font-mono mt-0.5">
                               ID: {item.id.substring(0, 8)}...
                             </p>
                           </div>
@@ -435,7 +465,12 @@ export default function FarmerListingsPage() {
                       {/* Status & Approval Column */}
                       <td className="py-4 px-4">
                         <div className="flex flex-col gap-1.5">
-                          {item.status === "APPROVED" ? (
+                          {item.status === "DRAFT" ? (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 text-slate-700 border border-slate-300 rounded-full text-[11px] font-extrabold w-fit shadow-xs">
+                              <Package size={14} className="text-slate-600" />
+                              Saved Draft
+                            </span>
+                          ) : item.status === "APPROVED" ? (
                             item.isAvailable ? (
                               <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-[11px] font-extrabold w-fit shadow-xs">
                                 <ShieldCheck size={14} className="text-green-600" />
@@ -465,7 +500,14 @@ export default function FarmerListingsPage() {
                             </span>
                           )}
 
-                          {item.status === "APPROVED" ? (
+                          {item.status === "DRAFT" ? (
+                            <Link
+                              href={`/farmer/sell?id=${item.id}`}
+                              className="text-[10px] font-bold text-[#1B4D28] hover:underline transition-colors w-fit"
+                            >
+                              Continue Editing →
+                            </Link>
+                          ) : item.status === "APPROVED" ? (
                             <button
                               onClick={() => handleToggleAvailability(item.id, item.isAvailable, item.status)}
                               className="text-[10px] font-bold text-gray-500 hover:text-gray-800 underline transition-colors w-fit cursor-pointer"
@@ -473,12 +515,19 @@ export default function FarmerListingsPage() {
                               {item.isAvailable ? "Pause Listing" : "Make Live"}
                             </button>
                           ) : item.status === "REJECTED" ? (
-                            <Link
-                              href={`/farmer/produce/${item.id}`}
-                              className="text-[10px] font-bold text-red-600 hover:underline transition-colors w-fit"
-                            >
-                              View Rejection Reason
-                            </Link>
+                            <div className="flex flex-col gap-0.5">
+                              {item.rejectionReason && (
+                                <span className="text-[10px] text-red-600 italic max-w-xs truncate">
+                                  {item.rejectionReason}
+                                </span>
+                              )}
+                              <Link
+                                href={`/farmer/sell?id=${item.id}`}
+                                className="text-[10px] font-bold text-[#1B4D28] hover:underline transition-colors w-fit"
+                              >
+                                Edit & Resubmit →
+                              </Link>
+                            </div>
                           ) : (
                             <span className="text-[10px] font-semibold text-gray-400">
                               Awaiting Moderator
@@ -489,7 +538,7 @@ export default function FarmerListingsPage() {
 
                       {/* Actions */}
                       <td className="py-4 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           {isEditing ? (
                             <>
                               <button
@@ -508,21 +557,17 @@ export default function FarmerListingsPage() {
                             </>
                           ) : (
                             <>
-                              <button
-                                onClick={() => {
-                                  setEditingId(item.id);
-                                  setEditPrice(Number(item.price));
-                                  setEditQty(availableQty);
-                                }}
-                                title="Edit Pricing & Stock"
-                                className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all"
+                              <Link
+                                href={`/farmer/sell?id=${item.id}`}
+                                title="Edit Full Listing Details"
+                                className="p-2 text-gray-500 hover:text-[#1B4D28] hover:bg-green-50 rounded-lg transition-all"
                               >
                                 <Edit size={16} />
-                              </button>
+                              </Link>
                               <button
                                 onClick={() => handleDeleteProduce(item.id, item.name)}
                                 title="Delete Listing"
-                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
                               >
                                 <Trash2 size={16} />
                               </button>
@@ -539,6 +584,20 @@ export default function FarmerListingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function FarmerListingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-7xl mx-auto p-8 text-center text-xs text-gray-400">
+          Loading produce listings...
+        </div>
+      }
+    >
+      <FarmerListingsContent />
+    </Suspense>
   );
 }
 

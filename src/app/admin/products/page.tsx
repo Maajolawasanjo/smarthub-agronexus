@@ -75,8 +75,17 @@ export default function AdminProductsPage() {
                     category: p.category?.name || "General Commodities",
                     imageUrl: p.images?.[0]?.imageUrl || "/agrochain-farmers.png",
                     moisture: "8.5%",
-                    origin: `${p.farmerProfile?.state || "Taraba"}, Nigeria`,
-                    organic: "Certified Grade A",
+                    origin: `${p.farmState || p.farmerProfile?.state || "Taraba"}${p.farmLga ? `, ${p.farmLga}` : ""}, Nigeria`,
+                    farmCommunity: p.farmCommunity || "",
+                    grade: p.grade || "Grade A (Export Certified)",
+                    condition: p.condition || "Freshly Harvested",
+                    packaging: p.packaging || "Standard Bags",
+                    packageSize: p.packageSize || "50kg",
+                    moq: p.moq || 1,
+                    storageCondition: p.storageCondition || "Ambient Store",
+                    storageNotes: p.storageNotes || "",
+                    harvestDate: p.harvestDate ? new Date(p.harvestDate).toLocaleDateString("en-GB") : "N/A",
+                    organic: p.grade || "Certified Grade A",
                     certificate: "CERT-9018",
                     createdAt: p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-GB") : "Recent",
                     rawProduct: p,
@@ -635,21 +644,45 @@ export default function AdminProductsPage() {
                                     </span>
                                 </div>
                                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    <span className="text-gray-400 font-semibold block">Harvest Origin</span>
-                                    <span className="text-gray-900 font-bold text-sm mt-0.5 block">
-                                        {selectedCrop.origin}
-                                    </span>
-                                </div>
-                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                                    <span className="text-gray-400 font-semibold block">Moisture Content</span>
-                                    <span className="text-gray-900 font-bold text-sm mt-0.5 block">
-                                        {selectedCrop.moisture}
-                                    </span>
-                                </div>
-                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
                                     <span className="text-gray-400 font-semibold block">Quality Grade</span>
                                     <span className="text-green-700 font-bold text-sm mt-0.5 block">
-                                        {selectedCrop.organic}
+                                        {selectedCrop.grade}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    <span className="text-gray-400 font-semibold block">Physical Condition</span>
+                                    <span className="text-gray-900 font-bold text-sm mt-0.5 block">
+                                        {selectedCrop.condition}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    <span className="text-gray-400 font-semibold block">Packaging & Size</span>
+                                    <span className="text-gray-900 font-bold text-sm mt-0.5 block truncate">
+                                        {selectedCrop.packaging} ({selectedCrop.packageSize})
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    <span className="text-gray-400 font-semibold block">Minimum Order (MOQ)</span>
+                                    <span className="text-gray-900 font-bold text-sm mt-0.5 block">
+                                        {selectedCrop.moq} {selectedCrop.unit}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    <span className="text-gray-400 font-semibold block">Harvest Date</span>
+                                    <span className="text-gray-900 font-bold text-sm mt-0.5 block">
+                                        {selectedCrop.harvestDate}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    <span className="text-gray-400 font-semibold block">Harvest Origin</span>
+                                    <span className="text-gray-900 font-bold text-sm mt-0.5 block">
+                                        {selectedCrop.origin} {selectedCrop.farmCommunity ? `(${selectedCrop.farmCommunity})` : ""}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                    <span className="text-gray-400 font-semibold block">Storage Method</span>
+                                    <span className="text-gray-900 font-bold text-sm mt-0.5 block truncate">
+                                        {selectedCrop.storageCondition}
                                     </span>
                                 </div>
                             </div>

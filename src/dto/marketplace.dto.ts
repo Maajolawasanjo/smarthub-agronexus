@@ -29,6 +29,14 @@ export interface MarketplaceProductItemDTO {
     imageUrl: string;
   }>;
   primaryImage: string;
+  moq?: number;
+  grade?: string | null;
+  condition?: string | null;
+  packaging?: string | null;
+  packageSize?: string | null;
+  availabilityStatus?: string | null;
+  farmState?: string | null;
+  farmLga?: string | null;
 }
 
 export interface MarketplaceCategoryDTO {
