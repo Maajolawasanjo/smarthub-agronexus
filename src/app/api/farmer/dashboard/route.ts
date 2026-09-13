@@ -31,10 +31,32 @@ export async function GET() {
       return NextResponse.json({ error: "Farmer user profile not found" }, { status: 404 });
     }
 
-    const farmerProfile = user.farmerProfile;
+    let farmerProfile = user.farmerProfile;
 
     if (!farmerProfile) {
-      return NextResponse.json({ error: "Account does not have a farmer profile" }, { status: 400 });
+      if (user.role === "ADMIN") {
+        farmerProfile = await prisma.farmerProfile.create({
+          data: {
+            userId: user.id,
+            farmName: `${user.fullName}'s Farm`,
+            farmAddress: "Administrative Demonstration Facility",
+            state: "Lagos",
+            lga: "Ikeja",
+            verificationStatus: "APPROVED",
+          },
+          include: {
+            verification: true,
+            products: {
+              include: {
+                inventory: true,
+              },
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        });
+      } else {
+        return NextResponse.json({ error: "Account does not have a farmer profile" }, { status: 400 });
+      }
     }
 
     // Active Products & Inventory Stats
