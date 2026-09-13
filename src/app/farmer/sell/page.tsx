@@ -644,6 +644,20 @@ function SubmitProduceContent() {
                                 Clear, descriptive name visible to buyers on wholesale search results.
                             </p>
                         </div>
+
+                        <div>
+                            <FieldLabel label="Main Product Description" />
+                            <textarea
+                                value={form.description}
+                                onChange={(e) => update("description", e.target.value)}
+                                rows={4}
+                                placeholder="Provide a detailed description of your harvest batch, including farming practices, quality highlights, post-harvest processing, and wholesale loading terms..."
+                                className="w-full bg-gray-50/80 border border-gray-200 rounded-xl p-4 text-sm sm:text-base font-normal text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white leading-relaxed transition-all"
+                            />
+                            <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                                Comprehensive description displayed directly on the product detail page and live marketplace showroom.
+                            </p>
+                        </div>
                     </div>
 
                     {/* SECTION 2: Quality & Condition */}
@@ -1039,23 +1053,6 @@ function SubmitProduceContent() {
                         />
                     </div>
 
-                    {/* SECTION 9: Full Commodity Description */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
-                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
-                            <FileText size={20} className="text-[#1B4D28]" />
-                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
-                                9. Commodity Description & Summary
-                            </h2>
-                        </div>
-                        <textarea
-                            value={form.description}
-                            onChange={(e) => update("description", e.target.value)}
-                            rows={4}
-                            placeholder="Provide any additional background about your farming cooperative, harvest conditions, loading assistance, or delivery terms..."
-                            className="w-full bg-gray-50/80 border border-gray-200 rounded-xl p-4 text-sm sm:text-base font-normal text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white leading-relaxed transition-all"
-                        />
-                    </div>
-
                     {/* Action Bar */}
                     <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-md flex flex-col sm:flex-row items-center gap-5">
                         <button
@@ -1094,25 +1091,40 @@ function SubmitProduceContent() {
 
                     {/* Commodity Card Preview */}
                     <div className="bg-white border border-gray-200 rounded-3xl overflow-hidden shadow-xl transition-all">
-                        {/* Image Preview */}
-                        <div className="relative aspect-[16/10] w-full bg-gray-100 overflow-hidden">
-                            <Image
-                                src={images[0] || "/products/yam.png"}
-                                alt={form.title || "Produce preview"}
-                                fill
-                                className="object-cover"
-                            />
+                        {/* Image Preview / Placeholder */}
+                        <div className="relative aspect-[16/10] w-full bg-gradient-to-br from-emerald-950 via-[#1B4D28] to-emerald-900 overflow-hidden flex flex-col items-center justify-center text-white">
+                            {images[0] ? (
+                                <Image
+                                    src={images[0]}
+                                    alt={form.title || "Produce preview"}
+                                    fill
+                                    className="object-cover"
+                                />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center p-6 text-center space-y-2.5">
+                                    <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-green-300 shadow-inner">
+                                        <Upload size={24} />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        <p className="text-xs font-black tracking-wide text-white">No Produce Photo Uploaded</p>
+                                        <p className="text-[11px] text-green-100/70 max-w-[220px]">
+                                            Upload photos below to preview your listing card
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Tags overlay */}
-                            <div className="absolute top-3.5 left-3.5 flex flex-wrap gap-2">
-                                <span className="bg-[#1B4D28] text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                            <div className="absolute top-3.5 left-3.5 flex flex-wrap gap-2 z-10">
+                                <span className="bg-[#1B4D28]/90 backdrop-blur-md text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm border border-white/15">
                                     {form.produceType || "Produce"}
                                 </span>
-                                <span className="bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">
+                                <span className="bg-blue-600/90 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm border border-white/15">
                                     {form.grade}
                                 </span>
                             </div>
 
-                            <span className="absolute top-3.5 right-3.5 bg-emerald-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-full shadow-sm">
+                            <span className="absolute top-3.5 right-3.5 bg-emerald-600/90 backdrop-blur-md text-white text-[10px] font-extrabold px-3 py-1 rounded-full shadow-sm border border-white/15 z-10">
                                 {form.availabilityStatus === "AVAILABLE_NOW" ? "IN STOCK" : "UPCOMING"}
                             </span>
                         </div>
@@ -1125,6 +1137,16 @@ function SubmitProduceContent() {
                                 </h3>
                                 <p className="text-xs sm:text-sm text-[#1B4D28] font-bold mt-1">
                                     {farmName || "Your Farm / Cooperative"} • {form.farmState}, Nigeria
+                                </p>
+                            </div>
+
+                            {/* Main Product Description in Live Preview */}
+                            <div className="p-3.5 bg-gray-50/90 rounded-2xl border border-gray-100/90">
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                                    Main Product Description
+                                </p>
+                                <p className="text-xs text-gray-700 leading-relaxed line-clamp-3">
+                                    {form.description.trim() || "No product description entered yet. Your description will appear here on wholesale search and detail pages."}
                                 </p>
                             </div>
 
