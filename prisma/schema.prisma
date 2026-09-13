@@ -104,8 +104,12 @@ model Product {
   moq             Int            @default(1)
   grade           String?
   condition       String?
+  produceType     String?
+  variety         String?
   packaging       String?
   packageSize     String?
+  pricingNotes    String?
+  qualityNotes    String?
   availabilityStatus String?     @default("AVAILABLE_NOW")
   availableFrom   DateTime?
   storageCondition String?

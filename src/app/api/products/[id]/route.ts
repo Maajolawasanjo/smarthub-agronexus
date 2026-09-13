@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, executeWithDbRetry } from "@/lib/prisma";
 import { ProductDTO, MarketplaceProductItemDTO } from "@/dto";
 
 export async function GET(
@@ -13,21 +13,23 @@ export async function GET(
       return NextResponse.json({ error: "Product ID is required." }, { status: 400 });
     }
 
-    const product = await prisma.product.findUnique({
-      where: { id },
-      include: {
-        category: true,
-        farmerProfile: {
-          include: {
-            products: {
-              select: { id: true },
+    const product = await executeWithDbRetry(() =>
+      prisma.product.findUnique({
+        where: { id },
+        include: {
+          category: true,
+          farmerProfile: {
+            include: {
+              products: {
+                select: { id: true },
+              },
             },
           },
+          images: true,
+          inventory: true,
         },
-        images: true,
-        inventory: true,
-      },
-    });
+      })
+    );
 
     if (!product) {
       return NextResponse.json({ error: "Product not found." }, { status: 404 });
@@ -140,8 +142,12 @@ export async function GET(
       moq: product.moq || 1,
       grade: product.grade,
       condition: product.condition,
+      produceType: product.produceType,
+      variety: product.variety,
       packaging: product.packaging,
       packageSize: product.packageSize,
+      pricingNotes: product.pricingNotes,
+      qualityNotes: product.qualityNotes,
       availabilityStatus: product.availabilityStatus,
       availableFrom: product.availableFrom ? product.availableFrom.toISOString() : null,
       storageCondition: product.storageCondition,

@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "Product" 
+ADD COLUMN IF NOT EXISTS "produceType" TEXT,
+ADD COLUMN IF NOT EXISTS "variety" TEXT,
+ADD COLUMN IF NOT EXISTS "pricingNotes" TEXT,
+ADD COLUMN IF NOT EXISTS "qualityNotes" TEXT;

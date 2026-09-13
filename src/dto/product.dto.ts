@@ -40,8 +40,12 @@ export interface ProductDTO {
   moq?: number;
   grade?: string | null;
   condition?: string | null;
+  produceType?: string | null;
+  variety?: string | null;
   packaging?: string | null;
   packageSize?: string | null;
+  pricingNotes?: string | null;
+  qualityNotes?: string | null;
   availabilityStatus?: string | null;
   availableFrom?: string | null;
   storageCondition?: string | null;

@@ -255,7 +255,7 @@ function SubmitProduceContent() {
                         const status = user.verificationStatus || farmer?.verificationStatus || (user.role === "ADMIN" ? "APPROVED" : "PENDING");
                         setVerificationStatus(status);
                         setFarmName(farmer?.farmName || user.fullName || "Your Farm");
-                        if (farmer?.state) {
+                        if (!editId && farmer?.state) {
                             setForm((prev) => ({
                                 ...prev,
                                 farmState: farmer.state || prev.farmState,
@@ -268,23 +268,74 @@ function SubmitProduceContent() {
                 // If editing existing item
                 if (editId) {
                     const prodRes = await fetch(`/api/products/${editId}`);
-                    if (prodRes.ok) {
+                    if (!prodRes.ok) {
+                        toast("Could not retrieve listing details. Please try again.", "error");
+                    } else {
                         const prod = await prodRes.json();
                         if (isMounted && prod) {
+                            // Detect produce commodity and variety
+                            let detectedProduce = prod.produceType || "";
+                            let detectedVariety = prod.variety || "";
+
+                            if (!detectedProduce && prod.name) {
+                                const matchParentheses = prod.name.match(/^(.*?)\s*\((.*?)\)$/);
+                                if (matchParentheses) {
+                                    const candidateVariety = matchParentheses[1].trim();
+                                    const candidateProduce = matchParentheses[2].trim();
+                                    if (PRODUCE_TYPES.includes(candidateProduce)) {
+                                        detectedProduce = candidateProduce;
+                                        detectedVariety = candidateVariety;
+                                    }
+                                }
+                            }
+
+                            if (!detectedProduce && prod.name) {
+                                for (const pType of PRODUCE_TYPES) {
+                                    if (prod.name.toLowerCase().includes(pType.toLowerCase())) {
+                                        detectedProduce = pType;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (!detectedVariety && detectedProduce) {
+                                const varietiesForType = VARIETIES[detectedProduce] || [];
+                                for (const v of varietiesForType) {
+                                    if (prod.name?.toLowerCase().includes(v.toLowerCase())) {
+                                        detectedVariety = v;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // Normalize unit to match select option values: "kg" | "bags" | "tonnes" | "crates" | "pieces"
+                            let normalizedUnit = "bags";
+                            const rawUnit = (prod.unit || "").toLowerCase();
+                            if (rawUnit.includes("kg")) normalizedUnit = "kg";
+                            else if (rawUnit.includes("bag")) normalizedUnit = "bags";
+                            else if (rawUnit.includes("ton")) normalizedUnit = "tonnes";
+                            else if (rawUnit.includes("crate")) normalizedUnit = "crates";
+                            else if (rawUnit.includes("piece") || rawUnit.includes("tuber")) normalizedUnit = "pieces";
+
                             setForm((prev) => ({
                                 ...prev,
                                 id: prod.id,
+                                produceType: detectedProduce || prev.produceType,
+                                variety: detectedVariety || prev.variety,
                                 title: prod.name || "",
                                 description: prod.description || "",
-                                askingPrice: prod.price ? String(prod.price) : "",
-                                unit: prod.unit?.toLowerCase() || "bags",
-                                quantity: prod.inventory?.availableQty ? String(prod.inventory.availableQty) : "",
+                                askingPrice: prod.price !== undefined && prod.price !== null ? String(prod.price) : "",
+                                unit: normalizedUnit,
+                                quantity: prod.inventory?.availableQty !== undefined && prod.inventory?.availableQty !== null ? String(prod.inventory.availableQty) : "",
                                 moq: prod.moq ? String(prod.moq) : "1",
                                 grade: prod.grade || prev.grade,
                                 condition: prod.condition || prev.condition,
                                 packaging: prod.packaging || prev.packaging,
                                 packageSize: prod.packageSize || prev.packageSize,
+                                pricingNotes: prod.pricingNotes || "",
+                                qualityNotes: prod.qualityNotes || "",
                                 availabilityStatus: prod.availabilityStatus || prev.availabilityStatus,
+                                availableFrom: prod.availableFrom ? prod.availableFrom.split("T")[0] : "",
                                 harvestDate: prod.harvestDate ? prod.harvestDate.split("T")[0] : prev.harvestDate,
                                 farmState: prod.farmState || prod.farmer?.state || prev.farmState,
                                 farmLga: prod.farmLga || prod.farmer?.lga || prev.farmLga,
@@ -313,14 +364,20 @@ function SubmitProduceContent() {
     const update = (field: keyof FormState, value: string) => {
         setForm((prev) => {
             const next = { ...prev, [field]: value };
-            // Auto update title when produce type or variety changes
+            // Auto update title when produce type or variety changes, but only if user hasn't customized title
             if (field === "produceType" || field === "variety") {
                 const prod = field === "produceType" ? value : prev.produceType;
                 const vari = field === "variety" ? value : prev.variety;
-                if (prod && vari) {
-                    next.title = `${vari} (${prod})`;
-                } else if (prod) {
-                    next.title = `${prod} Produce`;
+                const isAutoTitle = !prev.title || 
+                    prev.title === `${prev.variety} (${prev.produceType})` || 
+                    prev.title === `${prev.produceType} Produce` ||
+                    prev.title === "Produce Listing Title";
+                if (isAutoTitle) {
+                    if (prod && vari) {
+                        next.title = `${vari} (${prod})`;
+                    } else if (prod) {
+                        next.title = `${prod} Produce`;
+                    }
                 }
             }
             // Reset LGA when state changes
@@ -411,6 +468,10 @@ function SubmitProduceContent() {
                 moq: parseInt(form.moq, 10) || 1,
                 grade: form.grade,
                 condition: form.condition,
+                produceType: form.produceType,
+                variety: form.variety,
+                pricingNotes: form.pricingNotes,
+                qualityNotes: form.qualityNotes,
                 packaging: form.packaging,
                 packageSize: form.packageSize,
                 availabilityStatus: form.availabilityStatus,
