@@ -178,13 +178,13 @@ function validateForm(form: FormState, isSubmitting: boolean): FormErrors {
 
 function FieldLabel({ label, required = false, error }: { label: string; required?: boolean; error?: string }) {
     return (
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between mb-2.5">
             <label className="text-xs font-bold text-gray-700 uppercase tracking-wider">
                 {label} {required && <span className="text-red-500">*</span>}
             </label>
             {error && (
-                <span className="flex items-center gap-1 text-[11px] text-red-500 font-medium">
-                    <AlertCircle size={11} />
+                <span className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
+                    <AlertCircle size={13} />
                     {error}
                 </span>
             )}
@@ -240,23 +240,26 @@ function SubmitProduceContent() {
         return NIGERIAN_STATES_LGAS[form.farmState] || [];
     }, [form.farmState]);
 
-    // Initial check on farmer profile & load edit produce if editId
+    // Check Farmer Verification on Load
     useEffect(() => {
         let isMounted = true;
         async function fetchInitial() {
             try {
-                const res = await fetch("/api/farmer/dashboard");
+                // Fetch logged-in user profile
+                const res = await fetch("/api/auth/me");
                 if (res.ok) {
                     const data = await res.json();
                     if (isMounted) {
-                        const status = data.farmerProfile?.verificationStatus || "PENDING";
+                        const user = data.user || data;
+                        const farmer = user.farmerProfile || data.farmerProfile;
+                        const status = user.verificationStatus || farmer?.verificationStatus || (user.role === "ADMIN" ? "APPROVED" : "PENDING");
                         setVerificationStatus(status);
-                        setFarmName(data.farmerProfile?.farmName || "Your Farm");
-                        if (data.farmerProfile?.state) {
+                        setFarmName(farmer?.farmName || user.fullName || "Your Farm");
+                        if (farmer?.state) {
                             setForm((prev) => ({
                                 ...prev,
-                                farmState: data.farmerProfile.state || prev.farmState,
-                                farmLga: data.farmerProfile.lga || prev.farmLga,
+                                farmState: farmer.state || prev.farmState,
+                                farmLga: farmer.lga || prev.farmLga,
                             }));
                         }
                     }
@@ -466,36 +469,36 @@ function SubmitProduceContent() {
     }
 
     return (
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 space-y-8 font-sans">
+        <div className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8 space-y-10 font-sans">
             {/* Top Navigation & Header */}
             <div>
                 <Link
                     href="/farmer/listings"
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-[#1B4D28] transition-colors mb-3"
+                    className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-500 hover:text-[#1B4D28] transition-colors mb-4"
                 >
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={18} />
                     <span>Back to Produce Inventory</span>
                 </Link>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+                    <div className="space-y-1.5">
+                        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">
                             {editId ? "Edit Produce Listing" : "Sell Produce — New Commodity Listing"}
                         </h1>
-                        <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                        <p className="text-sm sm:text-base text-gray-500 max-w-3xl leading-relaxed">
                             Define agricultural specifications, packaging, pricing, and farm origin for institutional wholesale buyers.
                         </p>
                     </div>
 
                     {/* Listing Status Badge */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         {verificationStatus === "APPROVED" ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <ShieldCheck size={14} />
+                            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs sm:text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
+                                <ShieldCheck size={16} />
                                 Verified Producer
                             </span>
                         ) : (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                <Clock size={14} />
+                            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs sm:text-sm font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-xs">
+                                <Clock size={16} />
                                 Verification Pending (Drafts Enabled)
                             </span>
                         )}
@@ -505,10 +508,10 @@ function SubmitProduceContent() {
 
             {/* Unverified Farmer Information Notice */}
             {verificationStatus !== "APPROVED" && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-                    <ShieldAlert size={20} className="text-amber-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-amber-800 space-y-1">
-                        <p className="font-bold">Producer Profile Pending Verification</p>
+                <div className="bg-amber-50 border border-amber-200 rounded-3xl p-5 sm:p-6 flex items-start gap-4">
+                    <ShieldAlert size={24} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800 space-y-1.5 leading-relaxed">
+                        <p className="font-bold text-base">Producer Profile Pending Verification</p>
                         <p>
                             You can prepare, configure, and <strong>Save Drafts</strong> of all your produce listings. 
                             Once your farm profile is verified by platform compliance, you can submit your listings for Admin Quality Inspection.
@@ -518,25 +521,25 @@ function SubmitProduceContent() {
             )}
 
             {/* Main Form & Live Preview Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
                 {/* Left Column: Comprehensive Listing Form (7 cols) */}
-                <div className="lg:col-span-7 space-y-6">
+                <div className="lg:col-span-7 space-y-8">
                     {/* SECTION 1: Produce Identification */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <Tag size={18} className="text-[#1B4D28]" />
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
+                            <Tag size={20} className="text-[#1B4D28]" />
+                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                 1. Produce Identification
                             </h2>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
                                 <FieldLabel label="Produce Commodity" required error={errors.produceType} />
                                 <select
                                     value={form.produceType}
                                     onChange={(e) => update("produceType", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 >
                                     <option value="">Select produce commodity...</option>
                                     {PRODUCE_TYPES.map((type) => (
@@ -553,7 +556,7 @@ function SubmitProduceContent() {
                                     value={form.variety}
                                     onChange={(e) => update("variety", e.target.value)}
                                     disabled={!form.produceType}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] disabled:opacity-50"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white disabled:opacity-50 transition-all"
                                 >
                                     <option value="">
                                         {form.produceType ? "Select variety..." : "Choose produce first"}
@@ -574,30 +577,30 @@ function SubmitProduceContent() {
                                 value={form.title}
                                 onChange={(e) => update("title", e.target.value)}
                                 placeholder="e.g. Export Grade Abuja White Yam Tubers"
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                             />
-                            <p className="text-[11px] text-gray-400 mt-1">
+                            <p className="text-xs text-gray-500 mt-2 leading-relaxed">
                                 Clear, descriptive name visible to buyers on wholesale search results.
                             </p>
                         </div>
                     </div>
 
                     {/* SECTION 2: Quality & Condition */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <Sparkles size={18} className="text-[#1B4D28]" />
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
+                            <Sparkles size={20} className="text-[#1B4D28]" />
+                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                 2. Quality Grade & Physical Condition
                             </h2>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
                                 <FieldLabel label="Quality Grade" required error={errors.grade} />
                                 <select
                                     value={form.grade}
                                     onChange={(e) => update("grade", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 >
                                     {QUALITY_GRADES.map((g) => (
                                         <option key={g.value} value={g.value}>
@@ -612,7 +615,7 @@ function SubmitProduceContent() {
                                 <select
                                     value={form.condition}
                                     onChange={(e) => update("condition", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 >
                                     {CONDITIONS.map((c) => (
                                         <option key={c.value} value={c.value}>
@@ -628,23 +631,23 @@ function SubmitProduceContent() {
                             <textarea
                                 value={form.qualityNotes}
                                 onChange={(e) => update("qualityNotes", e.target.value)}
-                                rows={2}
+                                rows={3}
                                 placeholder="Describe crop cleanliness, moisture content estimate, sorting standard, or absence of chemical additives..."
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm font-normal text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                className="w-full bg-gray-50/80 border border-gray-200 rounded-xl p-4 text-sm sm:text-base font-normal text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white leading-relaxed transition-all"
                             />
                         </div>
                     </div>
 
                     {/* SECTION 3: Quantity, Packaging & Minimum Order Quantity (MOQ) */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <Package size={18} className="text-[#1B4D28]" />
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
+                            <Package size={20} className="text-[#1B4D28]" />
+                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                 3. Quantity, Packaging & Minimum Order (MOQ)
                             </h2>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
                                 <FieldLabel label="Available Quantity" required error={errors.quantity} />
                                 <input
@@ -653,7 +656,7 @@ function SubmitProduceContent() {
                                     value={form.quantity}
                                     onChange={(e) => update("quantity", e.target.value)}
                                     placeholder="e.g. 500"
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 />
                             </div>
 
@@ -662,7 +665,7 @@ function SubmitProduceContent() {
                                 <select
                                     value={form.unit}
                                     onChange={(e) => update("unit", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 >
                                     {UNITS.map((u) => (
                                         <option key={u.value} value={u.value}>
@@ -673,13 +676,13 @@ function SubmitProduceContent() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
                                 <FieldLabel label="Packaging Format" />
                                 <select
                                     value={form.packaging}
                                     onChange={(e) => update("packaging", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 >
                                     {PACKAGING_TYPES.map((pkg) => (
                                         <option key={pkg} value={pkg}>
@@ -696,15 +699,15 @@ function SubmitProduceContent() {
                                     value={form.packageSize}
                                     onChange={(e) => update("packageSize", e.target.value)}
                                     placeholder="e.g. 50kg bag, 100kg jute sack"
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 />
                             </div>
                         </div>
 
                         {/* MOQ Field */}
-                        <div className="bg-green-50/50 border border-green-200/60 rounded-2xl p-4 space-y-1">
+                        <div className="bg-green-50/60 border border-green-200/80 rounded-2xl p-5 sm:p-6 space-y-2.5">
                             <FieldLabel label="Minimum Order Quantity (MOQ)" required error={errors.moq} />
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3.5">
                                 <input
                                     type="number"
                                     min="1"
@@ -712,52 +715,52 @@ function SubmitProduceContent() {
                                     value={form.moq}
                                     onChange={(e) => update("moq", e.target.value)}
                                     placeholder="e.g. 5"
-                                    className="w-32 bg-white border border-green-300 rounded-xl px-3.5 py-2 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-36 bg-white border border-green-300 rounded-xl px-4 py-2.5 text-base font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
                                 />
-                                <span className="text-xs font-bold text-[#1B4D28]">
+                                <span className="text-sm font-bold text-[#1B4D28]">
                                     {form.unit || "units"} minimum order per buyer
                                 </span>
                             </div>
-                            <p className="text-[11px] text-gray-500 pt-1">
+                            <p className="text-xs text-gray-500 pt-1 leading-relaxed">
                                 Wholesale buyers cannot purchase below this quantity. Helps prevent micro-orders on bulk commodities.
                             </p>
                         </div>
                     </div>
 
                     {/* SECTION 4: Commercial Pricing */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <Tag size={18} className="text-[#1B4D28]" />
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
+                            <Tag size={20} className="text-[#1B4D28]" />
+                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                 4. Commercial Pricing
                             </h2>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
                             <div>
                                 <FieldLabel label={`Asking Price per ${form.unit || "unit"} (₦)`} required error={errors.askingPrice} />
                                 <div className="relative">
-                                    <span className="absolute left-3.5 top-2.5 text-sm font-bold text-gray-400">₦</span>
+                                    <span className="absolute left-4 top-3 sm:top-3.5 text-base font-bold text-gray-400">₦</span>
                                     <input
                                         type="number"
                                         min="1"
                                         value={form.askingPrice}
                                         onChange={(e) => update("askingPrice", e.target.value)}
                                         placeholder="e.g. 35000"
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-3.5 py-2.5 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                        className="w-full bg-gray-50/80 border border-gray-200 rounded-xl pl-9 pr-4 py-3 sm:py-3.5 text-base sm:text-lg font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                     />
                                 </div>
                             </div>
 
                             {/* Total Batch Estimated Value */}
-                            <div className="p-3.5 bg-gray-50 border border-gray-100 rounded-2xl">
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            <div className="p-4 sm:p-5 bg-gray-50 border border-gray-100 rounded-2xl space-y-1">
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                                     Total Lot Value (Gross)
                                 </p>
-                                <p className="text-lg font-black text-[#1B4D28] mt-0.5">
+                                <p className="text-xl sm:text-2xl font-black text-[#1B4D28]">
                                     ₦{totalEstimatedValue.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                                 </p>
-                                <p className="text-[10px] text-gray-500">
+                                <p className="text-xs text-gray-500">
                                     {form.quantity || 0} {form.unit || "units"} @ ₦{Number(form.askingPrice || 0).toLocaleString()}
                                 </p>
                             </div>
@@ -770,27 +773,27 @@ function SubmitProduceContent() {
                                 value={form.pricingNotes}
                                 onChange={(e) => update("pricingNotes", e.target.value)}
                                 placeholder="e.g. Farmgate pickup price; discounts available for full trailer orders (30 MT)."
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-normal text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-normal text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                             />
                         </div>
                     </div>
 
                     {/* SECTION 5: Availability & Harvest Schedule */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <Calendar size={18} className="text-[#1B4D28]" />
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
+                            <Calendar size={20} className="text-[#1B4D28]" />
+                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                 5. Availability & Harvest Schedule
                             </h2>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
                                 <FieldLabel label="Availability Status" required />
                                 <select
                                     value={form.availabilityStatus}
                                     onChange={(e) => update("availabilityStatus", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 >
                                     {AVAILABILITY_STATUSES.map((st) => (
                                         <option key={st.value} value={st.value}>
@@ -806,7 +809,7 @@ function SubmitProduceContent() {
                                     type="date"
                                     value={form.harvestDate}
                                     onChange={(e) => update("harvestDate", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 />
                             </div>
                         </div>
@@ -818,28 +821,28 @@ function SubmitProduceContent() {
                                     type="date"
                                     value={form.availableFrom}
                                     onChange={(e) => update("availableFrom", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 />
                             </div>
                         )}
                     </div>
 
                     {/* SECTION 6: Structured Farm Origin & Location */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <MapPin size={18} className="text-[#1B4D28]" />
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
+                            <MapPin size={20} className="text-[#1B4D28]" />
+                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                 6. Structured Farm Origin & Location
                             </h2>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
                                 <FieldLabel label="Farm State" required error={errors.farmState} />
                                 <select
                                     value={form.farmState}
                                     onChange={(e) => update("farmState", e.target.value)}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                    className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                 >
                                     {NIGERIAN_STATE_NAMES.map((st) => (
                                         <option key={st} value={st}>
@@ -855,7 +858,7 @@ function SubmitProduceContent() {
                                     <select
                                         value={form.farmLga}
                                         onChange={(e) => update("farmLga", e.target.value)}
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                        className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                     >
                                         {availableLgas.map((lga) => (
                                             <option key={lga} value={lga}>
@@ -869,7 +872,7 @@ function SubmitProduceContent() {
                                         value={form.farmLga}
                                         onChange={(e) => update("farmLga", e.target.value)}
                                         placeholder="Enter LGA"
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                        className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                                     />
                                 )}
                             </div>
@@ -882,16 +885,16 @@ function SubmitProduceContent() {
                                 value={form.farmCommunity}
                                 onChange={(e) => update("farmCommunity", e.target.value)}
                                 placeholder="e.g. Serti Village Farm Cluster, km 15 Bali Road"
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-normal text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-normal text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                             />
                         </div>
                     </div>
 
                     {/* SECTION 7: Storage & Handling Information */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <Warehouse size={18} className="text-[#1B4D28]" />
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
+                            <Warehouse size={20} className="text-[#1B4D28]" />
+                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                 7. Storage & Post-Harvest Handling
                             </h2>
                         </div>
@@ -901,7 +904,7 @@ function SubmitProduceContent() {
                             <select
                                 value={form.storageCondition}
                                 onChange={(e) => update("storageCondition", e.target.value)}
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                             >
                                 {STORAGE_CONDITIONS.map((cond) => (
                                     <option key={cond} value={cond}>
@@ -918,24 +921,24 @@ function SubmitProduceContent() {
                                 value={form.storageNotes}
                                 onChange={(e) => update("storageNotes", e.target.value)}
                                 placeholder="e.g. Fumigated with phostoxin 2 weeks ago; kept on wooden pallets off bare concrete."
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm font-normal text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                                className="w-full bg-gray-50/80 border border-gray-200 rounded-xl px-4 py-3 sm:py-3.5 text-sm sm:text-base font-normal text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white transition-all"
                             />
                         </div>
                     </div>
 
                     {/* SECTION 8: Product Media */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                            <div className="flex items-center gap-2">
-                                <Upload size={18} className="text-[#1B4D28]" />
-                                <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <Upload size={20} className="text-[#1B4D28]" />
+                                <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                     8. Produce Photography (Max 4)
                                 </h2>
                             </div>
-                            <span className="text-xs text-gray-400 font-semibold">{images.length}/4 uploaded</span>
+                            <span className="text-xs sm:text-sm text-gray-400 font-semibold">{images.length}/4 uploaded</span>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                             {images.map((img, idx) => (
                                 <div
                                     key={idx}
@@ -945,9 +948,9 @@ function SubmitProduceContent() {
                                     <button
                                         type="button"
                                         onClick={() => removeImage(idx)}
-                                        className="absolute top-2 right-2 w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                                        className="absolute top-2.5 right-2.5 w-7 h-7 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
                                     >
-                                        <X size={12} />
+                                        <X size={14} />
                                     </button>
                                 </div>
                             ))}
@@ -956,11 +959,11 @@ function SubmitProduceContent() {
                                 <button
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#1B4D28] bg-gray-50 hover:bg-green-50/50 flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                                    className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#1B4D28] bg-gray-50/80 hover:bg-green-50/50 flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer p-3"
                                 >
-                                    <Upload size={20} className="text-gray-400 group-hover:text-[#1B4D28]" />
-                                    <span className="text-[10px] font-bold text-gray-600">Add Photo</span>
-                                    <span className="text-[9px] text-gray-400">PNG, JPG &lt; 5MB</span>
+                                    <Upload size={22} className="text-gray-400 group-hover:text-[#1B4D28]" />
+                                    <span className="text-xs font-bold text-gray-600">Add Photo</span>
+                                    <span className="text-[10px] text-gray-400">PNG, JPG &lt; 5MB</span>
                                 </button>
                             )}
                         </div>
@@ -976,31 +979,31 @@ function SubmitProduceContent() {
                     </div>
 
                     {/* SECTION 9: Full Commodity Description */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-xs space-y-4">
-                        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                            <FileText size={18} className="text-[#1B4D28]" />
-                            <h2 className="text-sm font-black text-gray-900 uppercase tracking-wider">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-sm space-y-6">
+                        <div className="flex items-center gap-3 pb-3.5 border-b border-gray-100">
+                            <FileText size={20} className="text-[#1B4D28]" />
+                            <h2 className="text-sm sm:text-base font-black text-gray-900 uppercase tracking-wider">
                                 9. Commodity Description & Summary
                             </h2>
                         </div>
                         <textarea
                             value={form.description}
                             onChange={(e) => update("description", e.target.value)}
-                            rows={3}
+                            rows={4}
                             placeholder="Provide any additional background about your farming cooperative, harvest conditions, loading assistance, or delivery terms..."
-                            className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-sm font-normal text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#1B4D28]"
+                            className="w-full bg-gray-50/80 border border-gray-200 rounded-xl p-4 text-sm sm:text-base font-normal text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1B4D28] focus:bg-white leading-relaxed transition-all"
                         />
                     </div>
 
                     {/* Action Bar */}
-                    <div className="bg-white rounded-3xl border border-gray-200/80 p-6 shadow-md flex flex-col sm:flex-row items-center gap-4">
+                    <div className="bg-white rounded-3xl border border-gray-200/80 p-7 sm:p-9 shadow-md flex flex-col sm:flex-row items-center gap-5">
                         <button
                             type="button"
                             onClick={() => handleAction("DRAFT")}
                             disabled={isSavingDraft || isLoading}
-                            className="w-full sm:w-1/2 py-3.5 px-6 rounded-2xl border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-bold text-sm flex items-center justify-center gap-2 transition-all hover:bg-gray-50 cursor-pointer disabled:opacity-50"
+                            className="w-full sm:w-1/2 py-4 px-8 rounded-2xl border-2 border-gray-300 hover:border-gray-400 text-gray-700 font-bold text-base flex items-center justify-center gap-2.5 transition-all hover:bg-gray-50 cursor-pointer disabled:opacity-50"
                         >
-                            <Save size={16} />
+                            <Save size={18} />
                             <span>{isSavingDraft ? "Saving Draft..." : "Save Draft"}</span>
                         </button>
 
@@ -1008,22 +1011,22 @@ function SubmitProduceContent() {
                             type="button"
                             onClick={() => handleAction("SUBMIT")}
                             disabled={isSavingDraft || isLoading}
-                            className="w-full sm:w-1/2 py-3.5 px-6 rounded-2xl bg-[#1B4D28] hover:bg-[#153b1e] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-green-900/20 active:scale-[0.99] cursor-pointer disabled:opacity-50"
+                            className="w-full sm:w-1/2 py-4 px-8 rounded-2xl bg-[#1B4D28] hover:bg-[#153b1e] text-white font-bold text-base flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-green-900/20 active:scale-[0.99] cursor-pointer disabled:opacity-50"
                         >
-                            <Send size={16} />
+                            <Send size={18} />
                             <span>{isLoading ? "Submitting..." : "Submit for Admin Review"}</span>
                         </button>
                     </div>
                 </div>
 
                 {/* Right Column: Live Marketplace Commodity Preview Card (5 cols, sticky) */}
-                <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-4">
+                <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-5">
                     <div className="flex items-center justify-between px-1">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                            <Eye size={14} className="text-[#1B4D28]" />
+                        <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-gray-500 uppercase tracking-wider">
+                            <Eye size={16} className="text-[#1B4D28]" />
                             <span>Live Showroom Preview</span>
                         </div>
-                        <span className="text-[10px] font-bold bg-green-100 text-[#1B4D28] px-2 py-0.5 rounded-full">
+                        <span className="text-xs font-bold bg-green-100 text-[#1B4D28] px-3 py-1 rounded-full">
                             Updates in real time
                         </span>
                     </div>
@@ -1039,80 +1042,80 @@ function SubmitProduceContent() {
                                 className="object-cover"
                             />
                             {/* Tags overlay */}
-                            <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                                <span className="bg-[#1B4D28] text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                            <div className="absolute top-3.5 left-3.5 flex flex-wrap gap-2">
+                                <span className="bg-[#1B4D28] text-white text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
                                     {form.produceType || "Produce"}
                                 </span>
-                                <span className="bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                <span className="bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm">
                                     {form.grade}
                                 </span>
                             </div>
 
-                            <span className="absolute top-3 right-3 bg-emerald-600 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full shadow-sm">
+                            <span className="absolute top-3.5 right-3.5 bg-emerald-600 text-white text-[10px] font-extrabold px-3 py-1 rounded-full shadow-sm">
                                 {form.availabilityStatus === "AVAILABLE_NOW" ? "IN STOCK" : "UPCOMING"}
                             </span>
                         </div>
 
                         {/* Body Details */}
-                        <div className="p-5 space-y-3">
+                        <div className="p-6 sm:p-7 space-y-5">
                             <div>
-                                <h3 className="font-extrabold text-gray-900 text-lg leading-tight">
+                                <h3 className="font-extrabold text-gray-900 text-lg sm:text-xl leading-snug">
                                     {form.title || "Produce Listing Title"}
                                 </h3>
-                                <p className="text-xs text-[#1B4D28] font-bold mt-0.5">
+                                <p className="text-xs sm:text-sm text-[#1B4D28] font-bold mt-1">
                                     {farmName || "Your Farm / Cooperative"} • {form.farmState}, Nigeria
                                 </p>
                             </div>
 
                             {/* Key Specifications Badges */}
-                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100 text-xs">
-                                <div className="p-2 bg-gray-50 rounded-xl">
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Unit Price</p>
-                                    <p className="font-extrabold text-gray-900 text-sm">
+                            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-gray-100 text-xs sm:text-sm">
+                                <div className="p-3 bg-gray-50/90 rounded-2xl">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Unit Price</p>
+                                    <p className="font-extrabold text-gray-900 text-base mt-0.5">
                                         ₦{Number(form.askingPrice || 0).toLocaleString("en-NG")}
-                                        <span className="text-[10px] font-normal text-gray-500"> / {form.unit}</span>
+                                        <span className="text-xs font-normal text-gray-500"> / {form.unit}</span>
                                     </p>
                                 </div>
 
-                                <div className="p-2 bg-gray-50 rounded-xl">
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Available Stock</p>
-                                    <p className="font-extrabold text-[#1B4D28] text-sm">
+                                <div className="p-3 bg-gray-50/90 rounded-2xl">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Available Stock</p>
+                                    <p className="font-extrabold text-[#1B4D28] text-base mt-0.5">
                                         {Number(form.quantity || 0).toLocaleString()} {form.unit}
                                     </p>
                                 </div>
 
-                                <div className="p-2 bg-gray-50 rounded-xl">
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Minimum Order (MOQ)</p>
-                                    <p className="font-extrabold text-gray-800 text-xs">
+                                <div className="p-3 bg-gray-50/90 rounded-2xl">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Minimum Order (MOQ)</p>
+                                    <p className="font-extrabold text-gray-800 text-sm mt-0.5">
                                         {form.moq || 1} {form.unit}
                                     </p>
                                 </div>
 
-                                <div className="p-2 bg-gray-50 rounded-xl">
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Packaging Format</p>
-                                    <p className="font-bold text-gray-800 text-xs truncate">
+                                <div className="p-3 bg-gray-50/90 rounded-2xl">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Packaging Format</p>
+                                    <p className="font-bold text-gray-800 text-xs sm:text-sm truncate mt-0.5">
                                         {form.packaging}
                                     </p>
                                 </div>
                             </div>
 
                             {/* Total Batch Est */}
-                            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs">
+                            <div className="p-4 sm:p-5 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between">
                                 <div>
-                                    <p className="text-[9px] font-bold text-emerald-800 uppercase tracking-wider">Estimated Lot Value</p>
-                                    <p className="font-black text-emerald-900 text-sm">
+                                    <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Estimated Lot Value</p>
+                                    <p className="font-black text-emerald-900 text-base sm:text-lg mt-0.5">
                                         ₦{totalEstimatedValue.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                                     </p>
                                 </div>
-                                <span className="text-[10px] font-bold text-emerald-700 bg-white px-2.5 py-1 rounded-full border border-emerald-200">
+                                <span className="text-xs font-bold text-emerald-700 bg-white px-3 py-1.5 rounded-full border border-emerald-200">
                                     {form.condition}
                                 </span>
                             </div>
 
                             {/* Review Process Explanation */}
-                            <div className="text-[11px] text-gray-400 p-3 bg-gray-50 rounded-2xl space-y-1">
-                                <p className="font-bold text-gray-600 flex items-center gap-1">
-                                    <ShieldCheck size={13} className="text-[#1B4D28]" />
+                            <div className="text-xs text-gray-500 p-4 sm:p-5 bg-gray-50 rounded-2xl space-y-1.5 leading-relaxed">
+                                <p className="font-bold text-gray-700 flex items-center gap-1.5 text-xs sm:text-sm">
+                                    <ShieldCheck size={16} className="text-[#1B4D28]" />
                                     Institutional Quality Moderation
                                 </p>
                                 <p>

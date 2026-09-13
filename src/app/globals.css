@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
+/* ─── Geist Font Definition ──────────────────────────────────────────────── */
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist/Geist-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist/Geist-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* ─── Lock to light mode — ignore OS/browser dark mode preference ─────────── */
 :root {
   color-scheme: light !important;
@@ -10,7 +27,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-geist-sans), 'Geist', sans-serif;
   --font-mono: var(--font-geist-mono);
   --font-handwriting: var(--font-caveat);
 

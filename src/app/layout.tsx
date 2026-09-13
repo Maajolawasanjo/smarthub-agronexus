@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Caveat } from "next/font/google";
+import localFont from "next/font/local";
+import { Geist_Mono, Caveat } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
 import { UserProvider } from "@/context/UserContext";
 import { LocalizationProvider } from "@/context/LocalizationContext";
@@ -8,10 +9,19 @@ import { SearchProvider } from "@/context/SearchContext";
 import { ProduceProvider } from "@/context/ProduceContext";
 import "./globals.css";
 
-
-const geistSans = Geist({
+const geistSans = localFont({
+  src: [
+    {
+      path: "./fonts/Geist/Geist-VariableFont_wght.ttf",
+      style: "normal",
+    },
+    {
+      path: "./fonts/Geist/Geist-Italic-VariableFont_wght.ttf",
+      style: "italic",
+    },
+  ],
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
