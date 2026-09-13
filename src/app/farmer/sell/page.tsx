@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
     ChevronLeft,
     ChevronDown,
@@ -9,6 +9,9 @@ import {
     Upload,
     X,
     AlertCircle,
+    ShieldAlert,
+    Clock,
+    ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -104,6 +107,33 @@ export default function SubmitProducePage() {
     const [touched, setTouched] = useState<Partial<Record<keyof FormErrors, boolean>>>({});
     const [images, setImages] = useState<string[]>([]);  // base64 previews
     const [isLoading, setIsLoading] = useState(false);
+    const [checkingVerification, setCheckingVerification] = useState(true);
+    const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+    const [farmName, setFarmName] = useState<string>("");
+
+    useEffect(() => {
+        let isMounted = true;
+        async function fetchFarmerStatus() {
+            try {
+                const res = await fetch("/api/farmer/dashboard");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (isMounted) {
+                        setVerificationStatus(data.farmerProfile?.verificationStatus || "PENDING");
+                        setFarmName(data.farmerProfile?.farmName || "Your Farm");
+                    }
+                }
+            } catch (err) {
+                console.error("Error checking farmer status:", err);
+            } finally {
+                if (isMounted) setCheckingVerification(false);
+            }
+        }
+        fetchFarmerStatus();
+        return () => {
+            isMounted = false;
+        };
+    }, []);
 
     const update = (field: keyof FormState, value: string) => {
         const next = { ...form, [field]: value };
@@ -207,6 +237,63 @@ export default function SubmitProducePage() {
     );
 
     const varietyOptions = form.produceType ? VARIETIES[form.produceType] || [] : [];
+
+    if (checkingVerification) {
+        return (
+            <div className="max-w-2xl mx-auto py-24 px-4 text-center">
+                <div className="inline-flex items-center gap-3 bg-white px-6 py-4 rounded-2xl border border-gray-100 shadow-sm text-gray-600">
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#1B4D28] border-t-transparent"></div>
+                    <span className="text-sm font-medium">Verifying producer credentials...</span>
+                </div>
+            </div>
+        );
+    }
+
+    if (verificationStatus !== "APPROVED") {
+        return (
+            <div className="max-w-2xl mx-auto py-12 px-4">
+                <div className="bg-white rounded-3xl p-8 md:p-10 border border-amber-200 shadow-xl text-center space-y-6">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200 shadow-sm">
+                        <ShieldAlert size={32} />
+                    </div>
+                    <div className="space-y-2">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-300">
+                            <Clock size={13} />
+                            <span>{verificationStatus === "REJECTED" ? "Verification Rejected" : "Verification Required"}</span>
+                        </span>
+                        <h1 className="text-2xl font-bold text-gray-900 mt-2">
+                            Producer Verification Required to List Produce
+                        </h1>
+                        <p className="text-sm text-gray-600 max-w-lg mx-auto leading-relaxed">
+                            To protect wholesale buyers and maintain export quality standards on SmartHub AgroChain, all farmers must be verified by platform administration before publishing harvest produce.
+                        </p>
+                    </div>
+
+                    <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-5 text-left text-xs text-amber-950 space-y-2 max-w-md mx-auto">
+                        <p className="font-bold text-amber-900 uppercase tracking-wider text-[11px]">Farm Profile Status</p>
+                        <p>• Enterprise: <strong className="text-gray-900">{farmName}</strong></p>
+                        <p>• Verification: <strong className="text-amber-800">{verificationStatus || "Pending Review"}</strong></p>
+                        <p>• Policy: <strong>Produce listing is locked until approved by a platform administrator.</strong></p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                        <Link
+                            href="/farmer/kyc"
+                            className="w-full sm:w-auto px-6 py-3 bg-[#1B4D28] hover:bg-[#143d20] text-white text-xs font-bold rounded-full transition-all shadow-md"
+                        >
+                            Upload / View KYC Verification
+                        </Link>
+                        <Link
+                            href="/farmer"
+                            className="w-full sm:w-auto px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-full transition-all"
+                        >
+                            Return to Dashboard
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-5xl mx-auto pb-12">
