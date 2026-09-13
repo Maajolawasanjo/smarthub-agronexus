@@ -5,9 +5,22 @@ import Link from "next/link";
 
 interface SubmitFarmProduceProps {
     isVerified?: boolean;
+    loading?: boolean;
 }
 
-export function SubmitFarmProduce({ isVerified = true }: SubmitFarmProduceProps) {
+export function SubmitFarmProduce({ isVerified = false, loading = false }: SubmitFarmProduceProps) {
+    if (loading) {
+        return (
+            <div className="bg-[#1B4D28]/70 rounded-xl p-5 flex items-center justify-between gap-4 animate-pulse">
+                <div className="space-y-2">
+                    <div className="h-4 w-36 bg-white/20 rounded"></div>
+                    <div className="h-3 w-52 bg-white/10 rounded"></div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-white/20"></div>
+            </div>
+        );
+    }
+
     if (!isVerified) {
         return (
             <Link

@@ -42,7 +42,7 @@ export async function GET() {
             farmAddress: "Administrative Demonstration Facility",
             state: "Lagos",
             lga: "Ikeja",
-            verificationStatus: "APPROVED",
+            verificationStatus: "PENDING",
           },
           include: {
             verification: true,

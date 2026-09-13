@@ -73,16 +73,29 @@ export default function FarmerOverviewPage() {
             FARMER COMMAND CENTER
           </span>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight mt-1">
-            {farmerData?.farmerProfile?.farmName || "Your Farm Cluster"}
+            {loading && !farmerData ? (
+              <span className="inline-block h-8 w-48 bg-white/20 rounded-lg animate-pulse"></span>
+            ) : (
+              farmerData?.farmerProfile?.farmName || "Your Farm Cluster"
+            )}
           </h1>
           <p className="text-xs text-green-200/80 font-serif italic mt-0.5">
-            {farmerData?.farmerProfile?.farmAddress || "Location Stated"} •{" "}
-            {isVerified ? "KYC Approved & Verified" : "Verification Pending Admin Review"}
+            {loading && !farmerData ? (
+              <span className="inline-block h-4 w-60 bg-white/10 rounded animate-pulse"></span>
+            ) : (
+              `${farmerData?.farmerProfile?.farmAddress || "Location Stated"} • ${
+                isVerified ? "KYC Approved & Verified" : "Verification Pending Admin Review"
+              }`
+            )}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {isVerified ? (
+          {loading && !farmerData ? (
+            <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-mono bg-white/10 text-white/70 animate-pulse">
+              Checking status...
+            </span>
+          ) : isVerified ? (
             <span className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold font-mono bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-sm">
               <ShieldCheck className="w-4 h-4 text-emerald-700" />
               <span>VERIFIED PRODUCER</span>
@@ -97,7 +110,7 @@ export default function FarmerOverviewPage() {
       </div>
 
       {/* Pending Verification Notice */}
-      {!isVerified && (
+      {!loading && farmerData && !isVerified && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-amber-100 rounded-xl text-amber-700 flex-shrink-0">
@@ -135,7 +148,7 @@ export default function FarmerOverviewPage() {
       {/* Main content split */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <div className="flex flex-col gap-5">
-          <SubmitFarmProduce isVerified={isVerified} />
+          <SubmitFarmProduce isVerified={isVerified} loading={loading && !farmerData} />
           <FieldAgent profileCompletion={farmerData?.profileCompletion} />
           <RecentSubmit
             submissions={submissions.map((s) => ({
