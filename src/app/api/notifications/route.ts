@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { getSharedSession, AuthRealm } from "@/lib/session";
 import {
   getNotificationDTO,
   markNotificationAsRead,
@@ -8,8 +8,12 @@ import {
 
 export async function GET(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
+    const auth = await getSharedSession(req, [
+      AuthRealm.ADMIN,
+      AuthRealm.FARMER,
+      AuthRealm.BUYER,
+    ]);
+    if (!auth) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     }
 
@@ -17,7 +21,7 @@ export async function GET(req: Request) {
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
 
-    const dto = await getNotificationDTO(session.userId, page, limit);
+    const dto = await getNotificationDTO(auth.userId, page, limit);
     return NextResponse.json(dto);
   } catch (error) {
     console.error("Error fetching notification DTO:", error);
@@ -30,8 +34,12 @@ export async function GET(req: Request) {
 
 export async function PUT(req: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
+    const auth = await getSharedSession(req, [
+      AuthRealm.ADMIN,
+      AuthRealm.FARMER,
+      AuthRealm.BUYER,
+    ]);
+    if (!auth) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     }
 
@@ -39,20 +47,20 @@ export async function PUT(req: Request) {
     const { notificationId, markAll } = body;
 
     if (markAll) {
-      await markAllNotificationsAsRead(session.userId);
+      await markAllNotificationsAsRead(auth.userId);
       return NextResponse.json({ message: "All notifications marked as read." });
     }
 
-    if (notificationId) {
-      await markNotificationAsRead(session.userId, notificationId);
-      return NextResponse.json({ message: "Notification marked as read." });
+    if (!notificationId) {
+      return NextResponse.json({ error: "notificationId is required." }, { status: 400 });
     }
 
-    return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
+    const updated = await markNotificationAsRead(notificationId, auth.userId);
+    return NextResponse.json(updated);
   } catch (error) {
-    console.error("Error updating notifications:", error);
+    console.error("Error marking notification as read:", error);
     return NextResponse.json(
-      { error: "Internal server error updating notification state." },
+      { error: "Internal server error updating notification." },
       { status: 500 }
     );
   }

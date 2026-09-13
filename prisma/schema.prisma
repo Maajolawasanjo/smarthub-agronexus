@@ -28,6 +28,7 @@ model User {
   wallet                Wallet?
   addresses             BuyerAddress[]
   moderatedProducts     Product[]        @relation("ProductModerator")
+  sessions              Session[]
 }
 
 model FarmerProfile {
@@ -565,5 +566,31 @@ model UserPreferences {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum AuthRealm {
+  ADMIN
+  FARMER
+  BUYER
+}
+
+model Session {
+  id           String     @id @default(cuid())
+  vaultId      String
+  userId       String
+  realm        AuthRealm
+  tokenHash    String     @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([vaultId, realm])
+  @@index([expiresAt])
+  @@index([userId, revokedAt])
 }
 

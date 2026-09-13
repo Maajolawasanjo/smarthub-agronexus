@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { getSharedSession, AuthRealm } from "@/lib/session";
 import { WalletService } from "@/services/wallet.service";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
@@ -8,8 +8,28 @@ import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 export async function POST(req: Request) {
   const traceCtx = createTraceContext(req);
   try {
-    const session = await getSession();
-    if (!session?.userId) {
+    // 1. CSRF Layer: Verify Origin on state-changing financial mutation
+    const origin = req.headers.get("origin");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (origin && appUrl) {
+      try {
+        const originHost = new URL(origin).host;
+        const appHost = new URL(appUrl).host;
+        if (originHost !== appHost && !originHost.includes("localhost")) {
+          const res = NextResponse.json(
+            createErrorResponse("FORBIDDEN", "Cross-origin financial mutations are prohibited."),
+            { status: 403 }
+          );
+          return attachTraceHeaders(res, traceCtx);
+        }
+      } catch {
+        // malformed origin header
+      }
+    }
+
+    // 2. Authoritative Multi-Realm Session Verification
+    const auth = await getSharedSession(req, [AuthRealm.FARMER, AuthRealm.BUYER]);
+    if (!auth?.userId) {
       const res = NextResponse.json(
         createErrorResponse("UNAUTHORIZED", "Authentication required to initiate withdrawal."),
         { status: 401 }
@@ -30,7 +50,8 @@ export async function POST(req: Request) {
       return attachTraceHeaders(res, traceCtx);
     }
 
-    const result = await WalletService.executeWithdrawal(session.userId, withdrawAmount, bankAccountId);
+    // 3. Strict Financial Invariant: Identity derived strictly from server-verified auth.userId
+    const result = await WalletService.executeWithdrawal(auth.userId, withdrawAmount, bankAccountId);
 
     const res = NextResponse.json(
       createSuccessResponse({

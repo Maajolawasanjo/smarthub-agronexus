@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { getSharedSession, AuthRealm } from "@/lib/session";
 import { WalletService } from "@/services/wallet.service";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
@@ -8,8 +8,8 @@ import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 export async function GET(req: Request) {
   const traceCtx = createTraceContext(req);
   try {
-    const session = await getSession();
-    if (!session?.userId) {
+    const auth = await getSharedSession(req, [AuthRealm.FARMER, AuthRealm.BUYER]);
+    if (!auth?.userId) {
       const res = NextResponse.json(
         createErrorResponse("UNAUTHORIZED", "Authentication required to access wallet data."),
         { status: 401 }
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
       return attachTraceHeaders(res, traceCtx);
     }
 
-    const walletPageData = await WalletService.getWalletPageData(session.userId);
+    const walletPageData = await WalletService.getWalletPageData(auth.userId);
     const res = NextResponse.json(createSuccessResponse(walletPageData));
     return attachTraceHeaders(res, traceCtx);
   } catch (err: any) {

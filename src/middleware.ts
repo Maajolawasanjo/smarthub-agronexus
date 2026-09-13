@@ -1,20 +1,32 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const SESSION_COOKIE_NAME = "smarthub_session";
+// ============================================================================
+// MULTI-REALM EDGE ROUTING & PRESENCE GATE (V4.1-FINAL-CORRECTED)
+// Model A: Independent Authenticated Role Contexts within a Shared Browser Origin
+//
+// Middleware is an EARLY ROUTING/PRESENCE GATE.
+// It is NOT the authoritative authentication layer.
+// Node.js server handlers and API routes read HttpOnly cookies directly
+// and execute authoritative PostgreSQL Session verification.
+// ============================================================================
 
-interface SessionPayload {
+const VAULT_COOKIE_NAME = "smarthub_vault_id";
+const LEGACY_SESSION_COOKIE_NAME = "smarthub_session";
+
+const REALM_COOKIE_NAMES = {
+  ADMIN: "smarthub_admin_token",
+  FARMER: "smarthub_farmer_token",
+  BUYER: "smarthub_buyer_token",
+} as const;
+
+interface LegacyPayload {
   userId: string;
   email: string;
   role: "BUYER" | "FARMER" | "ADMIN";
   exp: number;
 }
 
-/**
- * Decode a base64url string to a Uint8Array (Edge Runtime compatible).
- * Uses explicit new ArrayBuffer() so the result is typed as Uint8Array<ArrayBuffer>
- * (not Uint8Array<ArrayBufferLike>), which satisfies SubtleCrypto's BufferSource param.
- */
 function base64urlDecode(value: string): Uint8Array<ArrayBuffer> {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, "=");
@@ -27,12 +39,7 @@ function base64urlDecode(value: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-/**
- * Verify JWT signature using Web Crypto SubtleCrypto (HMAC-SHA256).
- * Compatible with Next.js Edge Runtime — no Node.js crypto required.
- * Returns the verified payload, or null if signature/expiry is invalid.
- */
-async function verifyEdgeSessionToken(token: string): Promise<SessionPayload | null> {
+async function verifyEdgeLegacyToken(token: string): Promise<LegacyPayload | null> {
   try {
     const secret = process.env.JWT_SECRET;
     if (!secret) return null;
@@ -41,7 +48,6 @@ async function verifyEdgeSessionToken(token: string): Promise<SessionPayload | n
     if (parts.length !== 3) return null;
     const [header, body, signature] = parts;
 
-    // Import key for HMAC-SHA256 verification
     const keyMaterial = new TextEncoder().encode(secret);
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
@@ -51,20 +57,15 @@ async function verifyEdgeSessionToken(token: string): Promise<SessionPayload | n
       ["verify"]
     );
 
-    // Verify the signature against header.body
     const signedData = new TextEncoder().encode(`${header}.${body}`);
     const signatureBytes = base64urlDecode(signature);
     const isValid = await crypto.subtle.verify("HMAC", cryptoKey, signatureBytes, signedData);
 
-    if (!isValid) {
-      return null; // Forged or tampered token — reject immediately
-    }
+    if (!isValid) return null;
 
-    // Decode verified payload
     const payloadJson = new TextDecoder().decode(base64urlDecode(body));
-    const payload: SessionPayload = JSON.parse(payloadJson);
+    const payload: LegacyPayload = JSON.parse(payloadJson);
 
-    // Check expiry
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
       return null;
     }
@@ -78,99 +79,140 @@ async function verifyEdgeSessionToken(token: string): Promise<SessionPayload | n
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 1. Prepare Response with Security Headers
-  const response = NextResponse.next();
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set("X-XSS-Protection", "1; mode=block");
-
-  const isDashboardRoute = pathname.startsWith("/dashboard");
-  const isFarmerRoute = pathname.startsWith("/farmer");
-  const isAdminRoute = pathname.startsWith("/admin") && pathname !== "/admin/login";
-  const isAdminApi = pathname.startsWith("/api/admin");
-  const isFarmerApi = pathname.startsWith("/api/farmer");
-
-  if (!isDashboardRoute && !isFarmerRoute && !isAdminRoute && !isAdminApi && !isFarmerApi) {
-    return response;
+  // 1. Sanitize incoming request headers: Strip untrusted client-supplied internal headers
+  const requestHeaders = new Headers(req.headers);
+  for (const key of Array.from(requestHeaders.keys())) {
+    if (key.toLowerCase().startsWith("x-internal-auth")) {
+      requestHeaders.delete(key);
+    }
   }
 
-  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
-  // Use cryptographic verification — never trust a token without checking the signature
-  const session = token ? await verifyEdgeSessionToken(token) : null;
+  // 2. Classify Dedicated Route Realms
+  const isAdminApi = pathname.startsWith("/api/admin");
+  const isFarmerApi = pathname.startsWith("/api/farmer");
+  const isBuyerApi = pathname.startsWith("/api/buyer");
 
-  const isApiRequest = isAdminApi || isFarmerApi;
+  const isAdminPage = pathname.startsWith("/admin") && pathname !== "/admin/login";
+  const isFarmerPage = pathname.startsWith("/farmer");
+  const isBuyerPage = pathname.startsWith("/dashboard");
 
-  if (!session) {
-    if (isApiRequest) {
-      return NextResponse.json(
+  let requiredRealm: "ADMIN" | "FARMER" | "BUYER" | null = null;
+  let isApiRoute = false;
+
+  if (isAdminApi || isAdminPage) {
+    requiredRealm = "ADMIN";
+    isApiRoute = isAdminApi;
+  } else if (isFarmerApi || isFarmerPage) {
+    requiredRealm = "FARMER";
+    isApiRoute = isFarmerApi;
+  } else if (isBuyerApi || isBuyerPage) {
+    requiredRealm = "BUYER";
+    isApiRoute = isBuyerApi;
+  }
+
+  const attachSecurityHeaders = (res: NextResponse) => {
+    res.headers.set("X-Frame-Options", "DENY");
+    res.headers.set("X-Content-Type-Options", "nosniff");
+    res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.headers.set("X-XSS-Protection", "1; mode=block");
+    return res;
+  };
+
+  // If public or shared route, proceed with sanitized headers
+  if (!requiredRealm) {
+    return attachSecurityHeaders(NextResponse.next({ request: { headers: requestHeaders } }));
+  }
+
+  // 3. Check for realm cookie presence
+  const targetCookieName = REALM_COOKIE_NAMES[requiredRealm];
+  const realmToken = req.cookies.get(targetCookieName)?.value;
+  const legacyToken = req.cookies.get(LEGACY_SESSION_COOKIE_NAME)?.value;
+
+  // If realm token exists for the required realm, proceed to Node.js handler
+  if (realmToken) {
+    requestHeaders.set("x-internal-auth-realm", requiredRealm);
+    const vaultId = req.cookies.get(VAULT_COOKIE_NAME)?.value;
+    if (vaultId) requestHeaders.set("x-internal-auth-vault-id", vaultId);
+
+    return attachSecurityHeaders(
+      NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      })
+    );
+  }
+
+  // If no realm token, check legacy token for rolling migration support
+  if (legacyToken) {
+    const legacySession = await verifyEdgeLegacyToken(legacyToken);
+    if (legacySession) {
+      const legacyRole = legacySession.role?.toUpperCase();
+
+      // Role check for legacy token
+      let isAuthorized = false;
+      if (requiredRealm === "ADMIN") {
+        isAuthorized = legacyRole === "ADMIN";
+      } else if (requiredRealm === "FARMER") {
+        isAuthorized = legacyRole === "FARMER" || legacyRole === "ADMIN";
+      } else if (requiredRealm === "BUYER") {
+        isAuthorized = legacyRole === "BUYER";
+      }
+
+      if (!isAuthorized) {
+        if (isApiRoute) {
+          return attachSecurityHeaders(
+            NextResponse.json(
+              {
+                success: false,
+                error: {
+                  code: "FORBIDDEN",
+                  message: `Privileges for ${requiredRealm.toLowerCase()} required.`,
+                },
+              },
+              { status: 403 }
+            )
+          );
+        }
+
+        // Page redirects for legacy role mismatch
+        if (legacyRole === "BUYER") return attachSecurityHeaders(NextResponse.redirect(new URL("/dashboard", req.url)));
+        if (legacyRole === "FARMER") return attachSecurityHeaders(NextResponse.redirect(new URL("/farmer", req.url)));
+        if (legacyRole === "ADMIN") return attachSecurityHeaders(NextResponse.redirect(new URL("/admin/overview", req.url)));
+        return attachSecurityHeaders(NextResponse.redirect(new URL("/login", req.url)));
+      }
+
+      requestHeaders.set("x-internal-auth-realm", requiredRealm);
+      return attachSecurityHeaders(
+        NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        })
+      );
+    }
+  }
+
+  // 4. Missing or invalid credential: 401 or redirect
+  if (isApiRoute) {
+    return attachSecurityHeaders(
+      NextResponse.json(
         {
           success: false,
           error: {
             code: "UNAUTHORIZED",
-            message: "Authentication required to access this resource.",
+            message: `Authentication required for ${requiredRealm.toLowerCase()} portal.`,
           },
         },
         { status: 401 }
-      );
-    }
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
+      )
+    );
   }
 
-  const userRole = session.role?.toUpperCase();
-
-  // Role-Based Authorization Enforcement & Portal Isolation
-  if (isAdminApi) {
-    if (userRole !== "ADMIN") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "FORBIDDEN",
-            message: "Administrative privileges required.",
-          },
-        },
-        { status: 403 }
-      );
-    }
-  }
-
-  if (isFarmerApi) {
-    if (userRole !== "FARMER" && userRole !== "ADMIN") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "FORBIDDEN",
-            message: "Farmer merchant privileges required.",
-          },
-        },
-        { status: 403 }
-      );
-    }
-  }
-
-  if (isFarmerRoute) {
-    if (userRole === "BUYER") return NextResponse.redirect(new URL("/dashboard", req.url));
-    if (userRole === "ADMIN") return NextResponse.redirect(new URL("/admin/overview", req.url));
-    if (userRole !== "FARMER") return NextResponse.redirect(new URL("/login", req.url));
-  }
-
-  if (isDashboardRoute) {
-    if (userRole === "FARMER") return NextResponse.redirect(new URL("/farmer", req.url));
-    if (userRole === "ADMIN") return NextResponse.redirect(new URL("/admin/overview", req.url));
-    if (userRole !== "BUYER") return NextResponse.redirect(new URL("/login", req.url));
-  }
-
-  if (isAdminRoute && userRole !== "ADMIN") {
-    if (userRole === "FARMER") return NextResponse.redirect(new URL("/farmer", req.url));
-    if (userRole === "BUYER") return NextResponse.redirect(new URL("/dashboard", req.url));
-    return NextResponse.redirect(new URL("/login", req.url));
-  }
-
-  return response;
+  const redirectPath = requiredRealm === "ADMIN" ? "/admin/login" : "/login";
+  const loginUrl = new URL(redirectPath, req.url);
+  loginUrl.searchParams.set("redirect", pathname);
+  return attachSecurityHeaders(NextResponse.redirect(loginUrl));
 }
 
 export const config = {
@@ -180,6 +222,6 @@ export const config = {
     "/admin/:path*",
     "/api/admin/:path*",
     "/api/farmer/:path*",
+    "/api/buyer/:path*",
   ],
 };
-
