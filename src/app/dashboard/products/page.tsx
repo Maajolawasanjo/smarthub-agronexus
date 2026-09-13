@@ -204,6 +204,13 @@ export default function DashboardProductsPage() {
                                                 {product.inventory.stockStatus.replace("_", " ")}
                                             </div>
 
+                                            {/* Quality Grade Badge */}
+                                            {product.grade && (
+                                                <span className="absolute top-3 right-3 z-10 bg-blue-600/95 backdrop-blur-md text-white text-[9px] font-bold px-2.5 py-1 rounded-full shadow-sm border border-white/20">
+                                                    {product.grade}
+                                                </span>
+                                            )}
+
                                             <Image
                                                 src={product.primaryImage}
                                                 alt={product.name}
@@ -233,6 +240,28 @@ export default function DashboardProductsPage() {
                                                 <div className="flex items-center gap-1 text-gray-500 text-xs mt-1 font-medium">
                                                     <MapPin size={13} className="text-gray-400 shrink-0" />
                                                     <span>{product.farmer.farmName} • {product.farmer.state}</span>
+                                                </div>
+
+                                                {/* Product Description */}
+                                                <p className="text-gray-600 text-xs leading-relaxed mt-2.5 line-clamp-2 font-normal">
+                                                    {product.description || "Freshly harvested export-grade commodity sourced directly from verified cooperative farms."}
+                                                </p>
+
+                                                {/* Commercial Specifications */}
+                                                <div className="flex items-center gap-2 mt-3 flex-wrap">
+                                                    <span className="bg-[#EEF2EE] text-[#1B4D28] text-[10px] font-bold px-2.5 py-0.5 rounded-md border border-green-200/60">
+                                                        MOQ: {product.moq || 1} {product.unit}s
+                                                    </span>
+                                                    {product.grade && (
+                                                        <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2.5 py-0.5 rounded-md border border-blue-200/60">
+                                                            {product.grade}
+                                                        </span>
+                                                    )}
+                                                    {product.packaging && (
+                                                        <span className="bg-gray-100 text-gray-700 text-[10px] font-medium px-2 py-0.5 rounded-md">
+                                                            {product.packaging}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -278,9 +307,9 @@ export default function DashboardProductsPage() {
                                                         brand: product.farmer.farmName,
                                                         farmerProfileId: product.farmer.id,
                                                         farmerName: product.farmer.farmName,
-                                                        moq: `1 ${product.unit}`,
-                                                        grade: "Grade A",
-                                                        packaging: "Export Bags",
+                                                        moq: product.moq ? `${product.moq} ${product.unit}s` : `1 ${product.unit}`,
+                                                        grade: product.grade || "Grade A",
+                                                        packaging: product.packaging || "Export Bags",
                                                     });
                                                     toast(`${product.name} added to cart!`, "success");
                                                 }}
