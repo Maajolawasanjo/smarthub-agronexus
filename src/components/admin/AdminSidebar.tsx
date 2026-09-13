@@ -18,6 +18,7 @@ import {
     ShieldAlert,
     FileCheck,
     History,
+    Tractor,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -34,6 +35,7 @@ const menuItems = [
     { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
     { name: "Disputes & Escrow", href: "/admin/disputes", icon: ShieldAlert },
     { name: "KYC Verifications", href: "/admin/verifications", icon: FileCheck },
+    { name: "Farmers", href: "/admin/farmers", icon: Tractor },
     { name: "Users", href: "/admin/users", icon: Users },
     { name: "Analytics", href: "/admin/analytics", icon: BarChart2 },
     { name: "Audit Trail", href: "/admin/audit-logs", icon: History },
