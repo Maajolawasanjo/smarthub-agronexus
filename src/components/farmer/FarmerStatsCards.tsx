@@ -1,6 +1,6 @@
 "use client";
 
-import { RefreshCw, CheckCircle, Wallet, TrendingUp, ArrowRight } from "lucide-react";
+import { RefreshCw, CheckCircle, Wallet, TrendingUp, ArrowRight, Package, Layers } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,8 @@ interface FarmerStatsProps {
     activeOrders?: number;
     revenue?: number;
     totalSales?: number;
+    totalProducts?: number;
+    totalAvailableQty?: number;
     loading?: boolean;
 }
 
@@ -17,6 +19,8 @@ export function FarmerStatsCards({
     activeOrders = 0,
     revenue = 0,
     totalSales = 0,
+    totalProducts = 0,
+    totalAvailableQty = 0,
     loading = false,
 }: FarmerStatsProps) {
     const formattedRevenue = `₦${Number(revenue).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
@@ -54,11 +58,26 @@ export function FarmerStatsCards({
             bgColor: "bg-blue-50",
             action: { label: "View Analytics", href: "/farmer/analytics" },
         },
+        {
+            label: "Active Listings",
+            value: totalProducts.toString().padStart(2, "0"),
+            icon: Package,
+            iconColor: "text-purple-600",
+            bgColor: "bg-purple-50",
+            action: { label: "Manage Listings", href: "/farmer/listings" },
+        },
+        {
+            label: "Stock Available",
+            value: `${totalAvailableQty.toLocaleString()} Units`,
+            icon: Layers,
+            iconColor: "text-teal-600",
+            bgColor: "bg-teal-50",
+            action: { label: "Add Produce", href: "/farmer/sell" },
+        },
     ];
 
-
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-sans">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 font-sans">
             {stats.map((stat) => {
                 const Icon = stat.icon;
                 return (

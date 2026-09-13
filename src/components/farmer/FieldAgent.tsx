@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { Phone } from "lucide-react";
+import Link from "next/link";
+import { Phone, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
 
-// WhatsApp icon as SVG (not in lucide-react by default)
+// WhatsApp icon as SVG
 function WhatsAppIcon({ size = 20 }: { size?: number }) {
     return (
         <svg
@@ -18,46 +19,104 @@ function WhatsAppIcon({ size = 20 }: { size?: number }) {
     );
 }
 
-export function FieldAgent() {
+interface FieldAgentProps {
+    profileCompletion?: {
+        percentage: number;
+        completedFields: string[];
+        missingFields: string[];
+        recommendedNextAction: string;
+    };
+}
+
+export function FieldAgent({ profileCompletion }: FieldAgentProps) {
+    const percentage = profileCompletion?.percentage ?? 100;
+    const hasPendingFields = (profileCompletion?.missingFields?.length ?? 0) > 0;
+
     return (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                Your Field Agent
-            </p>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-4">
+            {/* Top: Field Support Desk */}
+            <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
+                    Field Agent & Agronomy Support
+                </p>
 
-            <div className="flex items-center justify-between gap-3">
-                {/* Agent info */}
-                <div className="flex items-center gap-3">
-                    <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-green-100 flex-shrink-0">
-                        <Image
-                            src="/avatar-3.png"
-                            alt="Ade Olayinka"
-                            fill
-                            className="object-cover"
-                        />
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-green-100 flex-shrink-0">
+                            <Image
+                                src="/avatar-3.png"
+                                alt="Ade Olayinka"
+                                fill
+                                className="object-cover"
+                            />
+                        </div>
+                        <div>
+                            <p className="text-sm font-semibold text-gray-800">Ade Olayinka</p>
+                            <p className="text-xs text-gray-400">Assigned Agro-Hub Agent</p>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-sm font-semibold text-gray-800">Ade Olayinka</p>
-                        <p className="text-xs text-gray-400">Your Agronex Field Agent</p>
-                    </div>
-                </div>
 
-                {/* Contact icons */}
-                <div className="flex items-center gap-3">
-                    <button
-                        className="w-9 h-9 rounded-full bg-green-50 hover:bg-green-100 flex items-center justify-center transition-colors"
-                        aria-label="Call agent"
-                    >
-                        <Phone size={16} className="text-green-600" />
-                    </button>
-                    <button
-                        className="w-9 h-9 rounded-full bg-green-50 hover:bg-green-100 flex items-center justify-center transition-colors"
-                        aria-label="WhatsApp agent"
-                    >
-                        <WhatsAppIcon size={16} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <a
+                            href="tel:+2348105510626"
+                            className="w-9 h-9 rounded-full bg-green-50 hover:bg-green-100 flex items-center justify-center transition-colors cursor-pointer"
+                            aria-label="Call field agent"
+                            title="Call Agent"
+                        >
+                            <Phone size={16} className="text-green-600" />
+                        </a>
+                        <a
+                            href="https://wa.me/2348105510626?text=Hello%20SmartHub%20AgroChain,%20I%20need%20assistance%20with%20my%20farmer%20account"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-9 h-9 rounded-full bg-green-50 hover:bg-green-100 flex items-center justify-center transition-colors cursor-pointer"
+                            aria-label="WhatsApp field agent"
+                            title="WhatsApp Support"
+                        >
+                            <WhatsAppIcon size={16} />
+                        </a>
+                    </div>
                 </div>
             </div>
+
+            {/* Bottom: Profile & KYC Verification Readiness */}
+            {profileCompletion && (
+                <div className="pt-3 border-t border-gray-100">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="font-semibold text-gray-700 flex items-center gap-1">
+                            <ShieldCheck size={14} className="text-[#1B4D28]" />
+                            Profile Readiness
+                        </span>
+                        <span className="font-bold text-[#1B4D28]">{percentage}%</span>
+                    </div>
+
+                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-2">
+                        <div
+                            className="bg-[#1B4D28] h-full rounded-full transition-all duration-500"
+                            style={{ width: `${percentage}%` }}
+                        />
+                    </div>
+
+                    {hasPendingFields ? (
+                        <div className="flex items-center justify-between gap-2 mt-2">
+                            <span className="text-[11px] text-gray-500 truncate">
+                                Next: {profileCompletion.recommendedNextAction}
+                            </span>
+                            <Link
+                                href="/farmer/kyc"
+                                className="text-[11px] font-bold text-[#1B4D28] hover:underline flex items-center gap-0.5 shrink-0"
+                            >
+                                Complete <ArrowRight size={11} />
+                            </Link>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium mt-1">
+                            <CheckCircle2 size={12} />
+                            Producer profile verified and active for bulk trade
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

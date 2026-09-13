@@ -91,6 +91,8 @@ export default function FarmerOverviewPage() {
         activeOrders={stats?.activeOrders || 0}
         revenue={stats?.revenue || 0}
         totalSales={stats?.totalSales || 0}
+        totalProducts={stats?.totalProducts || 0}
+        totalAvailableQty={stats?.totalAvailableQty || 0}
         loading={loading}
       />
 
@@ -98,7 +100,7 @@ export default function FarmerOverviewPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
         <div className="flex flex-col gap-5">
           <SubmitFarmProduce />
-          <FieldAgent />
+          <FieldAgent profileCompletion={farmerData?.profileCompletion} />
           <RecentSubmit
             submissions={submissions.map((s) => ({
               id: s.id,

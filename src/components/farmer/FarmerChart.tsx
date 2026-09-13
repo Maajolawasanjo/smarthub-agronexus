@@ -52,7 +52,7 @@ export function FarmerChart({ data = [], loading = false }: FarmerChartProps) {
                 <div className="flex-1 w-full min-h-[220px] bg-gray-100 animate-pulse rounded-xl flex items-center justify-center">
                     <span className="text-xs text-gray-400">Loading sales chart...</span>
                 </div>
-            ) : !hasActiveVolume && data.length === 0 ? (
+            ) : !hasActiveVolume ? (
                 <div className="flex-1 w-full min-h-[220px] flex flex-col items-center justify-center text-center bg-gray-50/50 rounded-xl border border-dashed border-gray-200 p-6">
                     <BarChart2 className="text-gray-300 mb-2" size={32} />
                     <h4 className="text-xs font-bold text-gray-700">No Sales Volume Recorded</h4>
@@ -89,7 +89,9 @@ export function FarmerChart({ data = [], loading = false }: FarmerChartProps) {
                                 axisLine={false}
                                 tickLine={false}
                                 tick={{ fill: "#6B7280", fontSize: 11 }}
-                                tickFormatter={(v) => `₦${v}`}
+                                tickFormatter={(v) =>
+                                    `₦${Number(v) >= 1_000_000 ? `${(Number(v) / 1_000_000).toFixed(1)}M` : Number(v) >= 1_000 ? `${(Number(v) / 1_000).toFixed(0)}K` : v}`
+                                }
                             />
                             <Tooltip
                                 contentStyle={{
