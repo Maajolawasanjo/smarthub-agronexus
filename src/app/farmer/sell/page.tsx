@@ -196,6 +196,7 @@ export default function SubmitProducePage() {
                     moq: 1,
                     unit: form.unit || "pieces",
                     stockQuantity: parseFloat(form.quantity) || 50,
+                    harvestDate: form.harvestDate,
                     imageUrl: images[0] || "/products/yam.png",
                     images: images.length > 0 ? images : undefined,
                     farmLocation: form.farmLocation,

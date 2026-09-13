@@ -11,6 +11,7 @@ export async function POST(req: Request) {
       price,
       unit = "KG",
       stockQuantity = 50,
+      harvestDate,
       imageUrl,
       images,
     } = body;
@@ -195,6 +196,7 @@ export async function POST(req: Request) {
         unit: validUnit,
         status: productStatus,
         isAvailable: productAvailability,
+        harvestDate: harvestDate ? new Date(harvestDate) : undefined,
         moderatedAt: isAutoApproved ? new Date() : undefined,
         moderationNotes: isAutoApproved ? "Auto-published for verified producer" : undefined,
         images: imageList.length > 0
