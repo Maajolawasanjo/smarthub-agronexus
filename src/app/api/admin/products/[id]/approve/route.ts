@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { recordAuditEvent } from "@/lib/audit";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createNotification } from "@/lib/notifications";
@@ -10,15 +10,14 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session?.userId) {
+    const auth = await getAdminSession();
+    if (!auth) {
       return NextResponse.json(
         createErrorResponse("UNAUTHORIZED", "Authentication required to moderate produce."),
         { status: 401 }
       );
     }
-
-    if (session.role !== "ADMIN") {
+    if (auth.role !== "ADMIN") {
       return NextResponse.json(
         createErrorResponse("FORBIDDEN", "Administrative privileges required to moderate produce listings."),
         { status: 403 }
@@ -86,7 +85,7 @@ export async function PUT(
         isAvailable: targetAvailable,
         rejectionReason: targetStatus === "APPROVED" ? null : (rejectionReason || reason || (targetStatus === "SUSPENDED" ? "Listing suspended by admin." : "Produce listing did not meet marketplace quality standards.")),
         moderatedAt: new Date(),
-        moderatedById: session.userId,
+        moderatedById: auth.userId,
       },
       include: {
         category: true,
@@ -102,8 +101,8 @@ export async function PUT(
       category: "SYSTEM",
       severity: targetStatus === "SUSPENDED" ? "WARNING" : "INFO",
       action: auditAction,
-      actorId: session.userId,
-      actorEmail: session.email,
+      actorId: auth.userId,
+      actorEmail: auth.user.email,
       resourceType: "PRODUCT",
       resourceId: id,
       metadata: {
@@ -133,9 +132,9 @@ export async function PUT(
       { status: 200 }
     );
   } catch (error: any) {
-    console.error("Error approving/moderating product API:", error);
+    console.error("Error moderating produce:", error);
     return NextResponse.json(
-      createErrorResponse("INTERNAL_SERVER_ERROR", "Internal server error moderating produce."),
+      createErrorResponse("INTERNAL_SERVER_ERROR", "Failed to update produce moderation status."),
       { status: 500 }
     );
   }
@@ -146,8 +145,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session?.userId || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth) {
+      return NextResponse.json(
+        createErrorResponse("UNAUTHORIZED", "Authentication required to delete produce listings."),
+        { status: 401 }
+      );
+    }
+    if (auth.role !== "ADMIN") {
       return NextResponse.json(
         createErrorResponse("FORBIDDEN", "Administrative privileges required to delete produce listings."),
         { status: 403 }
@@ -187,7 +192,7 @@ export async function DELETE(
           status: "ARCHIVED",
           isAvailable: false,
           moderatedAt: new Date(),
-          moderatedById: session.userId,
+          moderatedById: auth.userId,
         },
       });
 
@@ -195,8 +200,8 @@ export async function DELETE(
         category: "SYSTEM",
         severity: "WARNING",
         action: "PRODUCT_ARCHIVED",
-        actorId: session.userId,
-        actorEmail: session.email,
+        actorId: auth.userId,
+        actorEmail: auth.user.email,
         resourceType: "PRODUCT",
         resourceId: id,
         metadata: {
@@ -230,8 +235,8 @@ export async function DELETE(
       category: "SYSTEM",
       severity: "INFO",
       action: "PRODUCT_DELETED",
-      actorId: session.userId,
-      actorEmail: session.email,
+      actorId: auth.userId,
+      actorEmail: auth.user.email,
       resourceType: "PRODUCT",
       resourceId: id,
       metadata: {

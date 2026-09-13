@@ -57,7 +57,9 @@ export default function AdminUsersPage() {
     // Form inputs for new user
     const [newUserName, setNewUserName] = useState("");
     const [newUserEmail, setNewUserEmail] = useState("");
+    const [newUserPhone, setNewUserPhone] = useState("");
     const [newUserRole, setNewUserRole] = useState("Buyer");
+    const [isCreatingUser, setIsCreatingUser] = useState(false);
 
     // Toast state
     const [toastMessage, setToastMessage] = useState("");
@@ -69,27 +71,41 @@ export default function AdminUsersPage() {
         }, 3500);
     };
 
-    const handleAddUser = (e: React.FormEvent) => {
+    const handleAddUser = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newUserName || !newUserEmail) return;
 
-        const newUser = {
-            id: Math.floor(10000 + Math.random() * 90000).toString(),
-            rawId: `temp-${Date.now()}`,
-            email: newUserEmail,
-            name: newUserName,
-            role: newUserRole,
-            status: "Active",
-            joined: new Date().toLocaleDateString("en-GB"),
-            rawUser: { fullName: newUserName, email: newUserEmail, role: newUserRole.toUpperCase(), isActive: true }
-        };
+        setIsCreatingUser(true);
+        try {
+            const phone = newUserPhone.trim() || `+234${Math.floor(7000000000 + Math.random() * 2999999999)}`;
+            const res = await fetch("/api/admin/users", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    fullName: newUserName.trim(),
+                    email: newUserEmail.trim(),
+                    phoneNumber: phone,
+                    role: newUserRole.toUpperCase() === "AGENT" ? "BUYER" : newUserRole.toUpperCase(),
+                }),
+            });
 
-        setUsers([newUser, ...users]);
-        setShowModal(false);
-        setNewUserName("");
-        setNewUserEmail("");
-        setNewUserRole("Buyer");
-        triggerToast(`User account for ${newUserName} successfully created!`);
+            const data = await res.json();
+            if (res.ok) {
+                setShowModal(false);
+                setNewUserName("");
+                setNewUserEmail("");
+                setNewUserPhone("");
+                setNewUserRole("Buyer");
+                triggerToast(`User account for ${newUserName} successfully created!`);
+                await fetchUsers();
+            } else {
+                triggerToast(`Failed to create user: ${data.error || "Server error"}`);
+            }
+        } catch (err) {
+            triggerToast("Network error creating user account.");
+        } finally {
+            setIsCreatingUser(false);
+        }
     };
 
     // Toggle user status between Active & Inactive via PATCH /api/admin/users
@@ -479,6 +495,19 @@ export default function AdminUsersPage() {
                                     placeholder="Enter email address"
                                     value={newUserEmail}
                                     onChange={(e) => setNewUserEmail(e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#1B4D28] text-gray-700 font-semibold"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                                    Phone Number
+                                </label>
+                                <input
+                                    type="tel"
+                                    placeholder="+234 800 000 0000 (Optional, auto-generated if empty)"
+                                    value={newUserPhone}
+                                    onChange={(e) => setNewUserPhone(e.target.value)}
                                     className="w-full bg-gray-50 border border-gray-200 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#1B4D28] text-gray-700 font-semibold"
                                 />
                             </div>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
@@ -25,9 +25,9 @@ export async function GET(req: Request) {
   const traceCtx = createTraceContext(req);
 
   try {
-    const session = await getSession();
-    if (!session || !hasPermission(session.role, "config:view")) {
-      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Access denied"), { status: 403 });
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
+      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Admin authorization required"), { status: 403 });
       return attachTraceHeaders(res, traceCtx);
     }
 
@@ -47,9 +47,19 @@ export async function PATCH(req: Request) {
   const traceCtx = createTraceContext(req);
 
   try {
-    const session = await getSession();
-    if (!session || !hasPermission(session.role, "config:update")) {
-      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Access denied: config:update permission required"), { status: 403 });
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
+      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Admin authorization required"), { status: 403 });
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    // CSRF origin validation
+    const origin = req.headers.get("origin");
+    const referer = req.headers.get("referer");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const expectedOrigin = new URL(appUrl).origin;
+    if ((origin && origin !== expectedOrigin) || (referer && !referer.startsWith(expectedOrigin))) {
+      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Cross-origin request forbidden."), { status: 403 });
       return attachTraceHeaders(res, traceCtx);
     }
 
@@ -66,7 +76,7 @@ export async function PATCH(req: Request) {
       ...(typeof body.registrationEnabled === "boolean" && { registrationEnabled: body.registrationEnabled }),
       ...(typeof body.reviewModerationMode === "string" && { reviewModerationMode: body.reviewModerationMode }),
       updatedAt: new Date().toISOString(),
-      updatedBy: session.userId,
+      updatedBy: auth.user.email,
     };
 
     const res = NextResponse.json(

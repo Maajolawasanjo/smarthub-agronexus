@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
+import { getAdminSession } from "@/lib/session";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
+import { recordAuditEvent } from "@/lib/audit";
 
 export type AccountLifecycleState =
   | "ACTIVE"
@@ -22,16 +22,16 @@ export async function PATCH(
   const { id: targetUserId } = await params;
 
   try {
-    const session = await getSession();
-    if (!session || !hasPermission(session.role, "users:freeze")) {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       const res = NextResponse.json(
-        createErrorResponse("FORBIDDEN", "Permission users:freeze required"),
+        createErrorResponse("FORBIDDEN", "Admin authorization required to freeze users"),
         { status: 403 }
       );
       return attachTraceHeaders(res, traceCtx);
     }
 
-    if (session.userId === targetUserId) {
+    if (auth.userId === targetUserId) {
       const res = NextResponse.json(
         createErrorResponse("INVALID_ACTION", "Administrators cannot freeze or suspend their own account"),
         { status: 400 }
@@ -54,10 +54,34 @@ export async function PATCH(
     const targetState: AccountLifecycleState = state || (targetUser.isActive ? "SUSPENDED" : "ACTIVE");
     const isNowActive = targetState === "ACTIVE";
 
-    const updatedUser = await prisma.user.update({
-      where: { id: targetUserId },
-      data: { isActive: isNowActive },
-      select: { id: true, email: true, fullName: true, role: true, isActive: true, updatedAt: true },
+    // Transactional status update and active session revocation on freeze/suspension
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: targetUserId },
+        data: { isActive: isNowActive },
+        select: { id: true, email: true, fullName: true, role: true, isActive: true, updatedAt: true },
+      });
+
+      if (!isNowActive) {
+        await tx.session.updateMany({
+          where: { userId: targetUserId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+
+      return user;
+    });
+
+    await recordAuditEvent({
+      category: "USER",
+      severity: isNowActive ? "INFO" : "WARNING",
+      action: `User account status transitioned to ${targetState}`,
+      actorId: auth.userId,
+      actorEmail: auth.user.email,
+      resourceType: "User",
+      resourceId: updatedUser.id,
+      metadata: { targetEmail: updatedUser.email, targetState, reason },
+      req,
     });
 
     const res = NextResponse.json(

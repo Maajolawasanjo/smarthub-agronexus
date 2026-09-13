@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 
@@ -12,8 +12,8 @@ export async function GET(
   const traceCtx = createTraceContext(req);
 
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       const res = NextResponse.json(
         createErrorResponse("FORBIDDEN", "Administrative privilege required to inspect dispute dossier."),
         { status: 403 }

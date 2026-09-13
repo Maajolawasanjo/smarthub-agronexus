@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { AdminVerificationQueueDTO, AdminQueueItemDTO } from "@/dto";
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       return NextResponse.json({ error: "Admin authorization required." }, { status: 403 });
     }
 

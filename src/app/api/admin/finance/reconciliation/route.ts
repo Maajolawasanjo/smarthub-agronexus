@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { config } from "@/lib/config";
 
 // ────────────────────────────────────────────────────────────
@@ -9,8 +9,8 @@ import { config } from "@/lib/config";
 // ────────────────────────────────────────────────────────────
 export async function GET(req: Request) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       return NextResponse.json(
         { error: "Forbidden: Admin privilege required for reconciliation." },
         { status: 403 }

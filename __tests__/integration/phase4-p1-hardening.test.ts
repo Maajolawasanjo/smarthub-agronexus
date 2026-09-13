@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { POST as validateOrder } from "@/app/api/orders/validate/route";
 import { PUT as reviewVerification } from "@/app/api/admin/verifications/[id]/route";
 import { recordAuditEvent } from "@/lib/audit";
-import { getSession } from "@/lib/session";
+import { getSession, getAdminSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
 vi.mock("@/lib/session", () => ({
   getSession: vi.fn(),
+  getAdminSession: vi.fn(),
   setSessionCookie: vi.fn(),
   clearSessionCookie: vi.fn(),
 }));
@@ -127,10 +128,11 @@ describe("Phase 4 — P1 Production Hardening Integration Suite", () => {
 
   describe("P1-3: KYC Compliance Review Audit Trail", () => {
     it("should record AuditEvent on KYC approval via admin verifications route", async () => {
-      (getSession as any).mockResolvedValue({
+      (getAdminSession as any).mockResolvedValue({
         userId: "admin-1",
-        email: "admin@smarthub.com",
         role: "ADMIN",
+        user: { id: "admin-1", email: "admin@smarthub.com", role: "ADMIN" },
+        session: { id: "sess-1" },
       });
 
       (prisma.verification.findUnique as any).mockResolvedValue({
@@ -162,10 +164,11 @@ describe("Phase 4 — P1 Production Hardening Integration Suite", () => {
     });
 
     it("should record AuditEvent on KYC rejection with mandatory remarks", async () => {
-      (getSession as any).mockResolvedValue({
+      (getAdminSession as any).mockResolvedValue({
         userId: "admin-1",
-        email: "admin@smarthub.com",
         role: "ADMIN",
+        user: { id: "admin-1", email: "admin@smarthub.com", role: "ADMIN" },
+        session: { id: "sess-1" },
       });
 
       (prisma.verification.findUnique as any).mockResolvedValue({
@@ -195,11 +198,7 @@ describe("Phase 4 — P1 Production Hardening Integration Suite", () => {
     });
 
     it("should deny non-admin authorization and prevent audit event creation", async () => {
-      (getSession as any).mockResolvedValue({
-        userId: "buyer-1",
-        email: "buyer@smarthub.com",
-        role: "BUYER",
-      });
+      (getAdminSession as any).mockResolvedValue(null);
 
       const req = new Request("http://localhost:3000/api/admin/verifications/verif-123", {
         method: "PUT",

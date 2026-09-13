@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { logger } from "@/lib/logger";
 import { createNotification } from "@/lib/notifications";
 
@@ -11,8 +11,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       return NextResponse.json({ error: "Admin authorization required." }, { status: 403 });
     }
 
@@ -56,7 +56,7 @@ export async function PUT(
       prisma.verification.update({
         where: { id },
         data: {
-          reviewedById: session.userId,
+          reviewedById: auth.userId,
           reviewedAt: new Date(),
           remarks: remarks || (action === "APPROVE" ? "Approved by compliance team." : null),
         },
@@ -70,7 +70,7 @@ export async function PUT(
     ]);
 
     logger.security(`Identity verification ${action.toLowerCase()}d by admin`, {
-      adminId: session.userId,
+      adminId: auth.userId,
       verificationId: id,
       farmerUserId: verification.farmerProfile.userId,
       status: newStatus,
@@ -81,8 +81,8 @@ export async function PUT(
       category: "KYC",
       severity: action === "APPROVE" ? "INFO" : "WARNING",
       action: action === "APPROVE" ? "KYC_APPROVED" : "KYC_REJECTED",
-      actorId: session.userId,
-      actorEmail: session.email,
+      actorId: auth.userId,
+      actorEmail: auth.user.email,
       resourceType: "Verification",
       resourceId: id,
       metadata: {

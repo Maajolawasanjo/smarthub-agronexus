@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { PUT as approvePUT, DELETE as approveDELETE } from "./approve/route";
 
@@ -9,8 +9,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       return NextResponse.json(
         createErrorResponse("FORBIDDEN", "Admin authorization required."),
         { status: 403 }

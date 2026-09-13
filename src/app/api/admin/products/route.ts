@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma, executeWithDbRetry } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 
 export async function GET(req: Request) {
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       return NextResponse.json({ error: "Unauthorized. Admin privileges required." }, { status: 403 });
     }
 

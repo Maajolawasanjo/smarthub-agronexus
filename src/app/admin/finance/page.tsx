@@ -80,10 +80,57 @@ export default function AdminFinancePage() {
   const [data, setData] = useState<FinanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"transactions" | "wallets">("transactions");
+  const [activeTab, setActiveTab] = useState<"transactions" | "wallets" | "withdrawals">("transactions");
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [withdrawalsLoading, setWithdrawalsLoading] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState("");
+
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 3500);
+  };
 
   const [reconciling, setReconciling] = useState(false);
   const [reconcileReport, setReconcileReport] = useState<ReconciliationReport | null>(null);
+
+  const fetchWithdrawals = useCallback(async () => {
+    setWithdrawalsLoading(true);
+    try {
+      const res = await fetch("/api/admin/withdrawals");
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setWithdrawals(json.data.withdrawals || []);
+      }
+    } catch (e) {
+      console.error("Failed to load withdrawals", e);
+    } finally {
+      setWithdrawalsLoading(false);
+    }
+  }, []);
+
+  const handleWithdrawalAction = async (transactionId: string, action: "APPROVE_PAYOUT" | "RETRY_PAYOUT" | "REVERSE_PAYOUT") => {
+    setActionLoadingId(transactionId);
+    try {
+      const res = await fetch("/api/admin/withdrawals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId, action }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        triggerToast(json.data.message || `Action ${action} succeeded.`);
+        await fetchWithdrawals();
+        await fetchFinanceData();
+      } else {
+        triggerToast(`Action failed: ${json.error?.message || json.error || "Server error"}`);
+      }
+    } catch (e) {
+      triggerToast("Network error executing withdrawal action.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   const fetchFinanceData = useCallback(async () => {
     setLoading(true);
@@ -147,6 +194,14 @@ export default function AdminFinancePage() {
 
   return (
     <div className="space-y-6 font-sans pb-12">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-[#1B4D28] text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+          <CheckCircle2 size={18} className="text-emerald-400" />
+          <span className="text-sm font-semibold">{toastMessage}</span>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="bg-[#0A3918] text-white rounded-[24px] p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-green-950/20">
         <div>
@@ -319,6 +374,17 @@ export default function AdminFinancePage() {
                 <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#1B4D28] rounded-full" />
               )}
             </button>
+            <button
+              onClick={() => setActiveTab("withdrawals")}
+              className={`pb-4 text-sm font-bold transition-colors relative cursor-pointer ${
+                activeTab === "withdrawals" ? "text-gray-900" : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              Withdrawal Payout Queue ({withdrawals.length})
+              {activeTab === "withdrawals" && (
+                <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#1B4D28] rounded-full" />
+              )}
+            </button>
           </div>
 
           <span className="text-xs text-gray-400 font-mono hidden sm:block mb-4">
@@ -430,6 +496,119 @@ export default function AdminFinancePage() {
                       </td>
                       <td className="px-6 py-4">
                         <span className="font-mono text-xs font-bold text-rose-700">{w.formattedFrozen}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* Withdrawals Queue Tab */}
+        {activeTab === "withdrawals" && (
+          <div className="overflow-x-auto">
+            {withdrawalsLoading ? (
+              <div className="p-12 text-center text-xs text-gray-400">Loading withdrawal queue...</div>
+            ) : withdrawals.length === 0 ? (
+              <div className="p-12 text-center text-xs text-gray-400">No withdrawal requests found.</div>
+            ) : (
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-gray-50/50 border-b border-gray-100">
+                    <th className="px-6 py-3.5 text-[10px] font-bold uppercase text-gray-400">User / Role</th>
+                    <th className="px-6 py-3.5 text-[10px] font-bold uppercase text-gray-400">Bank Destination</th>
+                    <th className="px-6 py-3.5 text-[10px] font-bold uppercase text-gray-400">Reference</th>
+                    <th className="px-6 py-3.5 text-[10px] font-bold uppercase text-gray-400">Status</th>
+                    <th className="px-6 py-3.5 text-[10px] font-bold uppercase text-gray-400">Amount</th>
+                    <th className="px-6 py-3.5 text-[10px] font-bold uppercase text-gray-400 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {withdrawals.map((w) => (
+                    <tr key={w.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <p className="text-xs font-bold text-gray-900">{w.user?.name || "User"}</p>
+                        <p className="text-[10px] text-gray-400">{w.user?.email} • {w.user?.role}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        {w.bank ? (
+                          <>
+                            <p className="text-xs font-semibold text-gray-800">{w.bank.bankName}</p>
+                            <p className="text-[10px] text-gray-500 font-mono">{w.bank.accountNumber} ({w.bank.accountName})</p>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">No bank profile</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="font-mono text-xs font-bold text-gray-700">{w.reference}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={cn(
+                            "px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                            w.status === "SUCCESS"
+                              ? "bg-green-50 text-green-700 border border-green-200"
+                              : w.status === "PROCESSING" || w.status === "SUBMITTED_TO_FLUTTERWAVE" || w.status === "VALIDATED"
+                              ? "bg-amber-50 text-amber-700 border border-amber-200"
+                              : "bg-red-50 text-red-700 border border-red-200"
+                          )}
+                        >
+                          {w.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-xs font-bold text-gray-900">
+                        {w.formattedAmount}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {["REQUESTED", "VALIDATED"].includes(w.status) && (
+                            <>
+                              <button
+                                onClick={() => handleWithdrawalAction(w.id, "APPROVE_PAYOUT")}
+                                disabled={actionLoadingId === w.id}
+                                className="px-3 py-1 rounded-lg text-[11px] font-bold bg-[#1B4D28] text-white hover:bg-[#143d20] transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                {actionLoadingId === w.id ? "Processing..." : "Approve & Payout"}
+                              </button>
+                              <button
+                                onClick={() => handleWithdrawalAction(w.id, "REVERSE_PAYOUT")}
+                                disabled={actionLoadingId === w.id}
+                                className="px-3 py-1 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                Reverse
+                              </button>
+                            </>
+                          )}
+                          {w.status === "FAILED" && (
+                            <>
+                              <button
+                                onClick={() => handleWithdrawalAction(w.id, "RETRY_PAYOUT")}
+                                disabled={actionLoadingId === w.id}
+                                className="px-3 py-1 rounded-lg text-[11px] font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                {actionLoadingId === w.id ? "Processing..." : "Retry"}
+                              </button>
+                              <button
+                                onClick={() => handleWithdrawalAction(w.id, "REVERSE_PAYOUT")}
+                                disabled={actionLoadingId === w.id}
+                                className="px-3 py-1 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                Reverse
+                              </button>
+                            </>
+                          )}
+                          {["PROCESSING", "SUBMITTED_TO_FLUTTERWAVE"].includes(w.status) && (
+                            <span className="text-[11px] font-mono text-amber-700 italic">In Flight</span>
+                          )}
+                          {w.status === "SUCCESS" && (
+                            <span className="text-[11px] font-bold text-emerald-700">Settled</span>
+                          )}
+                          {w.status === "REVERSED" && (
+                            <span className="text-[11px] font-bold text-gray-400">Reversed</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

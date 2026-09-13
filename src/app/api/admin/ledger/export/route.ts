@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
+import { getAdminSession } from "@/lib/session";
 import { calculateSettlement } from "@/lib/settlement";
 
 // GET /api/admin/ledger/export — Multi-Format Financial Ledger Exporter (CSV / JSON)
 export async function GET(req: Request) {
   try {
-    const session = await getSession();
-    if (!session || !hasPermission(session.role, "ledger:export")) {
-      return new NextResponse("403 Forbidden: Permission ledger:export required", { status: 403 });
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
+      return new NextResponse("403 Forbidden: Admin authorization required", { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);

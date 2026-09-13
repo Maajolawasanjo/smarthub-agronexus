@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
+import { getAdminSession } from "@/lib/session";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 
@@ -10,9 +9,9 @@ export async function GET(req: Request) {
   const traceCtx = createTraceContext(req);
 
   try {
-    const session = await getSession();
-    if (!session || !hasPermission(session.role, "audit:view")) {
-      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Access denied: audit:view permission required"), { status: 403 });
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
+      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Access denied: Admin authorization required"), { status: 403 });
       return attachTraceHeaders(res, traceCtx);
     }
 

@@ -1,23 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma, executeWithDbRetry } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { AdminDashboardDTO } from "@/types/page-dtos";
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session || !session.userId) {
-      return NextResponse.json({ error: "Unauthorized session" }, { status: 401 });
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
+      return NextResponse.json({ error: "Access denied. Admin authorization required." }, { status: 403 });
     }
 
     const { user, dto } = await executeWithDbRetry(async () => {
-      const user = await prisma.user.findUnique({
-        where: { id: session.userId },
-      });
-
-      if (!user || user.role !== "ADMIN") {
-        return { user: null, dto: null };
-      }
+      const user = auth.user;
 
       // Server-side Aggregations for Admin Command Center
       const totalFarmers = await prisma.user.count({ where: { role: "FARMER" } });

@@ -14,6 +14,7 @@ vi.mock("@/lib/events", () => ({
 
 vi.mock("@/lib/session", () => ({
   getSession: vi.fn().mockResolvedValue({ userId: "usr_admin_1", role: "ADMIN" }),
+  getAdminSession: vi.fn().mockResolvedValue({ userId: "usr_admin_1", role: "ADMIN" }),
 }));
 
 describe("Gap Phase 2: Admin Operations", () => {

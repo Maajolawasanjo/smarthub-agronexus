@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { WalletService } from "@/services/wallet.service";
 import { recordAuditEvent } from "@/lib/audit";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
@@ -15,12 +15,22 @@ export async function POST(
   const traceCtx = createTraceContext(req);
 
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       const res = NextResponse.json(
         createErrorResponse("FORBIDDEN", "Administrative privilege required to arbitrate disputes."),
         { status: 403 }
       );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    // CSRF origin validation for financial arbitration mutation
+    const origin = req.headers.get("origin");
+    const referer = req.headers.get("referer");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const expectedOrigin = new URL(appUrl).origin;
+    if ((origin && origin !== expectedOrigin) || (referer && !referer.startsWith(expectedOrigin))) {
+      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Cross-origin arbitration forbidden."), { status: 403 });
       return attachTraceHeaders(res, traceCtx);
     }
 
@@ -103,8 +113,8 @@ export async function POST(
         category: "DISPUTE",
         severity: "WARNING",
         action: "DISPUTE_RESOLVED_REFUND",
-        actorId: session.userId,
-        actorEmail: session.email,
+        actorId: auth.userId,
+        actorEmail: auth.user.email,
         resourceId: dispute.id,
         metadata: {
           orderId: order.id,
@@ -169,8 +179,8 @@ export async function POST(
         category: "DISPUTE",
         severity: "WARNING",
         action: "DISPUTE_RESOLVED_RELEASE",
-        actorId: session.userId,
-        actorEmail: session.email,
+        actorId: auth.userId,
+        actorEmail: auth.user.email,
         resourceId: dispute.id,
         metadata: {
           orderId: order.id,

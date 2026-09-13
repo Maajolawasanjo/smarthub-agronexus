@@ -4,11 +4,12 @@ import { GET as getAdminUsers, PATCH as updateAdminUser } from "@/app/api/admin/
 import { GET as getAdminOverview } from "@/app/api/admin/overview/route";
 import { GET as getAuditLogs } from "@/app/api/admin/audit-logs/route";
 import { recordAuditEvent } from "@/lib/audit";
-import { getSession } from "@/lib/session";
+import { getSession, getAdminSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 
 vi.mock("@/lib/session", () => ({
   getSession: vi.fn(),
+  getAdminSession: vi.fn(),
   setSessionCookie: vi.fn(),
   clearSessionCookie: vi.fn(),
 }));
@@ -262,7 +263,12 @@ describe("Phase 3 Verification Gate — Remediation Suite", () => {
 
   describe("ADM-001 & ADM-002: Admin API Endpoints", () => {
     it("should return users list for authorized admin", async () => {
-      vi.mocked(getSession).mockResolvedValue({ userId: "admin-1", role: "ADMIN" } as any);
+      vi.mocked(getAdminSession).mockResolvedValue({
+        userId: "admin-1",
+        role: "ADMIN",
+        user: { id: "admin-1", email: "admin@x.com", role: "ADMIN" },
+        session: { id: "sess-1" },
+      } as any);
       vi.mocked(prisma.user.findMany).mockResolvedValue([
         { id: "u-1", fullName: "Alice", email: "a@x.com", role: "BUYER", isActive: true, createdAt: new Date() },
       ] as any);
@@ -274,7 +280,12 @@ describe("Phase 3 Verification Gate — Remediation Suite", () => {
     });
 
     it("should return overview aggregations including salesData, categoryData, growthData", async () => {
-      vi.mocked(getSession).mockResolvedValue({ userId: "admin-1", role: "ADMIN" } as any);
+      vi.mocked(getAdminSession).mockResolvedValue({
+        userId: "admin-1",
+        role: "ADMIN",
+        user: { id: "admin-1", email: "admin@x.com", role: "ADMIN" },
+        session: { id: "sess-1" },
+      } as any);
       vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: "admin-1", role: "ADMIN" } as any);
 
       const res = await getAdminOverview();

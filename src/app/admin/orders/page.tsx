@@ -33,10 +33,30 @@ export default function AdminOrdersPage() {
     const fetchAdminOrders = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch("/api/orders");
+            const res = await fetch("/api/admin/orders");
             if (res.ok) {
-                const data: OrdersPageDTO = await res.json();
-                setDto(data);
+                const json = await res.json();
+                const ordersList = json.data?.orders || [];
+                const totalOrders = json.data?.pagination?.total || ordersList.length;
+                const pending = ordersList.filter((o: any) => o.status === "PENDING").length;
+                const completed = ordersList.filter((o: any) => ["DELIVERED", "COMPLETED"].includes(o.status)).length;
+                const totalTradeVolume = ordersList.reduce((acc: number, o: any) => acc + (o.totalAmount || 0), 0);
+
+                setDto({
+                    orders: ordersList,
+                    statistics: {
+                        totalOrders,
+                        pendingApprovals: pending,
+                        inTransit: ordersList.filter((o: any) => o.status === "IN_TRANSIT").length,
+                        totalTradeVolume,
+                    },
+                    statusSummary: {
+                        pending,
+                        delivered: completed,
+                        active: ordersList.filter((o: any) => ["CONFIRMED", "PROCESSING", "READY_FOR_PICKUP", "IN_TRANSIT"].includes(o.status)).length,
+                        cancelled: ordersList.filter((o: any) => o.status === "CANCELLED").length,
+                    }
+                } as any);
             }
         } catch (err) {
             console.error("Failed to fetch admin orders", err);
@@ -53,18 +73,18 @@ export default function AdminOrdersPage() {
     const handleUpdateStatus = async (id: string, newStatus: string) => {
         setIsUpdating(true);
         try {
-            const res = await fetch(`/api/orders/${id}`, {
+            const res = await fetch(`/api/admin/orders/${id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: newStatus }),
+                body: JSON.stringify({ status: newStatus, action: newStatus }),
             });
-            const data = await res.json();
-            if (res.ok) {
-                triggerToast(`Order #${data.order?.orderNumber || id} updated to ${newStatus}!`);
+            const json = await res.json();
+            if (res.ok && json.success) {
+                triggerToast(json.data?.message || `Order #${json.data?.order?.orderNumber || id} updated!`);
                 fetchAdminOrders();
                 setSelectedOrder(null);
             } else {
-                triggerToast(`Failed to update status: ${data.error}`);
+                triggerToast(`Failed to update status: ${json.error?.message || json.error || "Unknown error"}`);
             }
         } catch (err) {
             triggerToast("Network error updating order status.");

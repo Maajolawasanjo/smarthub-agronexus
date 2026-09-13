@@ -8,13 +8,23 @@ import { WalletService } from "@/services/wallet.service";
 // Set stable JWT secret for test session signatures
 process.env.JWT_SECRET = "super-secret-jwt-key-for-testing-purposes-only-32-chars";
 
-// Mock top-level getSession for API routes
+// Mock top-level getSession and getAdminSession for API routes
 const mockSession = vi.fn();
 vi.mock("@/lib/session", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/session")>();
   return {
     ...actual,
     getSession: () => mockSession(),
+    getAdminSession: async () => {
+      const s = await mockSession();
+      if (!s) return null;
+      return {
+        userId: s.userId,
+        role: s.role,
+        user: { id: s.userId, email: s.email || `${s.userId}@agro.ng`, role: s.role },
+        session: { id: `sess_${s.userId}` },
+      };
+    },
   };
 });
 

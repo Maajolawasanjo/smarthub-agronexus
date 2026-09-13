@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma, executeWithDbRetry } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { getAdminSession } from "@/lib/session";
 import { WalletService } from "@/services/wallet.service";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
@@ -10,8 +10,8 @@ import { reconstructGrossFromPayout } from "@/lib/settlement";
 export async function GET(req: Request) {
   const traceCtx = createTraceContext(req);
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       const res = NextResponse.json(
         createErrorResponse("FORBIDDEN", "Admin authorization required to view platform finance."),
         { status: 403 }
