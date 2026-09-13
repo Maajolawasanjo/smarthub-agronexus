@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MapPin, Search, SlidersHorizontal, X, Loader2, ShoppingBag, Eye } from "lucide-react";
 import { useSearch } from "@/context/SearchContext";
 import { useCart } from "@/context/CartContext";
@@ -10,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { MarketplaceDTO, MarketplaceProductItemDTO } from "@/dto";
 
 export default function DashboardProductsPage() {
+    const router = useRouter();
     const { searchTerm } = useSearch();
     const { addToCart, cartItems } = useCart();
     const cartItemsCount = cartItems?.length || 0;
@@ -188,7 +190,8 @@ export default function DashboardProductsPage() {
                                 {products.map((product) => (
                                     <div
                                         key={product.id}
-                                        className="bg-white rounded-2xl border border-gray-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col hover:-translate-y-1.5 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] transition-all duration-300 group"
+                                        onClick={() => router.push(`/dashboard/products/${product.id}`)}
+                                        className="bg-white rounded-2xl border border-gray-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col hover:-translate-y-1.5 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] transition-all duration-300 group cursor-pointer"
                                     >
                                         {/* Card Top Image Container */}
                                         <div className="relative w-full h-56 md:h-60 bg-gray-100 overflow-hidden">
@@ -280,6 +283,7 @@ export default function DashboardProductsPage() {
                                                 </div>
                                                 <Link
                                                     href={`/dashboard/products/${product.id}`}
+                                                    onClick={(e) => e.stopPropagation()}
                                                     className="inline-flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-[#1B4D28] transition-colors hover:underline cursor-pointer"
                                                 >
                                                     <Eye size={13} />
@@ -289,7 +293,8 @@ export default function DashboardProductsPage() {
 
                                             {/* Prominent High-Impact Call-To-Action (CTA) Button */}
                                             <button
-                                                onClick={() => {
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
                                                     addToCart({
                                                         id: product.id,
                                                         name: product.name,

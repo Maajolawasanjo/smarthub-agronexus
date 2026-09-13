@@ -287,37 +287,117 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                 </Link>
             </div>
 
-            {/* Related Products Section */}
+            {/* Recommended Commodities & Frequently Bought Together */}
             {product.relatedProducts.length > 0 && (
-                <div className="w-full mt-4 md:mt-8 border-t border-gray-100 pt-10 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-500 fill-mode-both">
-                    <h3 className="text-[17px] font-bold text-gray-900 mb-8 border-b-2 border-transparent relative w-fit after:content-[''] after:absolute after:-bottom-2 after:left-0 after:w-12 after:h-0.5 after:bg-[#1B4D28]">
-                        Related Products
-                    </h3>
+                <div className="w-full mt-10 md:mt-16 border-t border-gray-100 pt-12 animate-in fade-in slide-in-from-bottom-12 duration-700 delay-500 fill-mode-both">
+                    <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 gap-3">
+                        <div>
+                            <span className="font-handwriting text-[#527052] text-xl md:text-2xl italic block mb-1">
+                                Complementary Commodities
+                            </span>
+                            <h3 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">
+                                Recommended Produce &amp; Frequently Bought Together
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-1">
+                                High-demand Nigerian agricultural commodities frequently paired with {product.name}
+                            </p>
+                        </div>
+                        <Link
+                            href="/dashboard/products"
+                            className="text-xs font-bold text-[#1B4D28] hover:underline flex items-center gap-1 shrink-0"
+                        >
+                            Browse All Commodities &rarr;
+                        </Link>
+                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
                         {product.relatedProducts.map((related) => (
-                            <Link
+                            <div
                                 key={related.id}
-                                href={`/dashboard/products/${related.id}`}
-                                className="group bg-white flex items-center gap-4 py-2 hover:bg-gray-50 rounded-xl transition-all duration-300 pr-4 hover:-translate-y-1 hover:shadow-sm"
+                                onClick={() => router.push(related.id.startsWith("rec_") ? "/dashboard/products" : `/dashboard/products/${related.id}`)}
+                                className="group bg-white rounded-2xl border border-gray-200/80 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col hover:-translate-y-1.5 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] transition-all duration-300 cursor-pointer"
                             >
-                                <div className="relative w-20 h-20 md:w-24 md:h-24 bg-[#F5F5F5] rounded-xl overflow-hidden shrink-0">
+                                <div className="relative w-full aspect-[4/3] bg-gray-50 overflow-hidden">
                                     <Image
                                         src={related.primaryImage}
                                         alt={related.name}
                                         fill
-                                        className="object-cover group-hover:scale-110 transition-transform duration-500"
+                                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).src =
+                                                'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 24 24" fill="none" stroke="%23cccccc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>';
+                                        }}
                                     />
+                                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1">
+                                        <span className="bg-[#1B4D28]/95 backdrop-blur-md text-white text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-sm">
+                                            {related.category.name}
+                                        </span>
+                                    </div>
+                                    {related.grade && (
+                                        <span className="absolute top-2.5 right-2.5 bg-blue-600/95 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                            {related.grade}
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="flex flex-col">
-                                    <h4 className="text-[13px] md:text-sm font-semibold text-gray-800 leading-tight mb-1.5 group-hover:text-[#1B4D28] transition-colors">
-                                        {related.name}
-                                    </h4>
-                                    <span className="text-[13px] font-bold text-gray-900">
-                                        ₦{related.price.toLocaleString()} / {related.unit}
-                                    </span>
+
+                                <div className="p-4 flex flex-col flex-1 justify-between">
+                                    <div>
+                                        <h4 className="font-bold text-gray-900 text-sm sm:text-base leading-snug group-hover:text-[#1B4D28] transition-colors line-clamp-1 mb-1">
+                                            {related.name}
+                                        </h4>
+                                        <p className="text-[11px] text-gray-500 mb-2 font-medium">
+                                            {related.farmer.farmName} • {related.farmer.state}
+                                        </p>
+                                        <p className="text-gray-600 text-xs leading-relaxed line-clamp-2 mb-3 font-normal">
+                                            {related.description}
+                                        </p>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-gray-100">
+                                        <div className="flex items-baseline justify-between mb-3">
+                                            <span className="text-base font-extrabold text-gray-900">
+                                                ₦{related.price.toLocaleString()}
+                                                <span className="text-[11px] font-normal text-gray-500"> / {related.unit}</span>
+                                            </span>
+                                            <span className="text-[10px] font-bold text-[#1B4D28] bg-green-50 px-2 py-0.5 rounded border border-green-200/50">
+                                                MOQ: {related.moq || 1}
+                                            </span>
+                                        </div>
+
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                addToCart({
+                                                    id: related.id,
+                                                    name: related.name,
+                                                    category: related.category.name,
+                                                    country: related.farmer.state,
+                                                    price: related.price,
+                                                    unit: related.unit,
+                                                    image: related.primaryImage,
+                                                    description: related.description,
+                                                    stock: related.inventory.availableQty,
+                                                    rating: 4.9,
+                                                    reviewsCount: 8,
+                                                    certification: "Certified Export Grade",
+                                                    sku: `PROD-${related.id.substring(0, 6)}`,
+                                                    brand: related.farmer.farmName,
+                                                    farmerProfileId: related.farmer.id,
+                                                    farmerName: related.farmer.farmName,
+                                                    moq: `${related.moq || 1} ${related.unit}`,
+                                                    grade: related.grade || "Grade A",
+                                                    packaging: related.packaging || "Export Bags",
+                                                });
+                                                toast(`${related.name} added to cart!`, "success");
+                                            }}
+                                            className="w-full py-2.5 px-3 bg-[#1B4D28] hover:bg-[#153b1e] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                                        >
+                                            <ShoppingCart size={14} />
+                                            <span>+ Add to Cart</span>
+                                        </button>
+                                    </div>
                                 </div>
-                            </Link>
+                            </div>
                         ))}
                     </div>
                 </div>
