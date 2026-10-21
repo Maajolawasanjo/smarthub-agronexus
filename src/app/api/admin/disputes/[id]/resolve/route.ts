@@ -94,12 +94,21 @@ export async function POST(
           traceCtx
         );
       }
-      if (order.payment.paymentMethod !== "WALLET") {
+      if (order.payment.paymentMethod === "WALLET") {
+        await WalletService.executeWalletEscrowRefund(buyerUserId, orderTotal, order.id);
+      } else if (order.payment.paymentMethod === "CARD" && order.payment.gatewayTransactionId) {
+        await WalletService.executeGatewayCardRefund(
+          buyerUserId,
+          order.id,
+          order.payment.gatewayTransactionId,
+          orderTotal
+        );
+      } else {
         return attachTraceHeaders(
           NextResponse.json(
             createErrorResponse(
               "GATEWAY_REFUND_REQUIRED",
-              "This order was not paid from the wallet. The dispute remains open until a provider-backed refund workflow is completed."
+              "A verified provider transaction ID is required for this refund. The dispute remains open."
             ),
             { status: 409 }
           ),
@@ -107,13 +116,16 @@ export async function POST(
         );
       }
 
-      // 1. Return only escrow actually locked for this wallet-paid order.
-      await WalletService.executeWalletEscrowRefund(buyerUserId, orderTotal, order.id);
-
-      // 2. Mark order as CANCELLED
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: "CANCELLED" },
+      // 2. Persist the order/payment state only after the source-specific refund succeeds.
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: "CANCELLED" },
+        });
+        await tx.payment.update({
+          where: { id: order.payment!.id },
+          data: { paymentStatus: "REFUNDED" },
+        });
       });
 
       // 3. Mark dispute as RESOLVED
