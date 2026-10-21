@@ -585,38 +585,87 @@ export class WalletService {
    * If escrow is 0 (e.g. card order refunded as platform store credit), funds balance directly without negative escrow.
    */
   public static async executeRefund(userId: string, amount: number, orderId: string, isStoreCredit: boolean = false) {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("INVALID_REFUND_AMOUNT");
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { buyer: true, payment: true },
+    });
+    if (!order || order.buyer.userId !== userId) {
+      throw new Error("REFUND_ORDER_OWNER_MISMATCH");
+    }
+    if (Math.abs(Number(order.totalAmount) - amount) > 0.01) {
+      throw new Error("REFUND_AMOUNT_MISMATCH");
+    }
+
+    let escrowLock: any = null;
+    if (!isStoreCredit) {
+      if (order.payment?.paymentMethod !== "WALLET") {
+        throw new Error("PAYMENT_SOURCE_MISMATCH: Wallet escrow refunds are only valid for wallet-paid orders.");
+      }
+      if (!order.payment.transactionRef) throw new Error("ESCROW_LOCK_REFERENCE_MISSING");
+
+      escrowLock = await prisma.walletTransaction.findUnique({
+        where: { reference: order.payment.transactionRef },
+        include: { wallet: true },
+      });
+      if (
+        !escrowLock ||
+        escrowLock.type !== "ESCROW_LOCK" ||
+        escrowLock.status !== "SUCCESS" ||
+        escrowLock.wallet?.userId !== userId ||
+        Math.abs(Number(escrowLock.amount) - amount) > 0.01
+      ) {
+        throw new Error("ESCROW_NOT_FUNDED");
+      }
+    }
+
     const wallet = await this.getOrCreateWallet(userId);
-    const txRef = `REF-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    const txRef = isStoreCredit ? `STORE-CREDIT-${orderId}` : `WALLET-REFUND-${orderId}`;
 
-    const currentEscrow = Number(wallet.escrow);
-    // Escrow decrement is safely clamped to available escrow so it NEVER goes negative
-    const escrowDecrement = isStoreCredit ? 0 : Math.min(currentEscrow, amount);
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.walletTransaction.findUnique({ where: { reference: txRef } });
+      if (existing) {
+        if (existing.status === "SUCCESS" && Math.abs(Number(existing.amount) - amount) <= 0.01) {
+          return { updatedWallet: wallet, txRecord: existing, alreadyRefunded: true };
+        }
+        throw new Error("REFUND_ALREADY_RECORDED");
+      }
 
-    const orderRef = String(orderId || "").slice(0, 8);
+      if (isStoreCredit) {
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: { increment: amount } },
+        });
+      } else {
+        const debit = await tx.wallet.updateMany({
+          where: { id: wallet.id, escrow: { gte: amount } },
+          data: {
+            escrow: { decrement: amount },
+            balance: { increment: amount },
+          },
+        });
+        if (debit.count !== 1) throw new Error("INSUFFICIENT_ESCROW");
+      }
 
-    const [updatedWallet, txRecord] = await prisma.$transaction([
-      prisma.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          escrow:  { decrement: escrowDecrement },  // ← Safe release: never negative
-          balance: { increment: amount },           // ← Return to buyer's available balance
-        },
-      }),
-      prisma.walletTransaction.create({
+      const txRecord = await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: "REFUND",
           amount,
           reference: txRef,
-          description: escrowDecrement > 0
-            ? `Refund credited for cancelled Order #${orderRef} (Escrow released: ₦${escrowDecrement})`
-            : `Store credit refund for cancelled Order #${orderRef}`,
+          description: isStoreCredit
+            ? `Admin-authorized store credit for Order #${order.orderNumber}`
+            : `Wallet escrow refunded for cancelled Order #${order.orderNumber}`,
           status: "SUCCESS",
         },
-      }),
-    ]);
+      });
 
-    return { updatedWallet, txRecord };
+      const updatedWallet = await tx.wallet.findUnique({ where: { id: wallet.id } });
+      return { updatedWallet, txRecord, alreadyRefunded: false };
+    });
   }
 
   /**
