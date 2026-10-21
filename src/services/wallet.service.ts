@@ -636,52 +636,74 @@ export class WalletService {
    * Enforces state machine transition to SUCCESS or REVERSED.
    */
   public static async handleTransferWebhook(txRef: string, isSuccessful: boolean, failureReason?: string) {
-    const tx = await prisma.walletTransaction.findUnique({
+    const existing = await prisma.walletTransaction.findUnique({
       where: { reference: txRef },
       include: { wallet: true },
     });
 
     const activePendingStates = ["PENDING", "VALIDATED", "SUBMITTED_TO_FLUTTERWAVE", "PROCESSING"];
-
-    if (!tx || tx.type !== "WITHDRAWAL" || !activePendingStates.includes(tx.status)) {
-      console.log(`[TRANSFER_WEBHOOK_SKIP] Transaction ${txRef} not in an active pending state (current: ${tx?.status}).`);
-      return;
+    if (!existing || existing.type !== "WITHDRAWAL" || !activePendingStates.includes(existing.status)) {
+      console.log(`[TRANSFER_WEBHOOK_SKIP] Transaction ${txRef} is not an active pending withdrawal (current: ${existing?.status}).`);
+      return { status: "ALREADY_HANDLED" as const };
     }
 
-    const amount = Number(tx.amount);
-
-    if (isSuccessful) {
-      // ── PROCESSING → SUCCESS Transition ──
-      await prisma.$transaction([
-        prisma.walletTransaction.update({
-          where: { id: tx.id },
-          data: { status: "SUCCESS", description: `[SUCCESS] Bank transfer settled (${txRef})` },
-        }),
-        prisma.wallet.update({
-          where: { id: tx.walletId },
-          data: {
-            pendingWithdrawal: { decrement: amount },
-          },
-        }),
-      ]);
-      console.log(`[TRANSFER_WEBHOOK_SUCCESS] Withdrawal ${txRef} of ₦${amount} confirmed by recipient bank.`);
-    } else {
-      // ── PROCESSING → REVERSED Transition ──
-      await prisma.$transaction([
-        prisma.walletTransaction.update({
-          where: { id: tx.id },
-          data: { status: "REVERSED", description: `[REVERSED] Transfer failed: ${failureReason || "Returned by bank"}` },
-        }),
-        prisma.wallet.update({
-          where: { id: tx.walletId },
-          data: {
-            pendingWithdrawal: { decrement: amount },
-            balance: { increment: amount },
-          },
-        }),
-      ]);
-      console.log(`[TRANSFER_WEBHOOK_REVERSED] Withdrawal ${txRef} failed. ₦${amount} restored to available balance.`);
+    const amount = Number(existing.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("WITHDRAWAL_LEDGER_AMOUNT_INVALID");
     }
+
+    // Claim the state transition and adjust the wallet in one transaction. A replayed
+    // or concurrent webhook cannot decrement pendingWithdrawal or restore balance twice.
+    const result = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.walletTransaction.updateMany({
+        where: {
+          id: existing.id,
+          type: "WITHDRAWAL",
+          status: { in: activePendingStates },
+        },
+        data: {
+          status: isSuccessful ? "SUCCESS" : "REVERSED",
+          description: isSuccessful
+            ? `[SUCCESS] Bank transfer settled (${txRef})`
+            : `[REVERSED] Transfer failed: ${failureReason || "Returned by bank"} (funds restored to available balance)`,
+        },
+      });
+
+      if (claimed.count !== 1) {
+        return { status: "ALREADY_HANDLED" as const };
+      }
+
+      const walletUpdate = await tx.wallet.updateMany({
+        where: {
+          id: existing.walletId,
+          pendingWithdrawal: { gte: amount },
+        },
+        data: isSuccessful
+          ? { pendingWithdrawal: { decrement: amount } }
+          : {
+              pendingWithdrawal: { decrement: amount },
+              balance: { increment: amount },
+            },
+      });
+
+      if (walletUpdate.count !== 1) {
+        throw new Error("WITHDRAWAL_SETTLEMENT_CONFLICT: Pending withdrawal balance does not cover this ledger entry.");
+      }
+
+      return { status: isSuccessful ? "SUCCESS" as const : "REVERSED" as const };
+    });
+
+    if (result.status === "ALREADY_HANDLED") {
+      console.log(`[TRANSFER_WEBHOOK_SKIP] Duplicate transfer callback ignored for ${txRef}.`);
+      return result;
+    }
+
+    console.log(
+      isSuccessful
+        ? `[TRANSFER_WEBHOOK_SUCCESS] Withdrawal ${txRef} of ₦${amount} confirmed by recipient bank.`
+        : `[TRANSFER_WEBHOOK_REVERSED] Withdrawal ${txRef} failed. ₦${amount} restored to available balance.`
+    );
+    return result;
   }
 
   /**
