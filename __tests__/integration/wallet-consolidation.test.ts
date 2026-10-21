@@ -198,13 +198,14 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
       id: "w_101",
       userId: mockUserId,
       balance: 10000.0 as any,
-      escrow: 0.0 as any,
+      escrow: 10000.0 as any,
       pendingWithdrawal: 0.0 as any,
       frozen: 0.0 as any,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
+    vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
     vi.spyOn(prisma, "$transaction").mockResolvedValue([
       { id: "w_101", userId: mockUserId, balance: 20000.0 as any, escrow: 0.0 as any },
       {
@@ -223,5 +224,54 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
 
     expect(result.txRecord.type).toBe("REFUND");
     expect(result.txRecord.amount).toBe(10000);
+  });
+
+  test("7. Business Rule: Refund cannot mint wallet balance when escrow is insufficient", async () => {
+    vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue({
+      id: "w_101",
+      userId: mockUserId,
+      balance: 10000.0 as any,
+      escrow: 0.0 as any,
+      pendingWithdrawal: 0.0 as any,
+      frozen: 0.0 as any,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+    const transaction = vi.spyOn(prisma, "$transaction");
+
+    await expect(
+      WalletService.executeRefund(mockUserId, 10000, "ord_insufficient_escrow")
+    ).rejects.toThrow("INSUFFICIENT_ESCROW_FOR_REFUND");
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  test("8. Business Rule: A repeated refund returns the existing ledger entry without crediting again", async () => {
+    vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue({
+      id: "w_101",
+      userId: mockUserId,
+      balance: 20000.0 as any,
+      escrow: 0.0 as any,
+      pendingWithdrawal: 0.0 as any,
+      frozen: 0.0 as any,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const existingRefund = {
+      id: "tx_refund_1",
+      walletId: "w_101",
+      type: "REFUND",
+      amount: 10000 as any,
+      reference: "REF-ord_replayed_101",
+      description: "Refund credited",
+      status: "SUCCESS",
+      createdAt: new Date(),
+    };
+    vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(existingRefund as any);
+    const transaction = vi.spyOn(prisma, "$transaction");
+
+    const result = await WalletService.executeRefund(mockUserId, 10000, "ord_replayed_101");
+    expect(result.txRecord).toEqual(existingRefund);
+    expect(transaction).not.toHaveBeenCalled();
   });
 });

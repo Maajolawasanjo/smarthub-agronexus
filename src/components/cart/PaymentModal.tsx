@@ -437,28 +437,43 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                 ? `${selectedAddress.label ? `[${selectedAddress.label}] ` : ""}${selectedAddress.addressLine}, ${selectedAddress.city ? selectedAddress.city + ", " : ""}${selectedAddress.lga}, ${selectedAddress.state} (Recipient: ${selectedAddress.recipientName}, ${selectedAddress.phoneNumber})`
                 : "Lagos Port Terminal, Nigeria";
 
-            // Handle Hosted Payment Gateway (Make Payment)
+            // Hosted checkout must first persist the order and reserve inventory.
+            // The payment initializer then binds Flutterwave to that buyer-owned Payment record.
             if (method === "flutterwave" || method === "card") {
-                const flwRes = await fetch("/api/payments/flutterwave/initialize", {
+                const orderRes = await fetch("/api/orders", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         items: orderItems,
-                        totalAmount: total,
                         shippingAddress: formattedShippingAddress,
                         shippingAddressId: selectedAddressId || undefined,
+                        incoterm: "FOB",
+                        paymentMethod: "CARD",
                     }),
                 });
+                const orderData = await orderRes.json();
+                if (!orderRes.ok || !orderData.order?.id) {
+                    setSubmitError(orderData.error || "Could not create the order for payment.");
+                    setIsSubmitting(false);
+                    return;
+                }
 
+                const flwRes = await fetch("/api/payments/flutterwave/initialize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ orderId: orderData.order.id }),
+                });
                 const flwData = await flwRes.json();
                 if (flwRes.ok && flwData.link) {
                     window.location.href = flwData.link;
                     return;
-                } else {
-                    setSubmitError(flwData.error || "Failed to launch payment checkout session.");
-                    setIsSubmitting(false);
-                    return;
                 }
+
+                // Best-effort cleanup: release reserved inventory if hosted checkout could not start.
+                await fetch(`/api/orders/${orderData.order.id}/cancel`, { method: "POST" }).catch(() => undefined);
+                setSubmitError(flwData.error || "Failed to launch Flutterwave checkout.");
+                setIsSubmitting(false);
+                return;
             }
 
             const res = await fetch("/api/orders", {

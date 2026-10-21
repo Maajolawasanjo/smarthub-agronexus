@@ -141,3 +141,44 @@ jobs:
 
       - name: Run password and origin tests
         run: npx vitest run __tests__/security/p0c2-password-change.test.ts __tests__/security/p0c2-role-mutation-guards.test.ts __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
+
+
+  p0c3-financial-endpoint-security:
+    name: Financial endpoint authorization and gateway binding
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint financial endpoint changes and regression tests
+        run: >-
+          npx eslint
+          src/app/api/payments/flutterwave/initialize/route.ts
+          src/app/api/payments/flutterwave/webhook/route.ts
+          src/app/api/wallet/escrow/route.ts
+          'src/app/api/orders/[id]/release-escrow/route.ts'
+          'src/app/api/orders/[id]/cancel/route.ts'
+          'src/app/api/payments/settlement/[orderId]/route.ts'
+          'src/app/api/admin/disputes/[id]/resolve/route.ts'
+          src/services/wallet.service.ts
+          src/components/cart/PaymentModal.tsx
+          __tests__/integration/wallet-consolidation.test.ts
+          __tests__/integration/multi-vendor-settlement.test.ts
+          __tests__/integration/phase4-checkout-logistics.test.ts
+          __tests__/security/p0c3-financial-endpoint-authorization.test.ts
+
+      - name: Run financial authorization and refund regression suites
+        run: npx vitest run __tests__/security/p0c3-financial-endpoint-authorization.test.ts __tests__/integration/wallet-consolidation.test.ts __tests__/integration/multi-vendor-settlement.test.ts __tests__/integration/phase4-checkout-logistics.test.ts

@@ -513,12 +513,35 @@ export class WalletService {
    * If escrow is 0 (e.g. card order refunded as platform store credit), funds balance directly without negative escrow.
    */
   public static async executeRefund(userId: string, amount: number, orderId: string, isStoreCredit: boolean = false) {
+    if (!Number.isFinite(amount) || amount <= 0 || !orderId) {
+      throw new Error("INVALID_REFUND: A positive amount and order ID are required.");
+    }
+
     const wallet = await this.getOrCreateWallet(userId);
-    const txRef = `REF-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    // One full refund per order. A deterministic unique ledger reference prevents replayed
+    // requests from crediting the same buyer twice; a conflicting reuse fails closed.
+    const txRef = `REF-${orderId}`;
+    const existingTx = await prisma.walletTransaction.findUnique({
+      where: { reference: txRef },
+    });
+    if (existingTx) {
+      const existingIsStoreCredit = String(existingTx.description || "").toLowerCase().includes("store credit refund");
+      if (
+        existingTx.walletId !== wallet.id ||
+        Number(existingTx.amount) !== amount ||
+        existingTx.type !== "REFUND" ||
+        existingIsStoreCredit !== isStoreCredit
+      ) {
+        throw new Error("REFUND_REFERENCE_CONFLICT: Existing refund ledger entry does not match this request.");
+      }
+      return { updatedWallet: wallet, txRecord: existingTx };
+    }
 
     const currentEscrow = Number(wallet.escrow);
-    // Escrow decrement is safely clamped to available escrow so it NEVER goes negative
-    const escrowDecrement = isStoreCredit ? 0 : Math.min(currentEscrow, amount);
+    if (!isStoreCredit && currentEscrow + 0.001 < amount) {
+      throw new Error("INSUFFICIENT_ESCROW_FOR_REFUND: Locked escrow is insufficient; no wallet credit was issued.");
+    }
+    const escrowDecrement = isStoreCredit ? 0 : amount;
 
     const orderRef = String(orderId || "").slice(0, 8);
 
@@ -741,6 +764,7 @@ export class WalletService {
       where: { id: effectiveOrderId },
       include: {
         buyer: true,
+        payment: true,
         sellerOrders: {
           include: {
             farmerProfile: {
@@ -759,6 +783,17 @@ export class WalletService {
     });
 
     if (!order) throw new Error("ORDER_NOT_FOUND");
+    // A completed parent order is terminal. This service is called by routes, admin
+    // arbitration, and fulfillment jobs, so replay protection must live below the route.
+    if (order.status === "COMPLETED") {
+      throw new Error("ESCROW_ALREADY_RELEASED");
+    }
+    if (!order.payment || order.payment.paymentStatus !== "PAID") {
+      throw new Error("PAYMENT_NOT_SETTLED");
+    }
+    if (Math.abs(Number(order.payment.amount) - Number(order.totalAmount)) > 0.01) {
+      throw new Error("PAYMENT_AMOUNT_MISMATCH");
+    }
 
     const buyerUserId = order.buyer?.userId || (maybeOrderId ? userIdOrOrderId : (order as any).buyerId);
     const buyerWallet = await this.getOrCreateWallet(buyerUserId);
@@ -793,7 +828,7 @@ export class WalletService {
         const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
         totalGrossSettled += grossAmount;
         const farmerWallet = await this.getOrCreateWallet(farmerUserId);
-        const txRef = `REL-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+        const txRef = `REL-${order.id}-${farmerUserId}`;
 
         settlementOps.push(
           prisma.wallet.update({
@@ -814,7 +849,10 @@ export class WalletService {
       }
 
       const currentEscrow = Number(buyerWallet.escrow);
-      const escrowDecrement = Math.min(currentEscrow, totalGrossSettled);
+      const escrowDecrement = Number(order.totalAmount);
+      if (currentEscrow + 0.001 < escrowDecrement) {
+        throw new Error("INSUFFICIENT_ESCROW_FOR_RELEASE");
+      }
 
       await prisma.$transaction([
         prisma.order.update({
@@ -855,7 +893,7 @@ export class WalletService {
       settledSellerOrderIds.push(sellerOrder.id);
 
       const farmerWallet = await this.getOrCreateWallet(farmerUserId);
-      const txRef = `REL-${sellerOrder.sellerOrderNumber}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+      const txRef = `REL-${sellerOrder.id}`;
 
       // 1. Mark SellerOrder as COMPLETED
       settlementOps.push(
@@ -891,10 +929,13 @@ export class WalletService {
       );
     }
 
-    // 4. Decrement buyer's escrow column safely (full locked amount including shipping)
+    // 4. The seller sub-order totals must be fully backed by the buyer's locked escrow.
+    // Never pay sellers while clamping an underfunded escrow balance.
     const currentEscrow = Number(buyerWallet.escrow);
-    const escrowDecrement = Math.min(currentEscrow, totalEscrowToRelease);
-
+    if (currentEscrow + 0.001 < totalEscrowToRelease) {
+      throw new Error("INSUFFICIENT_ESCROW_FOR_RELEASE");
+    }
+    const escrowDecrement = totalEscrowToRelease;
 
     settlementOps.push(
       prisma.wallet.update({

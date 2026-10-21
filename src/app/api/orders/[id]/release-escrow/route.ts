@@ -31,7 +31,7 @@ export async function POST(
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { buyer: true },
+      include: { buyer: true, payment: true, delivery: true, sellerOrders: true, disputes: true },
     });
 
     if (!order) {
@@ -42,8 +42,9 @@ export async function POST(
       return attachTraceHeaders(res, traceCtx);
     }
 
-    // Verify buyer owns this order or user is admin
-    if (order.buyer.userId !== session.userId && session.role !== "ADMIN") {
+    // Only the authenticated buyer who owns this order may confirm delivery here.
+    // Admin arbitration uses the dedicated dispute-resolution endpoint.
+    if (session.role !== "BUYER" || order.buyer.userId !== session.userId) {
       const res = NextResponse.json(
         createErrorResponse("FORBIDDEN", "Only the buyer who placed the order can confirm delivery & release escrow."),
         { status: 403 }
@@ -54,7 +55,37 @@ export async function POST(
     if (order.status === "COMPLETED") {
       const res = NextResponse.json(
         createErrorResponse("ALREADY_RELEASED", "Escrow has already been released for this order."),
-        { status: 400 }
+        { status: 409 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    if (order.payment?.paymentStatus !== "PAID") {
+      const res = NextResponse.json(
+        createErrorResponse("PAYMENT_NOT_SETTLED", "Payment must be confirmed before escrow release."),
+        { status: 409 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    const deliveryConfirmed =
+      order.status === "DELIVERED" ||
+      order.delivery?.deliveryStatus === "DELIVERED" ||
+      (order.sellerOrders.length > 0 && order.sellerOrders.every((sellerOrder) =>
+        sellerOrder.status === "DELIVERED" || sellerOrder.status === "COMPLETED"
+      ));
+    if (!deliveryConfirmed) {
+      const res = NextResponse.json(
+        createErrorResponse("DELIVERY_NOT_CONFIRMED", "Escrow can only be released after delivery is confirmed."),
+        { status: 409 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    if (order.disputes.some((dispute) => dispute.status === "OPEN" || dispute.status === "UNDER_REVIEW")) {
+      const res = NextResponse.json(
+        createErrorResponse("DISPUTE_OPEN", "Escrow is held while this order has an active dispute."),
+        { status: 409 }
       );
       return attachTraceHeaders(res, traceCtx);
     }
