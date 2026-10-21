@@ -702,39 +702,59 @@ export class WalletService {
       throw new Error("REFUND_AMOUNT_MISMATCH");
     }
 
-    const refundReference = `FLW-REFUND-${orderId}`;
-    const existingRefund = await prisma.walletTransaction.findUnique({
-      where: { reference: refundReference },
-    });
-    if (existingRefund?.status === "SUCCESS") {
-      return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: gatewayId };
+    const payment = order.payment;
+    if (payment.refundStatus === "SUCCEEDED") {
+      return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: payment.gatewayTransactionId };
+    }
+    if (payment.refundStatus === "PENDING" || payment.refundStatus === "MANUAL_REVIEW") {
+      throw new Error("CARD_REFUND_PENDING_RECONCILIATION: A previous refund attempt requires reconciliation.");
+    }
+    if (payment.refundStatus === "FAILED") {
+      throw new Error("CARD_REFUND_FAILED: A previous provider refund attempt failed; manual review is required.");
+    }
+    if (payment.paymentStatus !== "PAID") {
+      throw new Error("CARD_REFUND_FAILED: Only a captured payment can be refunded.");
     }
 
-    if (!gatewayId || !order.payment.gatewayTransactionId || order.payment.gatewayTransactionId !== gatewayId) {
+    const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
+    if (!secretKey || !gatewayId || !payment.gatewayTransactionId || payment.gatewayTransactionId !== gatewayId || !/^\d+$/.test(gatewayId)) {
+      await prisma.payment.updateMany({
+        where: { id: payment.id, paymentStatus: "PAID", refundStatus: null },
+        data: { refundStatus: "MANUAL_REVIEW" },
+      });
       await this.persistManualReviewFlag(
         userId,
         orderId,
         amount,
-        "Verified provider transaction ID is missing or does not match the persisted payment."
+        !secretKey
+          ? "Gateway not configured (missing FLUTTERWAVE_SECRET_KEY)"
+          : "Verified provider transaction ID is missing or does not match the persisted payment."
       );
-      throw new Error("CARD_REFUND_FAILED: Verified provider transaction ID is missing or mismatched. Manual review required.");
+      throw new Error("CARD_REFUND_FAILED: Verified provider transaction ID or gateway configuration is missing. Manual review required.");
     }
 
-    const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
-    if (!secretKey) {
-      await this.persistManualReviewFlag(userId, orderId, amount, "Gateway not configured (missing FLUTTERWAVE_SECRET_KEY)");
-      throw new Error("CARD_REFUND_FAILED: Gateway not configured. Manual review required.");
-    }
-    if (!/^\d+$/.test(gatewayId)) {
-      await this.persistManualReviewFlag(userId, orderId, amount, "Verified provider transaction ID is missing; tx_ref cannot be used as a transaction ID.");
-      throw new Error("CARD_REFUND_FAILED: Verified provider transaction ID is missing. Manual review required.");
-    }
-    if (order.payment.paymentStatus !== "PAID" && order.payment.paymentStatus !== "REFUNDED") {
-      throw new Error("CARD_REFUND_FAILED: Only a captured payment can be refunded.");
+    // Claim the one allowed refund attempt before calling Flutterwave. A second request
+    // cannot issue a duplicate refund while the first is pending or its outcome is unknown.
+    const claim = await prisma.payment.updateMany({
+      where: {
+        id: payment.id,
+        paymentStatus: "PAID",
+        refundStatus: null,
+        gatewayTransactionId: gatewayId,
+      },
+      data: { refundStatus: "PENDING" },
+    });
+    if (claim.count !== 1) {
+      const current = await prisma.payment.findUnique({ where: { id: payment.id } });
+      if (current?.refundStatus === "SUCCEEDED") {
+        return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: current.gatewayTransactionId };
+      }
+      throw new Error("CARD_REFUND_PENDING_RECONCILIATION: Refund state changed before provider submission.");
     }
 
+    let flwRes: Response;
     try {
-      const flwRes = await fetch(
+      flwRes = await fetch(
         `https://api.flutterwave.com/v3/transactions/${encodeURIComponent(gatewayId)}/refund`,
         {
           method: "POST",
@@ -745,42 +765,49 @@ export class WalletService {
           body: JSON.stringify({ amount }),
         }
       );
-      const flwData = await flwRes.json().catch(() => ({}));
-      if (!flwRes.ok || flwData.status !== "success") {
-        const errMsg = flwData?.message || "Gateway returned non-success status";
-        await this.persistManualReviewFlag(userId, orderId, amount, `Gateway rejection: ${errMsg}`);
-        throw new Error(`CARD_REFUND_FAILED: ${errMsg}. Manual review required.`);
-      }
-
-      const wallet = await this.getOrCreateWallet(userId);
-      await prisma.$transaction(async (tx) => {
-        const existing = await tx.walletTransaction.findUnique({
-          where: { reference: refundReference },
-        });
-        if (existing?.status === "SUCCESS") return;
-
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            type: "REFUND",
-            amount,
-            reference: refundReference,
-            description: `Gateway card refund processed for Order #${order.orderNumber} via Flutterwave (provider transaction ${gatewayId})`,
-            status: "SUCCESS",
-          },
-        });
+    } catch (error: unknown) {
+      await prisma.payment.updateMany({
+        where: { id: payment.id, refundStatus: "PENDING" },
+        data: { refundStatus: "MANUAL_REVIEW" },
       });
-
-      console.log(`[FLUTTERWAVE_REFUND_SUCCESS] Refunded ₦${amount} to card for Order #${orderId}`);
-      return { gatewayRefunded: true, alreadyRefunded: false, gatewayTransactionId: gatewayId };
-    } catch (err: unknown) {
-      const error = err as { message?: string };
-      if (error.message?.startsWith("CARD_REFUND_FAILED")) throw err;
-      const networkMsg = error.message || "Unknown network error";
-      console.error("[FLUTTERWAVE_REFUND_EXCEPTION] Network or persistence error during gateway refund:", networkMsg);
-      await this.persistManualReviewFlag(userId, orderId, amount, `Refund request could not be conclusively recorded: ${networkMsg}`);
-      throw new Error("CARD_REFUND_FAILED: Refund result requires manual reconciliation.");
+      const message = error instanceof Error ? error.message : "Unknown network error";
+      await this.persistManualReviewFlag(userId, orderId, amount, `Gateway refund outcome is unknown: ${message}`);
+      throw new Error("CARD_REFUND_PENDING_RECONCILIATION: Gateway outcome is unknown; manual reconciliation required.");
     }
+
+    const flwData = await flwRes.json().catch(() => ({}));
+    if (!flwRes.ok || flwData.status !== "success") {
+      const errMsg = flwData?.message || "Gateway returned non-success status";
+      await prisma.payment.updateMany({
+        where: { id: payment.id, refundStatus: "PENDING" },
+        data: { refundStatus: "FAILED" },
+      });
+      await this.persistManualReviewFlag(userId, orderId, amount, `Gateway rejection: ${errMsg}`);
+      throw new Error(`CARD_REFUND_FAILED: ${errMsg}. Manual review required.`);
+    }
+
+    const providerRefundId = String(flwData.data?.id ?? flwData.data?.refund_id ?? "").trim() || null;
+    try {
+      const finalized = await prisma.payment.updateMany({
+        where: { id: payment.id, refundStatus: "PENDING" },
+        data: {
+          refundStatus: "SUCCEEDED",
+          gatewayRefundId: providerRefundId,
+        },
+      });
+      if (finalized.count !== 1) throw new Error("REFUND_STATE_FINALIZATION_CONFLICT");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown persistence error";
+      await prisma.payment.updateMany({
+        where: { id: payment.id, refundStatus: "PENDING" },
+        data: { refundStatus: "MANUAL_REVIEW" },
+      }).catch(() => undefined);
+      await this.persistManualReviewFlag(userId, orderId, amount, `Provider refund succeeded but local state finalization failed: ${message}`);
+      throw new Error("CARD_REFUND_PENDING_RECONCILIATION: Provider refunded the charge but local state requires manual reconciliation.");
+    }
+
+    console.log(`[FLUTTERWAVE_REFUND_SUCCESS] Refunded ₦${amount} to card for Order #${orderId}`);
+    return { gatewayRefunded: true, alreadyRefunded: false, gatewayTransactionId: gatewayId, gatewayRefundId: providerRefundId };
   }
 
   /**
