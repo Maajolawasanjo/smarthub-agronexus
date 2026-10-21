@@ -19,6 +19,7 @@ The current financial endpoint hardening is being implemented on branch `fix/p0c
 - The new Prisma migration for provider refund state must be applied and verified in staging before deploying application code that reads those fields.
 - Staging tests must exercise buyer, farmer, and admin flows against the migrated database, including checkout/webhook settlement, card and wallet refunds, escrow release, and withdrawal retry/reconciliation.
 - Production deployment and production smoke tests must be independently confirmed; no deployment is asserted by this report.
+- **Separate financial-ledger blocker:** escrow release currently drains the full order amount and credits farmers net of commission/VAT, but the schema has no platform treasury, VAT payable, or logistics payable account and no corresponding ledger entries. Shipping is described as pass-through but is not settled to a persisted logistics account. The current PR does not resolve this accounting architecture; it must be audited and implemented before financial reconciliation can be certified.
 
 The historical figures in earlier versions of this report are not release evidence for the current branch unless re-run against the exact final commit.
 
