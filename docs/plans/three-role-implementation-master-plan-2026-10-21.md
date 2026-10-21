@@ -2,7 +2,7 @@
 
 **Version:** 1.1 — APPROVED (four product policies locked)  
 **Date:** 2026-10-21  
-**Starting point:** [Admin Operations and Product Parity Audit](./admin-operations-product-parity-2026-10-21.md), [Cross-Role Farmer–Admin–Buyer Audit](./cross-role-farmer-admin-buyer-2026-10-21.md)  
+**Starting point:** [Admin Operations and Product Parity Audit](../audits/admin-operations-product-parity-2026-10-21.md), [Cross-Role Farmer–Admin–Buyer Audit](../audits/cross-role-farmer-admin-buyer-2026-10-21.md)  
 **State:** The four product policies are APPROVED as of 2026-10-21. Detailed Phase 0 execution and tests are specified in [Phase 0 Execution Specification](./phase-0-security-database-ci-execution-spec-2026-10-21.md). Planning only: no application-code or production-data modification authorized by this document.
 
 ## 1. Product objective
