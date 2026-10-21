@@ -128,13 +128,16 @@ export async function POST(
       });
 
       for (const item of order.orderItems) {
-        await tx.inventory.updateMany({
+        const restored = await tx.inventory.updateMany({
           where: { productId: item.productId, reservedQty: { gte: item.quantity } },
           data: {
             availableQty: { increment: item.quantity },
             reservedQty: { decrement: item.quantity },
           },
         });
+        if (restored.count !== 1) {
+          throw new Error(`INVENTORY_RESTORE_CONFLICT: Cannot restore reserved quantity for product ${item.productId}.`);
+        }
       }
     });
 
