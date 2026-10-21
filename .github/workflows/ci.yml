@@ -2,9 +2,8 @@ name: SmartHub AgroChain CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, 'fix/**' ]
   pull_request:
-    branches: [ main, develop ]
 # Safe, intentionally unreachable placeholder for Prisma client initialization and
 # Next.js build-time route discovery. Never use Production DATABASE_URL in CI.
 env:
