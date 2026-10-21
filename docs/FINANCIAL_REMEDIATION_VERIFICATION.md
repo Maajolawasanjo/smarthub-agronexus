@@ -24,10 +24,11 @@ The current financial endpoint hardening is being implemented on branch `fix/p0c
 The historical figures in earlier versions of this report are not release evidence for the current branch unless re-run against the exact final commit.
 
 ### Verification record — October 21, 2026
-- **Application code head tested:** `cfd95481cec73f841567b7bfabaf5b97c7e18786`
-- **GitHub Actions:** [Run 39623820541](https://github.com/Maajolawasanjo/smarthub-agronexus/actions/runs/39623820541) — all six jobs passed, including the production Next.js build, full test suite, and required security suites.
-- **Automated suite:** 42 test files passed, 1 skipped; 266 tests passed, 7 skipped.
-- **Staging/browser verification:** **Not completed.** Vercel preview creation is currently blocked by the account's daily deployment API quota (HTTP 402). The latest available branch preview is for an older commit and is in an error state. No runtime verification of the current PR head and no production deployment are claimed.
+- **Latest application code head tested:** `63068841525fd8fecb1d1ee3003c8577ca66943c`
+- **GitHub Actions:** [Run 39624929103](https://github.com/Maajolawasanjo/smarthub-agronexus/actions/runs/39624929103) — all six jobs passed, including the production Next.js build, full test suite, and required security suites.
+- **Automated suite:** 42 test files passed, 1 skipped; 268 tests passed, 7 skipped.
+- **Live PostgreSQL persistence tests:** The real-database test file was skipped in this CI run (7 tests skipped); these results do not prove the latest migration was applied to staging or production.
+- **Staging/browser verification:** **Not completed.** Vercel preview creation was previously blocked by the account's daily deployment API quota (HTTP 402). The latest available branch preview was for an older commit and was in an error state. No runtime verification of the current PR head and no production deployment are claimed.
 
 ---
 
