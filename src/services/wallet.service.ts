@@ -745,18 +745,22 @@ export class WalletService {
     const orders = await prisma.order.findMany({
       where: {
         buyerId: buyerProfileId,
-        status: { in: ["PENDING", "CONFIRMED", "PROCESSING", "READY_FOR_PICKUP", "IN_TRANSIT"] },
+        status: { in: ["PENDING", "CONFIRMED", "PROCESSING", "READY_FOR_PICKUP", "IN_TRANSIT", "DELIVERED"] },
       },
       include: {
         orderItems: { include: { product: true } },
         delivery: true,
+        payment: true,
+        disputes: { where: { status: { in: ["OPEN", "UNDER_REVIEW"] } } },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    const totalLockedEscrow = orders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+    // The escrow dashboard must not represent unpaid orders as funded escrow.
+    const protectedOrders = orders.filter((o) => o.payment?.paymentStatus === "PAID");
+    const totalLockedEscrow = protectedOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
 
-    const mappedOrders = orders.map((o) => {
+    const mappedOrders = protectedOrders.map((o) => {
       const firstProduct = o.orderItems[0]?.product?.name || "Agro Produce Shipment";
       const totalItems = o.orderItems.reduce((acc, item) => acc + item.quantity, 0);
       const deliveryStatus = o.delivery?.deliveryStatus || "PENDING";
@@ -780,7 +784,7 @@ export class WalletService {
           ? new Date(o.delivery.estimatedDelivery).toLocaleDateString("en-NG", { month: "short", day: "numeric" })
           : "In Transit",
         milestone: `Logistics Checkpoint: ${deliveryStatus}`,
-        canRelease: o.status === "IN_TRANSIT" || deliveryStatus === "DELIVERED",
+        canRelease: o.status === "DELIVERED" && o.payment?.paymentStatus === "PAID" && (o.disputes?.length || 0) === 0,
       };
     });
 
