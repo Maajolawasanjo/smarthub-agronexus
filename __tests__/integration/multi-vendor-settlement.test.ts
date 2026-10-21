@@ -678,6 +678,6 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         if (originalKey === undefined) delete process.env.FLUTTERWAVE_SECRET_KEY;
         else process.env.FLUTTERWAVE_SECRET_KEY = originalKey;
       }
-    });;
+    });
   });
 });
