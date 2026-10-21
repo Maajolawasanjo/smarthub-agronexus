@@ -49,6 +49,7 @@ export async function POST(
         order: {
           include: {
             buyer: true,
+            payment: true,
             orderItems: {
               include: {
                 product: {
@@ -82,8 +83,32 @@ export async function POST(
     const buyerUserId = order.buyer.userId;
 
     if (action === "REFUND_BUYER") {
-      // 1. Return locked escrow funds back to buyer's available wallet balance
-      await WalletService.executeRefund(buyerUserId, orderTotal, order.id);
+      // A gateway/card payment must be refunded through the gateway using its provider
+      // transaction ID. Never convert a card capture into wallet credit implicitly.
+      if (order.payment?.paymentStatus !== "PAID") {
+        return attachTraceHeaders(
+          NextResponse.json(
+            createErrorResponse("PAYMENT_NOT_SETTLED", "Only settled orders can be refunded."),
+            { status: 409 }
+          ),
+          traceCtx
+        );
+      }
+      if (order.payment.paymentMethod !== "WALLET") {
+        return attachTraceHeaders(
+          NextResponse.json(
+            createErrorResponse(
+              "GATEWAY_REFUND_REQUIRED",
+              "This order was not paid from the wallet. The dispute remains open until a provider-backed refund workflow is completed."
+            ),
+            { status: 409 }
+          ),
+          traceCtx
+        );
+      }
+
+      // 1. Return only escrow actually locked for this wallet-paid order.
+      await WalletService.executeWalletEscrowRefund(buyerUserId, orderTotal, order.id);
 
       // 2. Mark order as CANCELLED
       await prisma.order.update({
@@ -155,7 +180,7 @@ export async function POST(
     } else {
       // action === "RELEASE_TO_FARMER"
       // 1. Release escrow funds to the farmer wallet (minus platform fee) & complete order
-      await WalletService.executeEscrowRelease(buyerUserId, order.id);
+      await WalletService.executeEscrowRelease(buyerUserId, order.id, undefined, { allowActiveDispute: true });
 
       // 2. Mark dispute as RESOLVED
       const resolutionText = notes?.trim()
