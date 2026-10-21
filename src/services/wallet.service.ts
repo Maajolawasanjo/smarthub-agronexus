@@ -613,6 +613,18 @@ export class WalletService {
       ) {
         throw new Error("ESCROW_NOT_FUNDED");
       }
+      if (order.payment.paymentStatus === "REFUNDED") {
+        const priorRefund = await prisma.walletTransaction.findUnique({
+          where: { reference: `WALLET-REFUND-${orderId}` },
+        });
+        if (
+          !priorRefund ||
+          priorRefund.status !== "SUCCESS" ||
+          Math.abs(Number(priorRefund.amount) - amount) > 0.01
+        ) {
+          throw new Error("REFUND_STATE_CONFLICT");
+        }
+      }
     }
 
     const wallet = await this.getOrCreateWallet(userId);
