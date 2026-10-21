@@ -66,6 +66,7 @@ describe("Phase 4: Checkout & Logistics", () => {
           id: "pay-delivery-001",
           paymentMethod: "CARD",
           paymentStatus: "PAID",
+          financialState: "ESCROWED",
           transactionRef: "TX-DELIVERY-001",
           amount: 80000,
         },
