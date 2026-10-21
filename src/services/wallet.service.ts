@@ -596,7 +596,10 @@ export class WalletService {
     if (!order || order.buyer.userId !== userId) {
       throw new Error("REFUND_ORDER_OWNER_MISMATCH");
     }
-    if (Math.abs(Number(order.totalAmount) - amount) > 0.01) {
+    if (
+      Math.abs(Number(order.totalAmount) - amount) > 0.01 ||
+      (order.payment && Math.abs(Number(order.payment.amount) - amount) > 0.01)
+    ) {
       throw new Error("REFUND_AMOUNT_MISMATCH");
     }
 
@@ -604,6 +607,9 @@ export class WalletService {
     if (!isStoreCredit) {
       if (order.payment?.paymentMethod !== "WALLET") {
         throw new Error("PAYMENT_SOURCE_MISMATCH: Wallet escrow refunds are only valid for wallet-paid orders.");
+      }
+      if (!["PAID", "REFUNDED"].includes(order.payment.paymentStatus)) {
+        throw new Error("PAYMENT_NOT_SETTLED");
       }
       if (!order.payment.transactionRef) throw new Error("ESCROW_LOCK_REFERENCE_MISSING");
 
@@ -969,6 +975,10 @@ export class WalletService {
       Math.abs(Number(lockTransaction.amount) - orderAmount) > 0.01
     ) {
       throw new Error("ESCROW_NOT_FUNDED");
+    }
+
+    if (Math.abs(Number(order.payment.amount) - orderAmount) > 0.01) {
+      throw new Error("PAYMENT_AMOUNT_MISMATCH");
     }
 
     const buyerWallet = lockTransaction.wallet;
