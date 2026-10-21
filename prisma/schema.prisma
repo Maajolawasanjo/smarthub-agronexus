@@ -200,8 +200,9 @@ model Payment {
   amount         Decimal       @db.Decimal(10, 2)
   paymentMethod  PaymentMethod
   paymentStatus  PaymentStatus @default(PENDING)
-  transactionRef String?       @unique
-  paidAt         DateTime?
+  transactionRef       String?   @unique
+  gatewayTransactionId String?   @unique
+  paidAt                DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
