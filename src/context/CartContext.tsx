@@ -33,6 +33,7 @@ export interface CartItem extends Product {
 
 interface CartContextType {
     cartItems: CartItem[];
+    isHydrated: boolean;
     addToCart: (product: Product, customQty?: number) => void;
     updateQuantity: (id: number | string, delta: number) => void;
     removeFromCart: (id: number | string) => void;
