@@ -266,8 +266,12 @@ export class AdminOrderService {
           throw new Error(`Cannot cancel order in ${order.status} state.`);
         }
 
-        // If payment was settled, refund escrow to buyer wallet
-        if (order.payment && order.payment.paymentStatus === "PAID") {
+        // Only wallet-paid orders can be refunded from internal escrow. Card/bank
+        // payments require a provider-backed refund and must not be credited as wallet funds.
+        if (order.payment?.paymentStatus === "PAID") {
+          if (order.payment.paymentMethod !== "WALLET") {
+            throw new Error("GATEWAY_REFUND_REQUIRED: Resolve the provider refund before cancelling this paid order.");
+          }
           await WalletService.executeWalletEscrowRefund(buyerUserId, Number(order.totalAmount), order.id);
         }
 
