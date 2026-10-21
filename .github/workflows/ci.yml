@@ -170,6 +170,7 @@ jobs:
           src/app/api/payments/flutterwave/webhook/route.ts
           src/app/api/wallet/escrow/route.ts
           'src/app/api/orders/[id]/release-escrow/route.ts'
+          'src/app/api/orders/[id]/cancel/route.ts'
           'src/app/api/payments/settlement/[orderId]/route.ts'
           'src/app/api/admin/disputes/[id]/resolve/route.ts'
           src/services/wallet.service.ts
