@@ -174,6 +174,9 @@ export async function POST(
       "GATEWAY_REFUND_PAYMENT_MISMATCH",
       "ORDER_STATE_CONFLICT",
       "CARD_REFUND_FAILED",
+      "INVENTORY_RESTORE_CONFLICT",
+      "PAYMENT_NOT_SETTLED",
+      "REFUND_ALREADY_RECORDED",
     ].some((code) => message.includes(code)) ? 409 : 500;
     console.error("[SETTLEMENT_REFUND_ERROR]", { message, status });
     return NextResponse.json({ error: message, code: "REFUND_FAILED" }, { status });
