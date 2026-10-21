@@ -48,6 +48,7 @@ vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
 
 import { POST as initializeFlutterwave } from "@/app/api/payments/flutterwave/initialize/route";
 import { POST as releaseWalletEscrow } from "@/app/api/wallet/escrow/route";
+import { POST as cancelOrder } from "@/app/api/orders/[id]/cancel/route";
 import { POST as flutterwaveWebhook } from "@/app/api/payments/flutterwave/webhook/route";
 import { GET as getSettlement, POST as postSettlement } from "@/app/api/payments/settlement/[orderId]/route";
 import { POST as resolveDispute } from "@/app/api/admin/disputes/[id]/resolve/route";
@@ -70,6 +71,7 @@ const orderFixture = () => ({
   delivery: { deliveryStatus: "PENDING" },
   sellerOrders: [{ status: "PENDING" }],
   disputes: [],
+  orderItems: [],
 });
 
 function request(url: string, method: string, body?: unknown, origin = "https://www.smarthubagrochain.online") {
@@ -200,6 +202,37 @@ describe("P0-C3 financial endpoint authorization and payment binding", () => {
     const disputed = await releaseWalletEscrow(request("https://www.smarthubagrochain.online/api/wallet/escrow", "POST", { dbOrderId: "order_1" }));
     expect(disputed.status).toBe(409);
     expect(mock.executeEscrowRelease).not.toHaveBeenCalled();
+  });
+
+  it("does not mutate a paid card order when cancellation lacks a source-aware refund", async () => {
+    mock.orderFindUnique.mockResolvedValue({
+      ...orderFixture(),
+      payment: { ...orderFixture().payment, paymentMethod: "CARD", paymentStatus: "PAID" },
+    });
+    const response = await cancelOrder(
+      request("https://www.smarthubagrochain.online/api/orders/order_1/cancel", "POST"),
+      { params: Promise.resolve({ id: "order_1" }) },
+    );
+    expect(response.status).toBe(409);
+    expect(mock.orderUpdate).not.toHaveBeenCalled();
+    expect(mock.walletFindUnique).not.toHaveBeenCalled();
+    expect(mock.recordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: "PAID_EXTERNAL_ORDER_CANCELLATION_REQUIRES_MANUAL_REVIEW",
+    }));
+  });
+
+  it("does not cancel a wallet order when the locked escrow cannot cover the refund", async () => {
+    mock.orderFindUnique.mockResolvedValue({
+      ...orderFixture(),
+      payment: { ...orderFixture().payment, paymentMethod: "WALLET", paymentStatus: "PAID" },
+    });
+    mock.walletFindUnique.mockResolvedValue({ id: "wallet_1", escrow: 0 });
+    const response = await cancelOrder(
+      request("https://www.smarthubagrochain.online/api/orders/order_1/cancel", "POST"),
+      { params: Promise.resolve({ id: "order_1" }) },
+    );
+    expect(response.status).toBe(409);
+    expect(mock.orderUpdate).not.toHaveBeenCalled();
   });
 
   it("only allows an order-owning Buyer to view settlement details", async () => {
