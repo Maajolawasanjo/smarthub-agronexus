@@ -93,7 +93,8 @@ export async function POST(req: Request) {
         await WalletService.settleOrderPaymentFromGateway(
           targetPayment.id,
           txRef,
-          verifiedAmount
+          verifiedAmount,
+          String(verified.id)
         );
       } else if (
         meta.purpose === "WALLET_FUNDING" &&
