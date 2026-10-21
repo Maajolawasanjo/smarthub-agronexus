@@ -303,9 +303,28 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         return { count: 1 };
       });
       const txMock = {
+        payment: {
+          updateMany: vi.fn(async ({ where, data }: any) => {
+            if (where.id !== mockOrder.payment.id || mockOrder.payment.financialState !== where.financialState) return { count: 0 };
+            Object.assign(mockOrder.payment, data);
+            return { count: 1 };
+          }),
+        },
+        order: {
+          updateMany: vi.fn(async ({ where, data }: any) => {
+            if (where.id !== mockOrder.id || mockOrder.status !== where.status) return { count: 0 };
+            Object.assign(mockOrder, data);
+            return { count: 1 };
+          }),
+        },
         wallet: { update: txWalletUpdate, updateMany: txWalletUpdateMany },
         walletTransaction: { create: txWalletTransactionCreate },
-        sellerOrder: { updateMany: txSellerOrderUpdateMany },
+        sellerOrder: {
+          updateMany: txSellerOrderUpdateMany,
+          count: vi.fn(async ({ where }: any) => mockOrder.sellerOrders.filter((so: any) =>
+            so.orderId === where.orderId && so.status !== "COMPLETED"
+          ).length),
+        },
       };
 
       vi.spyOn(prisma.sellerOrder, "count").mockResolvedValue(0 as any);
@@ -780,6 +799,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
 
       const txUpdateMany = vi.fn(async () => ({ count: 0 }));
       const txMock = {
+        payment: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         walletTransaction: { findUnique: vi.fn().mockResolvedValue(null) },
         wallet: { updateMany: txUpdateMany },
       };
