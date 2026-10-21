@@ -810,6 +810,12 @@ export class WalletService {
           data: { balance: { increment: amount } },
         });
       } else {
+        const financialClaim = await tx.payment.updateMany({
+          where: { id: order.payment!.id, paymentStatus: "PAID", financialState: "ESCROWED" },
+          data: { financialState: "REFUNDED" },
+        });
+        if (financialClaim.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+
         const debit = await tx.wallet.updateMany({
           where: { id: wallet.id, escrow: { gte: amount } },
           data: {
@@ -895,10 +901,11 @@ export class WalletService {
 
     const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
     if (!secretKey || !gatewayId || !payment.gatewayTransactionId || payment.gatewayTransactionId !== gatewayId || !/^\d+$/.test(gatewayId)) {
-      await prisma.payment.updateMany({
-        where: { id: payment.id, paymentStatus: "PAID", refundStatus: null },
-        data: { refundStatus: "MANUAL_REVIEW" },
+      const manualClaim = await prisma.payment.updateMany({
+        where: { id: payment.id, paymentStatus: "PAID", refundStatus: null, financialState: "ESCROWED" },
+        data: { refundStatus: "MANUAL_REVIEW", financialState: "MANUAL_REVIEW" },
       });
+      if (manualClaim.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
       await this.persistManualReviewFlag(
         userId,
         orderId,
@@ -917,9 +924,10 @@ export class WalletService {
         id: payment.id,
         paymentStatus: "PAID",
         refundStatus: null,
+        financialState: "ESCROWED",
         gatewayTransactionId: gatewayId,
       },
-      data: { refundStatus: "PENDING" },
+      data: { refundStatus: "PENDING", financialState: "REFUNDING" },
     });
     if (claim.count !== 1) {
       const current = await prisma.payment.findUnique({ where: { id: payment.id } });
@@ -945,7 +953,7 @@ export class WalletService {
     } catch (error: unknown) {
       await prisma.payment.updateMany({
         where: { id: payment.id, refundStatus: "PENDING" },
-        data: { refundStatus: "MANUAL_REVIEW" },
+        data: { refundStatus: "MANUAL_REVIEW", financialState: "MANUAL_REVIEW" },
       });
       const message = error instanceof Error ? error.message : "Unknown network error";
       await this.persistManualReviewFlag(userId, orderId, amount, `Gateway refund outcome is unknown: ${message}`);
@@ -957,7 +965,7 @@ export class WalletService {
       const errMsg = flwData?.message || "Gateway returned non-success status";
       await prisma.payment.updateMany({
         where: { id: payment.id, refundStatus: "PENDING" },
-        data: { refundStatus: "FAILED" },
+        data: { refundStatus: "FAILED", financialState: "MANUAL_REVIEW" },
       });
       await this.persistManualReviewFlag(userId, orderId, amount, `Gateway rejection: ${errMsg}`);
       throw new Error(`CARD_REFUND_FAILED: ${errMsg}. Manual review required.`);
@@ -970,6 +978,7 @@ export class WalletService {
         data: {
           paymentStatus: "REFUNDED",
           refundStatus: "SUCCEEDED",
+          financialState: "REFUNDED",
           gatewayRefundId: providerRefundId,
         },
       });
@@ -978,7 +987,7 @@ export class WalletService {
       const message = error instanceof Error ? error.message : "Unknown persistence error";
       await prisma.payment.updateMany({
         where: { id: payment.id, refundStatus: "PENDING" },
-        data: { refundStatus: "MANUAL_REVIEW" },
+        data: { refundStatus: "MANUAL_REVIEW", financialState: "MANUAL_REVIEW" },
       }).catch(() => undefined);
       await this.persistManualReviewFlag(userId, orderId, amount, `Provider refund succeeded but local state finalization failed: ${message}`);
       throw new Error("CARD_REFUND_PENDING_RECONCILIATION: Provider refunded the charge but local state requires manual reconciliation.");
@@ -1161,6 +1170,9 @@ export class WalletService {
     if (!order.payment || order.payment.paymentStatus !== "PAID") {
       throw new Error("PAYMENT_NOT_SETTLED");
     }
+    if (order.payment.financialState !== "ESCROWED") {
+      throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+    }
     if ((order.disputes?.length || 0) > 0 && !options.allowActiveDispute) {
       throw new Error("ACTIVE_DISPUTE_BLOCKS_RELEASE");
     }
@@ -1224,6 +1236,12 @@ export class WalletService {
 
       let totalGrossSettled = 0;
       await prisma.$transaction(async (tx) => {
+        const financialClaim = await tx.payment.updateMany({
+          where: { id: order.payment!.id, paymentStatus: "PAID", financialState: "ESCROWED" },
+          data: { financialState: "SETTLING" },
+        });
+        if (financialClaim.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+
         const claim = await tx.order.updateMany({
           where: { id: order.id, status: "DELIVERED" },
           data: { status: "COMPLETED" },
@@ -1267,6 +1285,12 @@ export class WalletService {
             },
           });
         }
+
+        const finalized = await tx.payment.updateMany({
+          where: { id: order.payment!.id, financialState: "SETTLING" },
+          data: { financialState: "SETTLED" },
+        });
+        if (finalized.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
       });
 
       return {
@@ -1347,6 +1371,12 @@ export class WalletService {
 
     let totalGrossSettled = 0;
     await prisma.$transaction(async (tx) => {
+      const financialClaim = await tx.payment.updateMany({
+        where: { id: order.payment!.id, paymentStatus: "PAID", financialState: "ESCROWED" },
+        data: { financialState: "SETTLING" },
+      });
+      if (financialClaim.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+
       // Compare-and-set each seller order before crediting any wallet. If another request
       // has already claimed a seller order, the transaction rolls back all changes.
       for (const sellerOrder of sellerOrdersToSettle) {
@@ -1399,19 +1429,24 @@ export class WalletService {
           },
         });
       }
-    });
 
-    // Finalize the parent only after all seller-order releases have committed. A separate
-    // count handles two different sub-orders completing concurrently.
-    const pendingSellerOrderCount = await prisma.sellerOrder.count({
-      where: { orderId: order.id, status: { not: "COMPLETED" } },
-    });
-    if (pendingSellerOrderCount === 0) {
-      await prisma.order.updateMany({
-        where: { id: order.id, status: "DELIVERED" },
-        data: { status: "COMPLETED" },
+      const pendingSellerOrderCount = await tx.sellerOrder.count({
+        where: { orderId: order.id, status: { not: "COMPLETED" } },
       });
-    }
+      if (pendingSellerOrderCount === 0) {
+        const parentClaim = await tx.order.updateMany({
+          where: { id: order.id, status: "DELIVERED" },
+          data: { status: "COMPLETED" },
+        });
+        if (parentClaim.count !== 1) throw new Error("ESCROW_ALREADY_RELEASED");
+      }
+
+      const finalized = await tx.payment.updateMany({
+        where: { id: order.payment!.id, financialState: "SETTLING" },
+        data: { financialState: pendingSellerOrderCount === 0 ? "SETTLED" : "ESCROWED" },
+      });
+      if (finalized.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+    });
 
     console.log(
       `[MULTI_VENDOR_ESCROW_RELEASE] Order #${order.orderNumber}: Settled ${sellerOrdersToSettle.length} seller orders. Gross: ₦${totalGrossSettled}; escrow: ₦${totalEscrowToRelease}`
@@ -1664,6 +1699,8 @@ export class WalletService {
         },
         data: {
           paymentStatus: "PAID",
+          financialState: "ESCROWED",
+          refundStatus: null,
           paidAt: new Date(),
           gatewayTransactionId,
         },
