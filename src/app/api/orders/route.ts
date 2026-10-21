@@ -154,13 +154,18 @@ export async function POST(req: Request) {
           );
         }
 
-        await tx.wallet.update({
-          where: { id: wallet.id },
+        // The prior balance read is advisory only. The conditional debit is the
+        // authoritative guard against two concurrent checkouts spending the same funds.
+        const walletDebit = await tx.wallet.updateMany({
+          where: { id: wallet.id, balance: { gte: totalAmount } },
           data: {
             balance: { decrement: totalAmount },
             escrow: { increment: totalAmount },
           },
         });
+        if (walletDebit.count !== 1) {
+          throw new Error("INSUFFICIENT_FUNDS: Wallet balance changed before checkout could reserve escrow.");
+        }
 
         await tx.walletTransaction.create({
           data: {
@@ -291,7 +296,8 @@ export async function POST(req: Request) {
       err.message?.includes("INSUFFICIENT_STOCK") ||
       err.message?.includes("not available") ||
       err.message?.includes("Invalid quantity") ||
-      err.message?.includes("Insufficient wallet balance")
+      err.message?.includes("Insufficient wallet balance") ||
+      err.message?.includes("INSUFFICIENT_FUNDS")
     ) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
