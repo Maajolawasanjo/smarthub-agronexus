@@ -62,6 +62,14 @@ describe("Phase 4: Checkout & Logistics", () => {
         totalAmount: 80000,
         status: "DELIVERED",
         buyer: { userId: buyerId },
+        payment: {
+          id: "pay-delivery-001",
+          paymentMethod: "CARD",
+          paymentStatus: "PAID",
+          transactionRef: "TX-DELIVERY-001",
+          amount: 80000,
+        },
+        disputes: [],
         sellerOrders: [
           {
             id: "so_delivery_1",
@@ -84,6 +92,15 @@ describe("Phase 4: Checkout & Logistics", () => {
         return w;
       });
       vi.spyOn(prisma.order, "findUnique").mockResolvedValue(mockOrder as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue({
+        id: "tx-lock-delivery-001",
+        walletId: buyerWallet.id,
+        wallet: buyerWallet,
+        type: "ESCROW_LOCK",
+        amount: 80000,
+        reference: "TX-DELIVERY-001",
+        status: "SUCCESS",
+      } as any);
       (vi.spyOn(prisma.wallet, "update") as any).mockImplementation(async ({ where, data }: any) => {
         const w = Object.values(walletsMap).find((wal: any) => wal.id === where.id || wal.userId === where.userId);
         if (w) {
@@ -92,12 +109,37 @@ describe("Phase 4: Checkout & Logistics", () => {
         }
         return w;
       });
-      vi.spyOn(prisma.sellerOrder, "update").mockResolvedValue({ id: "so_updated" } as any);
-      vi.spyOn(prisma.order, "update").mockResolvedValue({ id: orderId } as any);
-      (vi.spyOn(prisma.walletTransaction, "create") as any).mockResolvedValue({ id: "tx_ok" } as any);
+
+      const txWalletUpdateMany = vi.fn(async ({ where, data }: any) => {
+        if (buyerWallet.id !== where.id || buyerWallet.escrow < Number(where.escrow?.gte ?? 0)) return { count: 0 };
+        if (data.escrow?.decrement) buyerWallet.escrow -= Number(data.escrow.decrement);
+        return { count: 1 };
+      });
+      const txSellerOrderUpdateMany = vi.fn(async ({ where, data }: any) => {
+        const sellerOrder = mockOrder.sellerOrders.find((so: any) => so.id === where.id);
+        if (!sellerOrder || sellerOrder.status !== where.status) return { count: 0 };
+        Object.assign(sellerOrder, data);
+        return { count: 1 };
+      });
+      const txMock = {
+        wallet: {
+          update: (args: any) => (prisma.wallet.update as any)(args),
+          updateMany: txWalletUpdateMany,
+        },
+        walletTransaction: { create: vi.fn(async ({ data }: any) => ({ id: "tx_ok", ...data })) },
+        sellerOrder: { updateMany: txSellerOrderUpdateMany },
+      };
+      vi.spyOn(prisma.sellerOrder, "count").mockResolvedValue(0 as any);
+      vi.spyOn(prisma.order, "updateMany").mockImplementation(async ({ where, data }: any) => {
+        if (mockOrder.id === where.id && mockOrder.status === where.status) {
+          Object.assign(mockOrder, data);
+          return { count: 1 } as any;
+        }
+        return { count: 0 } as any;
+      });
       vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => {
         if (Array.isArray(arg)) return Promise.all(arg);
-        return arg({});
+        return arg(txMock);
       });
 
       const result = await WalletService.executeEscrowRelease(orderId);
