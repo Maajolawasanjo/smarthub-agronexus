@@ -78,7 +78,7 @@ export async function POST(
         await WalletService.executeGatewayCardRefund(
           buyerUserId,
           order.id,
-          order.payment.transactionRef || order.orderNumber,
+          order.payment.gatewayTransactionId || "",
           totalAmount
         );
       } else {
