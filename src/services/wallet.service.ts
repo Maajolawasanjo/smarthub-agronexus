@@ -422,7 +422,7 @@ export class WalletService {
 
     const bankDesc = `${bankAccount.bankName} (${bankAccount.accountNumber})`;
     let initial: {
-      updatedWallet: Awaited<ReturnType<typeof this.getOrCreateWallet>>;
+      updatedWallet: Prisma.WalletGetPayload<{}>;
       txRecord: Prisma.WalletTransactionGetPayload<{}>;
     };
     try {
