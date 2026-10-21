@@ -68,6 +68,41 @@ export async function POST(
 
     const totalAmount = Number(order.totalAmount);
 
+    // Only wallet-funded orders have an in-app escrow balance that this application can
+    // safely refund synchronously. Card/bank refunds require a verified gateway transaction
+    // ID and must not be marked refunded or cancelled before that source-aware flow exists.
+    if (order.payment?.paymentStatus === "PAID" && order.payment.paymentMethod !== "WALLET") {
+      const { recordAuditEvent } = await import("@/lib/audit");
+      await recordAuditEvent({
+        category: "PAYMENT",
+        severity: "WARNING",
+        action: "PAID_EXTERNAL_ORDER_CANCELLATION_REQUIRES_MANUAL_REVIEW",
+        actorId: session.userId,
+        actorEmail: session.email,
+        resourceType: "ORDER",
+        resourceId: order.id,
+        metadata: { orderNumber: order.orderNumber, paymentMethod: order.payment.paymentMethod, amount: totalAmount },
+        req,
+      });
+      return NextResponse.json(
+        createErrorResponse("MANUAL_REVIEW_REQUIRED", "This paid external-gateway order requires a verified source-aware refund. No order, payment, inventory, or wallet state was changed."),
+        { status: 409 }
+      );
+    }
+
+    if (order.payment?.paymentMethod === "WALLET" && order.payment.paymentStatus === "PAID") {
+      const buyerWallet = await prisma.wallet.findUnique({
+        where: { userId: order.buyer.userId },
+        select: { id: true, escrow: true },
+      });
+      if (!buyerWallet || Number(buyerWallet.escrow) + 0.001 < totalAmount) {
+        return NextResponse.json(
+          createErrorResponse("ESCROW_BALANCE_MISMATCH", "The buyer escrow balance is insufficient for a safe refund. No order, payment, inventory, or wallet state was changed."),
+          { status: 409 }
+        );
+      }
+    }
+
     // Execute atomic refund and inventory release inside a transaction
     await prisma.$transaction(async (tx) => {
       // 1. Restore reserved inventory back to available
