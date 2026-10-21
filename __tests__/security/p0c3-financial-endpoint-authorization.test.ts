@@ -25,7 +25,9 @@ vi.mock("@/lib/session", () => ({ getSession: mock.getSession, getAdminSession: 
 vi.mock("@/lib/csrf", () => ({ isTrustedMutationOrigin: mock.trustedOrigin }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    order: { findUnique: mock.orderFindUnique },
+    order: { findUnique: mock.orderFindUnique, update: mock.orderUpdate },
+    dispute: { findUnique: mock.disputeFindUnique, update: mock.disputeUpdate },
+    wallet: { findUnique: mock.walletFindUnique },
     user: { findUnique: mock.userFindUnique },
     payment: { update: mock.paymentUpdate, findUnique: mock.paymentFindUnique },
   },
@@ -41,6 +43,8 @@ vi.mock("@/services/wallet.service", () => ({
 vi.mock("@/services/payment.service", () => ({
   getSettlementDTO: mock.getSettlementDTO,
 }));
+vi.mock("@/lib/audit", () => ({ recordAuditEvent: mock.recordAuditEvent }));
+vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
 
 import { POST as initializeFlutterwave } from "@/app/api/payments/flutterwave/initialize/route";
 import { POST as releaseWalletEscrow } from "@/app/api/wallet/escrow/route";
