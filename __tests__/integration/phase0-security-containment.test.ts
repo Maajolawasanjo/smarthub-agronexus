@@ -124,7 +124,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       const { POST } = await import("@/app/api/wallet/deposit/route");
       const req = new Request("http://localhost:3000/api/wallet/deposit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({
           amount: "5000000",
           simulateWebhook: true, // Malicious payload attempting instant credit
@@ -210,7 +210,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       mockSession.mockResolvedValue({ userId: "stranger_user", role: "BUYER" });
       const reqStranger = new Request("http://localhost:3000/api/disputes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ orderId: "ord_100", title: "Defect", reason: "Damaged goods" }),
       });
       const resStranger = await POST(reqStranger);
@@ -225,7 +225,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       } as any);
       const reqBuyer = new Request("http://localhost:3000/api/disputes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ orderId: "ord_100", title: "Defect", reason: "Damaged goods" }),
       });
       const resBuyer = await POST(reqBuyer);
@@ -257,7 +257,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       mockSession.mockResolvedValue({ userId: "buyer_usr_1", role: "BUYER" });
       const reqBuyer = new Request("http://localhost:3000/api/orders/ord_flow_1", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ status: "CONFIRMED" }),
       });
       const resBuyer = await PUT(reqBuyer, { params: Promise.resolve({ id: "ord_flow_1" }) });
@@ -267,7 +267,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       mockSession.mockResolvedValue({ userId: "farmer_usr_1", role: "FARMER" });
       const reqFarmerJump = new Request("http://localhost:3000/api/orders/ord_flow_1", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ status: "DELIVERED" }),
       });
       const resFarmerJump = await PUT(reqFarmerJump, { params: Promise.resolve({ id: "ord_flow_1" }) });
@@ -290,7 +290,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       });
       const reqFarmerConfirm = new Request("http://localhost:3000/api/orders/ord_flow_1", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ status: "CONFIRMED" }),
       });
       const resFarmerConfirm = await PUT(reqFarmerConfirm, { params: Promise.resolve({ id: "ord_flow_1" }) });
@@ -340,7 +340,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
 
       const req = new Request("http://localhost:3000/api/orders/ord_cancel_99/cancel", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
       });
 
       const res = await POST(req, { params: Promise.resolve({ id: "ord_cancel_99" }) });
@@ -373,7 +373,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
 
       const req = new Request("http://localhost:3000/api/orders/validate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({
           items: [
             { productId: "prod_cocoa", quantity: 2 },
