@@ -149,7 +149,13 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       };
 
       vi.spyOn(prisma.sellerOrder, "count").mockResolvedValue(0 as any);
-      vi.spyOn(prisma.order, "updateMany").mockResolvedValue({ count: 1 } as any);
+      vi.spyOn(prisma.order, "updateMany").mockImplementation(async ({ where, data }: any) => {
+        if (mockOrder.id === where.id && mockOrder.status === where.status) {
+          Object.assign(mockOrder, data);
+          return { count: 1 } as any;
+        }
+        return { count: 0 } as any;
+      });
       vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => {
         if (Array.isArray(arg)) return Promise.all(arg);
         return arg(txMock);
@@ -181,6 +187,12 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(farmerBWallet.balance).toBeCloseTo(73936.25, 1);
       // Buyer escrow: ₦100,000 - ₦100,000 (totalEscrowToRelease = ₦40,000 + ₦60,000) = ₦0
       expect(buyerWallet.escrow).toBe(0.0);
+      expect(mockOrder.status).toBe("COMPLETED");
+
+      // Replaying the same release cannot create a second set of payouts.
+      await expect(WalletService.executeEscrowRelease("buyer-idempotency", orderId))
+        .rejects.toThrow("ORDER_NOT_DELIVERED");
+      expect(createdTransactions).toHaveLength(4);
     });
   });
 
