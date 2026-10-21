@@ -24,10 +24,11 @@ The current financial endpoint hardening is being implemented on branch `fix/p0c
 The historical figures in earlier versions of this report are not release evidence for the current branch unless re-run against the exact final commit.
 
 ### Verification record — October 21, 2026
-- **Latest application code head tested:** `8b174a41ade04bf5f978441a67fc37ddb532cca2`
-- **GitHub Actions:** [Run 39636323205](https://github.com/Maajolawasanjo/smarthub-agronexus/actions/runs/39636323205) — all six jobs passed, including the production Next.js build, full test suite, and required security suites.
-- **Automated suite:** 42 test files passed, 1 skipped; 269 tests passed, 7 skipped.
-- **Live PostgreSQL persistence tests:** The real-database test file was skipped in this CI run (7 tests skipped); these results do not prove the latest migration was applied to staging or production.
+- **Latest application code head tested:** `ccbca16174d05bfd3c45db7bf005edf5e90d263c`
+- **GitHub Actions:** [Run 39637092950](https://github.com/Maajolawasanjo/smarthub-agronexus/actions/runs/39637092950) — all seven jobs passed, including the production Next.js build, full test suite, required security suites, and a real PostgreSQL concurrency job.
+- **Automated suite:** 42 test files passed, 2 skipped; 269 tests passed, 8 skipped.
+- **PostgreSQL concurrency test:** 1/1 passed against an isolated PostgreSQL 16 instance. It races an escrow-release claim against a refund claim and verifies exactly one compare-and-set can win. This is database-level concurrency evidence, not full production/staging end-to-end evidence.
+- **Live PostgreSQL persistence tests:** The legacy real-database suite remains skipped in the full unit/integration run. The dedicated isolated PostgreSQL concurrency test runs separately and passed; neither job proves the latest migration was applied to staging or production.
 - **Staging/browser verification:** **Not completed.** Vercel preview creation was previously blocked by the account's daily deployment API quota (HTTP 402). The latest available branch preview was for an older commit and was in an error state. No runtime verification of the current PR head and no production deployment are claimed.
 
 ---
