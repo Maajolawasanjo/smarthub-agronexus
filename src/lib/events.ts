@@ -26,7 +26,7 @@ export interface AgroEventPayload {
   amount?: number;
   remarks?: string;
   documentType?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export type AgroEventHandler = (eventType: AgroEventType, payload: AgroEventPayload) => Promise<void>;
