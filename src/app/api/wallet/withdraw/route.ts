@@ -29,7 +29,15 @@ export async function POST(req: Request) {
       return attachTraceHeaders(res, traceCtx);
     }
 
-    const idempotencyKey = req.headers.get("idempotency-key") || req.headers.get("x-idempotency-key");
+    const idempotencyKey = (req.headers.get("idempotency-key") || req.headers.get("x-idempotency-key") || "").trim();
+    if (idempotencyKey.length < 8 || idempotencyKey.length > 200) {
+      const res = NextResponse.json(
+        createErrorResponse("IDEMPOTENCY_KEY_REQUIRED", "Provide a valid Idempotency-Key so a retry cannot create a second withdrawal."),
+        { status: 400 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
     const body = await req.json();
     const { amount, bankAccountId } = body;
     const withdrawAmount = parseFloat(amount);
@@ -43,25 +51,48 @@ export async function POST(req: Request) {
     }
 
     // 3. Strict Financial Invariant: Identity derived strictly from server-verified auth.userId
-    const result = await WalletService.executeWithdrawal(auth.userId, withdrawAmount, bankAccountId);
+    const result = await WalletService.executeWithdrawal(
+      auth.userId,
+      withdrawAmount,
+      bankAccountId,
+      idempotencyKey
+    );
+
+    if (result.status === "FAILED" || result.status === "REVERSED") {
+      const res = NextResponse.json(
+        createErrorResponse("WITHDRAWAL_NOT_COMPLETED", "The withdrawal was reversed and the reserved funds were restored. Use a new idempotency key for a new attempt."),
+        { status: 409 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
 
     const res = NextResponse.json(
       createSuccessResponse({
         transactionRef: result.transactionRef,
-        amountWithdrawn: withdrawAmount,
-        formattedAmount: WalletService.formatNGN(withdrawAmount),
+        amountWithdrawn: Number(withdrawAmount.toFixed(2)),
+        formattedAmount: WalletService.formatNGN(Number(withdrawAmount.toFixed(2))),
         newBalance: Number(result.updatedWallet.balance),
         formattedNewBalance: WalletService.formatNGN(Number(result.updatedWallet.balance)),
-        status: "SUCCESS",
+        status: result.status,
+        alreadyProcessed: result.alreadyProcessed,
+        reconciliationRequired: result.reconciliationRequired,
         timestamp: new Date().toISOString(),
-      })
+      }),
+      { status: result.reconciliationRequired ? 202 : 200 }
     );
     return attachTraceHeaders(res, traceCtx);
   } catch (err: any) {
     console.error("Error in POST /api/wallet/withdraw:", err);
-    const status = err.message?.startsWith("ACCOUNT_FROZEN") ? 403 : err.message?.startsWith("INSUFFICIENT_FUNDS") ? 400 : 500;
+    const message = err instanceof Error ? err.message : "Failed to process bank withdrawal.";
+    const status =
+      message.startsWith("ACCOUNT_FROZEN") ? 403
+      : message.startsWith("INSUFFICIENT_FUNDS") || message.startsWith("INVALID_AMOUNT") || message.startsWith("INVALID_BANK_ACCOUNT") ? 400
+      : message.startsWith("IDEMPOTENCY_KEY_REUSED") || message.startsWith("WITHDRAWAL_IDEMPOTENCY_TERMINAL") || message.startsWith("WITHDRAWAL_STATE_CONFLICT") || message.startsWith("WITHDRAWAL_ROLLBACK_CONFLICT") ? 409
+      : message.startsWith("GATEWAY_UNCONFIGURED") ? 503
+      : message.startsWith("BANK_TRANSFER_FAILED") ? 502
+      : 500;
     const res = NextResponse.json(
-      createErrorResponse("WITHDRAWAL_FAILED", err.message || "Failed to process bank withdrawal"),
+      createErrorResponse("WITHDRAWAL_FAILED", message),
       { status }
     );
     return attachTraceHeaders(res, traceCtx);
