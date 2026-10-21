@@ -58,6 +58,7 @@ export async function POST(req: Request) {
         String(verified?.id) !== String(transactionId) ||
         verified?.tx_ref !== txRef ||
         String(verified?.currency || "").toUpperCase() !== "NGN" ||
+        String(payload.data.currency || "").toUpperCase() !== "NGN" ||
         !Number.isFinite(verifiedAmount) ||
         verifiedAmount <= 0 ||
         Math.abs(verifiedAmount - payloadAmount) > 0.01
@@ -78,13 +79,14 @@ export async function POST(req: Request) {
       // metadata orderId/paymentId as a fallback to select an unrelated payment.
       const targetPayment = await prisma.payment.findUnique({
         where: { transactionRef: txRef },
-        include: { order: true },
+        include: { order: { include: { buyer: true } } },
       });
 
       if (targetPayment) {
         if (
           (meta.orderId && meta.orderId !== targetPayment.orderId) ||
           (meta.paymentId && meta.paymentId !== targetPayment.id) ||
+          (meta.userId && meta.userId !== targetPayment.order.buyer.userId) ||
           (meta.purpose && meta.purpose !== "ORDER_PAYMENT")
         ) {
           return NextResponse.json({ error: "Payment intent metadata mismatch." }, { status: 400 });
