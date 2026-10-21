@@ -16,7 +16,8 @@ export type AgroEventType =
   | "ORDER_DELIVERED"
   | "ESCROW_RELEASED"
   | "PAYMENT_COMPLETED"
-  | "REFUND_EXECUTED";
+  | "REFUND_EXECUTED"
+  | "WITHDRAWAL_SUBMITTED";
 
 export interface AgroEventPayload {
   userId: string;
@@ -99,7 +100,11 @@ subscribeAgroEvent(async (eventType, payload) => {
       break;
     case "REFUND_EXECUTED":
       title = `Refund Processed #${payload.orderNumber}`;
-      message = `Refund of $${payload.amount?.toLocaleString()} processed. Reason: ${payload.remarks}`;
+      message = `Refund of ${payload.amount?.toLocaleString()} processed. Reason: ${payload.remarks}`;
+      break;
+    case "WITHDRAWAL_SUBMITTED":
+      title = "Withdrawal Processing";
+      message = `Your NGN withdrawal of ₦${payload.amount?.toLocaleString("en-NG")} is awaiting bank settlement. Reference: ${payload.remarks || "see wallet transactions"}.`;
       break;
   }
 
@@ -109,7 +114,7 @@ subscribeAgroEvent(async (eventType, payload) => {
         userId: payload.userId,
         title,
         message,
-        type: eventType.includes("ORDER") ? "ORDER" : eventType.includes("PAYMENT") || eventType.includes("ESCROW") ? "PAYMENT" : "SYSTEM",
+        type: eventType.includes("ORDER") ? "ORDER" : eventType.includes("PAYMENT") || eventType.includes("ESCROW") || eventType.includes("WITHDRAWAL") ? "PAYMENT" : "SYSTEM",
       },
     });
   } catch (err) {
