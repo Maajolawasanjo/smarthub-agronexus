@@ -30,8 +30,8 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Run Linting
-        run: npm run lint || true
+      - name: Run ESLint (fail closed)
+        run: npm run lint
 
       - name: Execute Vitest unit and integration tests (fail closed)
         run: npm test
