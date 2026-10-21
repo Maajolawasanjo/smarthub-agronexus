@@ -803,6 +803,7 @@ export class WalletService {
       const finalized = await prisma.payment.updateMany({
         where: { id: payment.id, refundStatus: "PENDING" },
         data: {
+          paymentStatus: "REFUNDED",
           refundStatus: "SUCCEEDED",
           gatewayRefundId: providerRefundId,
         },
@@ -1420,6 +1421,13 @@ export class WalletService {
       }
 
       // Idempotency is safe only for the same verified gateway reference.
+      if (payment.paymentStatus === "REFUNDED" && payment.refundStatus === "SUCCEEDED") {
+        if (payment.gatewayTransactionId !== gatewayTransactionId) {
+          throw new Error("GATEWAY_TRANSACTION_ID_MISMATCH");
+        }
+        return { status: "ALREADY_REFUNDED", payment };
+      }
+
       if (payment.paymentStatus === "PAID") {
         if (
           payment.gatewayTransactionId &&
