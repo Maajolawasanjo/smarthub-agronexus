@@ -184,6 +184,35 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
     });
   });
 
+  describe("Invariant 1b: Escrow release fails closed without a funded order intent", () => {
+    it("does not credit sellers when no matching successful escrow lock exists", async () => {
+      const orderId = "ord-unfunded-escrow";
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue({
+        id: orderId,
+        orderNumber: "ORD-UNFUNDED",
+        totalAmount: 10000,
+        status: "DELIVERED",
+        buyer: { userId: "buyer-unfunded" },
+        payment: {
+          paymentStatus: "PAID",
+          paymentMethod: "CARD",
+          transactionRef: "TX-NO-LOCK",
+          amount: 10000,
+        },
+        disputes: [],
+        sellerOrders: [],
+        orderItems: [],
+      } as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+      const transactionSpy = vi.spyOn(prisma, "$transaction");
+
+      await expect(WalletService.executeEscrowRelease("buyer-unfunded", orderId))
+        .rejects.toThrow("ESCROW_NOT_FUNDED");
+
+      expect(transactionSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Invariant 2: Card Refund Never Mints Internal Wallet Balance", () => {
     it("throws CARD_REFUND_FAILED and persists REQUIRES_MANUAL_REVIEW when gateway not configured", async () => {
       const buyerId = "usr_card_buyer_55";
