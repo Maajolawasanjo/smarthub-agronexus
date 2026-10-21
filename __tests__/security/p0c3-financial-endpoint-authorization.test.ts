@@ -153,6 +153,21 @@ describe("P0-C3 financial endpoint authorization and payment binding", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("rejects an order whose stored payment amount differs from the order total", async () => {
+    mock.orderFindUnique.mockResolvedValue({
+      ...orderFixture(),
+      payment: { ...orderFixture().payment, amount: 1 },
+    });
+    const response = await initializeFlutterwave(request(
+      "https://www.smarthubagrochain.online/api/payments/flutterwave/initialize",
+      "POST",
+      { orderId: "order_1" },
+    ));
+    expect(response.status).toBe(409);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(mock.paymentUpdate).not.toHaveBeenCalled();
+  });
+
   it("uses the persisted order amount and a payment-bound reference, not the caller's total", async () => {
     const response = await initializeFlutterwave(request("https://www.smarthubagrochain.online/api/payments/flutterwave/initialize", "POST", {
       orderId: "order_1",
@@ -233,6 +248,22 @@ describe("P0-C3 financial endpoint authorization and payment binding", () => {
     );
     expect(response.status).toBe(409);
     expect(mock.orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it("allows escrow release when the owning Buyer has a paid, delivered, undisputed order", async () => {
+    mock.orderFindUnique.mockResolvedValue({
+      ...orderFixture(),
+      status: "DELIVERED",
+      payment: { ...orderFixture().payment, paymentStatus: "PAID" },
+      delivery: { deliveryStatus: "DELIVERED" },
+      sellerOrders: [{ status: "DELIVERED" }],
+      disputes: [],
+    });
+    const response = await releaseWalletEscrow(
+      request("https://www.smarthubagrochain.online/api/wallet/escrow", "POST", { dbOrderId: "order_1" }),
+    );
+    expect(response.status).toBe(200);
+    expect(mock.executeEscrowRelease).toHaveBeenCalledWith("buyer_1", "order_1");
   });
 
   it("only allows an order-owning Buyer to view settlement details", async () => {
