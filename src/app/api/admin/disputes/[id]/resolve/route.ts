@@ -85,7 +85,16 @@ export async function POST(
     if (action === "REFUND_BUYER") {
       // A gateway/card payment must be refunded through the gateway using its provider
       // transaction ID. Never convert a card capture into wallet credit implicitly.
-      if (order.payment?.paymentStatus !== "PAID") {
+      const priorWalletRefund =
+        order.payment?.paymentMethod === "WALLET" && order.payment.paymentStatus === "REFUNDED"
+          ? await prisma.walletTransaction.findUnique({ where: { reference: `WALLET-REFUND-${order.id}` } })
+          : null;
+      const refundAlreadyConfirmed =
+        order.payment?.paymentStatus === "REFUNDED" &&
+        ((order.payment.paymentMethod === "CARD" && order.payment.refundStatus === "SUCCEEDED") ||
+          (order.payment.paymentMethod === "WALLET" && priorWalletRefund?.status === "SUCCESS"));
+
+      if (order.payment?.paymentStatus !== "PAID" && !refundAlreadyConfirmed) {
         return attachTraceHeaders(
           NextResponse.json(
             createErrorResponse("PAYMENT_NOT_SETTLED", "Only settled orders can be refunded."),
