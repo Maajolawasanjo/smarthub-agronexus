@@ -759,6 +759,11 @@ export class WalletService {
     });
 
     if (!order) throw new Error("ORDER_NOT_FOUND");
+    // A completed parent order is terminal. This service is called by routes, admin
+    // arbitration, and fulfillment jobs, so replay protection must live below the route.
+    if (order.status === "COMPLETED") {
+      throw new Error("ESCROW_ALREADY_RELEASED");
+    }
 
     const buyerUserId = order.buyer?.userId || (maybeOrderId ? userIdOrOrderId : (order as any).buyerId);
     const buyerWallet = await this.getOrCreateWallet(buyerUserId);
@@ -793,7 +798,7 @@ export class WalletService {
         const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
         totalGrossSettled += grossAmount;
         const farmerWallet = await this.getOrCreateWallet(farmerUserId);
-        const txRef = `REL-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+        const txRef = `REL-${order.id}-${farmerUserId}`;
 
         settlementOps.push(
           prisma.wallet.update({
@@ -855,7 +860,7 @@ export class WalletService {
       settledSellerOrderIds.push(sellerOrder.id);
 
       const farmerWallet = await this.getOrCreateWallet(farmerUserId);
-      const txRef = `REL-${sellerOrder.sellerOrderNumber}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+      const txRef = `REL-${sellerOrder.id}`;
 
       // 1. Mark SellerOrder as COMPLETED
       settlementOps.push(
