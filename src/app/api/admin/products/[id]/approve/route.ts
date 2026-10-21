@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/session";
@@ -22,6 +23,10 @@ export async function PUT(
         createErrorResponse("FORBIDDEN", "Administrative privileges required to moderate produce listings."),
         { status: 403 }
       );
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json(createErrorResponse("FORBIDDEN", "Untrusted mutation origin."), { status: 403 });
     }
 
     const { id } = await params;
@@ -157,6 +162,10 @@ export async function DELETE(
         createErrorResponse("FORBIDDEN", "Administrative privileges required to delete produce listings."),
         { status: 403 }
       );
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json(createErrorResponse("FORBIDDEN", "Untrusted mutation origin."), { status: 403 });
     }
 
     const { id } = await params;
