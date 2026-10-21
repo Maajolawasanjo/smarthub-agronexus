@@ -257,10 +257,27 @@ export async function POST(
       return attachTraceHeaders(res, traceCtx);
     }
   } catch (error: any) {
-    console.error("Error arbitrating dispute:", error);
+    const message = error?.message || "Failed to arbitrate dispute.";
+    const conflict = [
+      "CARD_REFUND_FAILED",
+      "CARD_REFUND_PENDING_RECONCILIATION",
+      "GATEWAY_REFUND_REQUIRED",
+      "INSUFFICIENT_ESCROW",
+      "ESCROW_NOT_FUNDED",
+      "ESCROW_ALREADY_RELEASED",
+      "ORDER_NOT_DELIVERED",
+      "PAYMENT_NOT_SETTLED",
+      "REFUND_AMOUNT_MISMATCH",
+      "REFUND_ORDER_OWNER_MISMATCH",
+      "PAYMENT_SOURCE_MISMATCH",
+      "SELLER_ORDER_NOT_DELIVERED",
+      "SELLER_ORDER_TOTAL_MISMATCH",
+    ].some((code) => String(message).includes(code));
+    const status = conflict ? 409 : 500;
+    console.error("Error arbitrating dispute:", { message, status });
     const res = NextResponse.json(
-      createErrorResponse("INTERNAL_SERVER_ERROR", error.message || "Failed to arbitrate dispute."),
-      { status: 500 }
+      createErrorResponse(conflict ? "DISPUTE_FINANCIAL_CONFLICT" : "INTERNAL_SERVER_ERROR", message),
+      { status }
     );
     return attachTraceHeaders(res, traceCtx);
   }
