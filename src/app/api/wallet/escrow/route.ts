@@ -109,6 +109,14 @@ export async function POST(req: Request) {
       "ESCROW_ALREADY_RELEASED",
       "SELLER_ORDER_NOT_DELIVERED",
       "SELLER_ORDER_TOTAL_MISMATCH",
+      "PAYMENT_AMOUNT_MISMATCH",
+      "INVALID_ORDER_AMOUNT",
+      "SELLER_GROSS_EXCEEDS_ORDER_AMOUNT",
+      "ORDER_OWNER_MISMATCH",
+      "ESCROW_LOCK_REFERENCE_MISSING",
+      "NO_SELLERS_FOR_ORDER",
+      "SELLER_USER_NOT_FOUND",
+      "INVALID_SELLER_ORDER_AMOUNT",
     ];
     const status = conflictCodes.some((code) => message.includes(code)) ? 409 : 500;
     console.error("[WALLET_ESCROW_RELEASE_ERROR]", { message, status });
