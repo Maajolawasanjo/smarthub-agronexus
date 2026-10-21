@@ -81,7 +81,7 @@ export async function POST(req: Request) {
       { status: result.reconciliationRequired ? 202 : 200 }
     );
     return attachTraceHeaders(res, traceCtx);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error in POST /api/wallet/withdraw:", err);
     const message = err instanceof Error ? err.message : "Failed to process bank withdrawal.";
     const status =
