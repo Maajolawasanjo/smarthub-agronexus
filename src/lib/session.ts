@@ -283,7 +283,10 @@ export async function getSharedSession(
   let selectedRealm: AuthRealm | null = null;
   if (req) {
     const realmHeader = req.headers.get("x-auth-realm")?.toUpperCase() as AuthRealm;
-    if (realmHeader && allowedRealms.includes(realmHeader)) {
+    // An explicit but disallowed realm is a denial, not a reason to fall
+    // back to whichever other cookie happens to be present.
+    if (realmHeader) {
+      if (!allowedRealms.includes(realmHeader)) return null;
       selectedRealm = realmHeader;
     }
   }
@@ -302,28 +305,23 @@ export async function getSharedSession(
 }
 
 /**
- * Backward compatibility helper for existing API handlers calling getSession().
- * First resolves against new multi-realm database sessions, with graceful fallback to legacy JWT.
+ * Legacy API compatibility wrapper for callers expecting SessionPayload.
+ *
+ * Authentication is exclusively backed by the revocable PostgreSQL Session
+ * registry. A previously issued smarthub_session JWT is NEVER authority:
+ * those JWTs cannot be revoked on account suspension, logout or role change.
+ * Existing legacy-only users must sign in again to obtain a realm session.
  */
 export async function getSession(): Promise<SessionPayload | null> {
   const authContext = await getSessionContext();
-  if (authContext) {
-    return {
-      userId: authContext.userId,
-      email: authContext.user.email,
-      role: authContext.role as "BUYER" | "FARMER" | "ADMIN",
-      exp: Math.floor(authContext.session.expiresAt.getTime() / 1000),
-    };
-  }
+  if (!authContext) return null;
 
-  // Legacy fallback
-  const cookieStore = await cookies();
-  const legacyToken = cookieStore.get(LEGACY_SESSION_COOKIE_NAME)?.value;
-  if (legacyToken) {
-    return verifySessionToken(legacyToken);
-  }
-
-  return null;
+  return {
+    userId: authContext.userId,
+    email: authContext.user.email,
+    role: authContext.role as "BUYER" | "FARMER" | "ADMIN",
+    exp: Math.floor(authContext.session.expiresAt.getTime() / 1000),
+  };
 }
 
 /**
