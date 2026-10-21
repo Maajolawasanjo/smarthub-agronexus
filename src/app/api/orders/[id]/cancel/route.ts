@@ -180,6 +180,8 @@ export async function POST(
       "PAYMENT_SOURCE_MISMATCH",
       "GATEWAY_REFUND_PAYMENT_MISMATCH",
       "CARD_REFUND_FAILED",
+      "CARD_REFUND_PENDING_RECONCILIATION",
+      "REFUND_STATE_CONFLICT",
     ].some((code) => String(message).includes(code));
     const status = conflict ? 409 : 500;
     console.error("Error in POST /api/orders/[id]/cancel:", { message, status });
