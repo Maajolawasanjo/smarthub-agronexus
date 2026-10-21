@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { CheckCircle2, Building2, ShieldCheck, ArrowRight, Wallet, Clock } from "lucide-react";
+import { Building2, ArrowRight, Clock } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { WalletPageDTO, LinkedBankDTO } from "@/types/wallet.dto";
 
@@ -26,12 +26,14 @@ export function TransferTab() {
           }
         }
       }
-    } catch (err) {
-      console.error("Error loading wallet data in TransferTab:", err);
+    } catch {
+      console.error("Error loading wallet data in TransferTab.");
     }
   };
 
   useEffect(() => {
+    // loadData writes state only after its asynchronous fetch resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 
@@ -92,7 +94,7 @@ export function TransferTab() {
         }
         toast(json.error?.message || "Withdrawal failed.", "error");
       }
-    } catch (err) {
+    } catch {
       // Keep the same key after a network failure; the server may have submitted the transfer.
       toast("Withdrawal outcome is not confirmed. Retry the same request before initiating another payout.", "error");
     } finally {
@@ -184,7 +186,7 @@ export function TransferTab() {
                 </div>
               ) : (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 font-medium">
-                  No verified bank account linked. Please link a bank account in the "Linked Accounts" tab first.
+                  No verified bank account linked. Please link a bank account in the &quot;Linked Accounts&quot; tab first.
                 </div>
               )}
             </div>
