@@ -22,6 +22,12 @@ The current financial endpoint hardening is being implemented on branch `fix/p0c
 
 The historical figures in earlier versions of this report are not release evidence for the current branch unless re-run against the exact final commit.
 
+### Verification record — October 21, 2026
+- **PR head tested:** `a4a22a7d791bd343aedd0710bd7b94074d8877f7`
+- **GitHub Actions:** [Run 39622502092](https://github.com/Maajolawasanjo/smarthub-agronexus/actions/runs/39622502092) — all six jobs passed, including the production Next.js build, full test suite, and required security suites.
+- **Automated suite:** 42 test files passed, 1 skipped; 265 tests passed, 7 skipped.
+- **Staging/browser verification:** **Not completed.** Vercel preview creation is currently blocked by the account's daily deployment API quota (HTTP 402). The latest available branch preview is for an older commit and is in an error state. No runtime verification of the current PR head and no production deployment are claimed.
+
 ---
 
 ## 2. Historical Defect Remediation Register (Prior Audit)
