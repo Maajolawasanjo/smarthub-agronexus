@@ -130,7 +130,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(txPaymentClaim).not.toHaveBeenCalled();
       expect(txWalletUpdate).not.toHaveBeenCalled();
     });
-    });
+
     it("treats a webhook retry after a successful card refund as idempotent", async () => {
       const payment = {
         id: "pay-gateway-refunded",
