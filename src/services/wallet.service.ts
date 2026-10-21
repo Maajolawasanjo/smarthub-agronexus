@@ -525,7 +525,13 @@ export class WalletService {
       where: { reference: txRef },
     });
     if (existingTx) {
-      if (existingTx.walletId !== wallet.id || Number(existingTx.amount) !== amount || existingTx.type !== "REFUND") {
+      const existingIsStoreCredit = String(existingTx.description || "").toLowerCase().includes("store credit refund");
+      if (
+        existingTx.walletId !== wallet.id ||
+        Number(existingTx.amount) !== amount ||
+        existingTx.type !== "REFUND" ||
+        existingIsStoreCredit !== isStoreCredit
+      ) {
         throw new Error("REFUND_REFERENCE_CONFLICT: Existing refund ledger entry does not match this request.");
       }
       return { updatedWallet: wallet, txRecord: existingTx };
