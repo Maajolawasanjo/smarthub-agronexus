@@ -130,6 +130,44 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(txPaymentClaim).not.toHaveBeenCalled();
       expect(txWalletUpdate).not.toHaveBeenCalled();
     });
+    });
+    it("treats a webhook retry after a successful card refund as idempotent", async () => {
+      const payment = {
+        id: "pay-gateway-refunded",
+        orderId: "ord-gateway-refunded",
+        transactionRef: "AGRO-FLW-refunded-001",
+        paymentStatus: "REFUNDED",
+        paymentMethod: "CARD",
+        amount: 75000,
+        gatewayTransactionId: "98765",
+        refundStatus: "SUCCEEDED",
+        order: {
+          id: "ord-gateway-refunded",
+          orderNumber: "AGRO-GW-003",
+          totalAmount: 75000,
+          status: "CANCELLED",
+          buyer: { userId: "buyer-refunded", user: { id: "buyer-refunded" } },
+        },
+      };
+      const paymentClaim = vi.fn();
+      const walletUpdate = vi.fn();
+      const txMock = {
+        payment: { findFirst: vi.fn().mockResolvedValue(payment), updateMany: paymentClaim },
+        wallet: { update: walletUpdate },
+      };
+      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => arg(txMock));
+
+      const result = await WalletService.settleOrderPaymentFromGateway(
+        payment.id,
+        payment.transactionRef,
+        75000,
+        "98765"
+      );
+
+      expect(result.status).toBe("ALREADY_REFUNDED");
+      expect(paymentClaim).not.toHaveBeenCalled();
+      expect(walletUpdate).not.toHaveBeenCalled();
+    });
   });
 
   describe("Invariant 1: Multi-Vendor SellerOrder Escrow Distribution", () => {
