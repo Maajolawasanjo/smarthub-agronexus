@@ -171,6 +171,7 @@ jobs:
           src/app/api/wallet/escrow/route.ts
           'src/app/api/orders/[id]/release-escrow/route.ts'
           'src/app/api/payments/settlement/[orderId]/route.ts'
+          'src/app/api/admin/disputes/[id]/resolve/route.ts'
           src/services/wallet.service.ts
           src/components/cart/PaymentModal.tsx
           __tests__/security/p0c3-financial-endpoint-authorization.test.ts
