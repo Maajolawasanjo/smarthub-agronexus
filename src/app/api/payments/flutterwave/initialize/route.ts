@@ -141,6 +141,7 @@ export async function POST(req: Request) {
           orderId: order.id,
           paymentMethod: "CARD",
           paymentStatus: "PENDING",
+          transactionRef: order.payment.transactionRef,
         },
         data: { transactionRef: txRef },
       });
