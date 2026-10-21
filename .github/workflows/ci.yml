@@ -5,6 +5,10 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+# Safe, intentionally unreachable placeholder for Prisma client initialization and
+# Next.js build-time route discovery. Never use Production DATABASE_URL in CI.
+env:
+  DATABASE_URL: "postgresql://smarthub_ci:placeholder@127.0.0.1:5432/smarthub_ci"
 
 jobs:
   build-and-test:
@@ -26,11 +30,36 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Run Linting
-        run: npm run lint || true
+      - name: Lint Phase 0-A security changes (fail closed)
+        run: npx eslint src/app/api/kyc/verify/route.ts __tests__/security/p0a-kyc-admin-authorization.test.ts
 
-      - name: Execute Domain Unit Tests
-        run: npx jest || npx vitest run || true
+      - name: Execute Vitest unit and integration tests (fail closed)
+        run: npm test
 
       - name: Build Next.js Production App
         run: npm run build
+
+  # P0-A security gate. The existing legacy build job masks test failures;
+  # this separate job must fail if unauthorized KYC mutations regress.
+  p0a-kyc-security:
+    name: KYC admin authorization (required verification)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run KYC authorization regression suite
+        run: npx vitest run __tests__/security/p0a-kyc-admin-authorization.test.ts

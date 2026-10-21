@@ -1,84 +1,44 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
-import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
+import { getAdminSession } from "@/lib/session";
+import { createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
-import { publishAgroEvent } from "@/lib/events";
-import { recordAuditEvent } from "@/lib/audit";
 
-// POST /api/kyc/verify — Admin approval or rejection of farmer KYC identity
+/**
+ * Legacy KYC verification mutation endpoint.
+ *
+ * No application code calls this endpoint. The authenticated admin verification
+ * workflow is implemented at PUT /api/admin/verifications/[id].
+ *
+ * This endpoint previously allowed unauthenticated approval/rejection. Do not
+ * re-enable a parallel write path: requiring an ADMIN realm here AND returning
+ * 410 prevents accidental use while retaining a clear migration message.
+ */
 export async function POST(req: Request) {
   const traceCtx = createTraceContext(req);
 
   try {
-    const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      console.warn("KYC Verification executed without ADMIN session fallback");
-    }
-
-    const body = await req.json();
-    const { farmerProfileId, action, remarks } = body;
-
-    if (!farmerProfileId || !["APPROVE", "REJECT"].includes(action?.toUpperCase())) {
+    const auth = await getAdminSession();
+    if (!auth || auth.role !== "ADMIN") {
       const res = NextResponse.json(
-        createErrorResponse("INVALID_INPUT", "farmerProfileId and valid action (APPROVE/REJECT) are required"),
-        { status: 400 }
+        createErrorResponse("FORBIDDEN", "Admin authorization required."),
+        { status: 403 }
       );
       return attachTraceHeaders(res, traceCtx);
     }
 
-    const isApproved = action.toUpperCase() === "APPROVE";
-    const newStatus = isApproved ? "APPROVED" : "REJECTED";
-
-    const updatedProfile = await prisma.$transaction(async (tx) => {
-      const profile = await tx.farmerProfile.update({
-        where: { id: farmerProfileId },
-        data: { verificationStatus: newStatus },
-        include: { user: true },
-      });
-
-      await tx.verification.updateMany({
-        where: { farmerProfileId },
-        data: {
-          remarks: remarks || (isApproved ? "Verification approved by compliance team." : "Verification rejected."),
-          reviewedAt: new Date(),
-        },
-      });
-
-      return profile;
-    });
-
-    // Publish event
-    await publishAgroEvent(isApproved ? "KYC_APPROVED" : "KYC_REJECTED", {
-      userId: updatedProfile.userId,
-      remarks: `KYC ${newStatus}`,
-    });
-
-    await recordAuditEvent({
-      category: "KYC",
-      severity: isApproved ? "INFO" : "WARNING",
-      action: isApproved ? "KYC_APPROVED" : "KYC_REJECTED",
-      actorId: session?.userId || null,
-      actorEmail: session?.email || null,
-      resourceId: farmerProfileId,
-      metadata: { remarks: remarks || null },
-      req,
-    });
-
     const res = NextResponse.json(
-      createSuccessResponse({
-        farmerProfileId,
-        verificationStatus: newStatus,
-        message: isApproved
-          ? "Farmer identity successfully verified! Unlimited produce publishing unlocked."
-          : "Verification rejected. Farmer notified for resubmission.",
-      })
+      createErrorResponse(
+        "ENDPOINT_RETIRED",
+        "Legacy KYC verification is disabled. Use PUT /api/admin/verifications/{verificationId}."
+      ),
+      { status: 410 }
     );
     return attachTraceHeaders(res, traceCtx);
-  } catch (err: any) {
+  } catch (error) {
+    console.error("[KYC_VERIFY_LEGACY_AUTH_ERROR]", error instanceof Error ? error.name : "Unknown");
     const res = NextResponse.json(
-      createErrorResponse("VERIFICATION_FAILED", err.message || "Failed to update verification status"),
-      { status: 500 }
+      createErrorResponse("AUTH_CHECK_FAILED", "Unable to verify admin authorization."),
+      { status: 503 }
     );
     return attachTraceHeaders(res, traceCtx);
   }
