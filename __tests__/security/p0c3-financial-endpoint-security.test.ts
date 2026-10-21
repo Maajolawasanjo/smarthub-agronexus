@@ -127,6 +127,7 @@ function gatewayVerifyPayload(txRef: string, overrides: Record<string, unknown> 
       id: 98765,
       tx_ref: txRef,
       amount: 1200,
+      currency: "NGN",
       meta: {
         userId: "buyer-1",
         purpose: "ORDER_PAYMENT",
