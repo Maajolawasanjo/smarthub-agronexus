@@ -1295,7 +1295,11 @@ export class WalletService {
       if (!sellerOrder.farmerProfile?.userId) {
         throw new Error("SELLER_USER_NOT_FOUND");
       }
+    }
 
+    // Validate every sub-order, including previously completed rows, before using their
+    // totals to calculate remaining escrow. Corrupt historical totals must stop settlement.
+    for (const sellerOrder of allSellerOrders) {
       const commoditySubtotal = Number(sellerOrder.subtotal);
       const shippingFee = Number(sellerOrder.shippingFee ?? 0);
       const sellerOrderTotal = Number(sellerOrder.totalAmount);
