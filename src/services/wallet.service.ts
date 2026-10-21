@@ -513,12 +513,29 @@ export class WalletService {
    * If escrow is 0 (e.g. card order refunded as platform store credit), funds balance directly without negative escrow.
    */
   public static async executeRefund(userId: string, amount: number, orderId: string, isStoreCredit: boolean = false) {
+    if (!Number.isFinite(amount) || amount <= 0 || !orderId) {
+      throw new Error("INVALID_REFUND: A positive amount and order ID are required.");
+    }
+
     const wallet = await this.getOrCreateWallet(userId);
-    const txRef = `REF-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    // One full refund per order. A deterministic unique ledger reference prevents replayed
+    // requests from crediting the same buyer twice; a conflicting reuse fails closed.
+    const txRef = `REF-${orderId}`;
+    const existingTx = await prisma.walletTransaction.findUnique({
+      where: { reference: txRef },
+    });
+    if (existingTx) {
+      if (existingTx.walletId !== wallet.id || Number(existingTx.amount) !== amount || existingTx.type !== "REFUND") {
+        throw new Error("REFUND_REFERENCE_CONFLICT: Existing refund ledger entry does not match this request.");
+      }
+      return { updatedWallet: wallet, txRecord: existingTx };
+    }
 
     const currentEscrow = Number(wallet.escrow);
-    // Escrow decrement is safely clamped to available escrow so it NEVER goes negative
-    const escrowDecrement = isStoreCredit ? 0 : Math.min(currentEscrow, amount);
+    if (!isStoreCredit && currentEscrow + 0.001 < amount) {
+      throw new Error("INSUFFICIENT_ESCROW_FOR_REFUND: Locked escrow is insufficient; no wallet credit was issued.");
+    }
+    const escrowDecrement = isStoreCredit ? 0 : amount;
 
     const orderRef = String(orderId || "").slice(0, 8);
 
