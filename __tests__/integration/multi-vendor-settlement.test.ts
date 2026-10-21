@@ -190,7 +190,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(mockOrder.status).toBe("COMPLETED");
 
       // Replaying the same release cannot create a second set of payouts.
-      await expect(WalletService.executeEscrowRelease("buyer-idempotency", orderId))
+      await expect(WalletService.executeEscrowRelease(orderId))
         .rejects.toThrow("ORDER_NOT_DELIVERED");
       expect(createdTransactions).toHaveLength(4);
     });
