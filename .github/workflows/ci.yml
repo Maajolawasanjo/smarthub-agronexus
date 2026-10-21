@@ -111,7 +111,7 @@ jobs:
         run: npx prisma generate
 
       - name: Lint new origin policy and regression tests
-        run: npx eslint src/lib/csrf.ts __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-admin-mutation-guards.test.ts
+        run: npx eslint src/lib/csrf.ts __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-admin-mutation-guards.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
 
       - name: Run origin and admin mutation regression tests
-        run: npx vitest run __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-admin-mutation-guards.test.ts
+        run: npx vitest run __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-admin-mutation-guards.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
