@@ -967,6 +967,9 @@ export class WalletService {
       include: { wallet: true },
     });
     const orderAmount = Number(order.totalAmount);
+    if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
+      throw new Error("INVALID_ORDER_AMOUNT");
+    }
     if (
       !lockTransaction ||
       lockTransaction.type !== "ESCROW_LOCK" ||
@@ -996,6 +999,10 @@ export class WalletService {
         }
       }
       if (farmerGross.size === 0) throw new Error("NO_SELLERS_FOR_ORDER");
+      const totalFarmerGross = Array.from(farmerGross.values()).reduce((sum, value) => sum + value, 0);
+      if (totalFarmerGross > orderAmount + 0.01) {
+        throw new Error("SELLER_GROSS_EXCEEDS_ORDER_AMOUNT");
+      }
 
       const currentEscrow = Number(buyerWallet.escrow);
       if (!Number.isFinite(currentEscrow) || currentEscrow < orderAmount) {
