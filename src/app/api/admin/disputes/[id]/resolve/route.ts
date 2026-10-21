@@ -49,6 +49,7 @@ export async function POST(
         order: {
           include: {
             buyer: true,
+            payment: true,
             orderItems: {
               include: {
                 product: {
@@ -82,8 +83,50 @@ export async function POST(
     const buyerUserId = order.buyer.userId;
 
     if (action === "REFUND_BUYER") {
-      // 1. Return locked escrow funds back to buyer's available wallet balance
-      await WalletService.executeRefund(buyerUserId, orderTotal, order.id);
+      if (!order.payment || order.payment.paymentStatus !== "PAID") {
+        return NextResponse.json(
+          createErrorResponse("PAYMENT_NOT_SETTLED", "A settled payment is required before issuing a refund."),
+          { status: 409 }
+        );
+      }
+
+      // The current schema stores Flutterwave tx_ref, not the gateway's numeric transaction ID.
+      // Do not mint wallet credit for a card-funded order or claim a card refund succeeded.
+      if (order.payment.paymentMethod !== "WALLET") {
+        await recordAuditEvent({
+          category: "PAYMENT",
+          severity: "WARNING",
+          action: "CARD_REFUND_REQUIRES_MANUAL_REVIEW",
+          actorId: auth.userId,
+          actorEmail: auth.user.email,
+          resourceType: "ORDER",
+          resourceId: order.id,
+          metadata: { disputeId: dispute.id, orderNumber: order.orderNumber, amount: orderTotal },
+          req,
+        });
+        return NextResponse.json(
+          createErrorResponse("MANUAL_REVIEW_REQUIRED", "Card-funded refunds require gateway transaction-ID support. No wallet credit or refund status change was made."),
+          { status: 409 }
+        );
+      }
+
+      const buyerWallet = await prisma.wallet.findUnique({
+        where: { userId: buyerUserId },
+        select: { id: true, escrow: true },
+      });
+      if (!buyerWallet || Number(buyerWallet.escrow) + 0.001 < orderTotal) {
+        return NextResponse.json(
+          createErrorResponse("ESCROW_BALANCE_MISMATCH", "The buyer escrow balance is insufficient for a safe refund. No funds were moved."),
+          { status: 409 }
+        );
+      }
+
+      // 1. Return the buyer's own locked wallet funds; card payments fail closed above.
+      await WalletService.executeWalletEscrowRefund(buyerUserId, orderTotal, order.id);
+      await prisma.payment.update({
+        where: { id: order.payment.id },
+        data: { paymentStatus: "REFUNDED" },
+      });
 
       // 2. Mark order as CANCELLED
       await prisma.order.update({
