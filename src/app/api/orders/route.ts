@@ -196,6 +196,7 @@ export async function POST(req: Request) {
               amount: totalAmount,
               paymentMethod: validPaymentMethod,
               paymentStatus: validPaymentMethod === "WALLET" ? "PAID" : "PENDING",
+              financialState: validPaymentMethod === "WALLET" ? "ESCROWED" : "PENDING",
               transactionRef: paymentReference,
             },
           },
