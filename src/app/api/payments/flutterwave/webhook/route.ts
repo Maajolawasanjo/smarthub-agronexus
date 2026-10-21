@@ -76,6 +76,10 @@ export async function POST(req: Request) {
       if (targetPayment.paymentStatus === "PAID") {
         return NextResponse.json({ status: "already_processed" }, { status: 200 });
       }
+      if (targetPayment.paymentStatus !== "PENDING") {
+        console.warn("[FLUTTERWAVE_WEBHOOK_PAYMENT_NOT_PENDING]", { txRef, paymentStatus: targetPayment.paymentStatus });
+        return NextResponse.json({ error: "Payment intent is no longer pending; manual review is required." }, { status: 409 });
+      }
 
       await WalletService.settleOrderPaymentFromGateway(targetPayment.id, txRef, Number(verified.amount));
     } else if (event === "transfer.completed") {
