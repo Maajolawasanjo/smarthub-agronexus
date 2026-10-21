@@ -27,6 +27,7 @@ function walletRequest(origin?: string) {
       "Content-Type": "application/json",
       "x-auth-realm": "BUYER",
       ...(origin ? { origin } : {}),
+      "idempotency-key": "test-withdrawal-key-001",
     },
     body: JSON.stringify({ amount: 2500, bankAccountId: "bank-account-1" }),
   });
@@ -65,10 +66,13 @@ describe("Phase 0-C: CSRF on bank withdrawal", () => {
   it("a same-origin authenticated request reaches the legitimate wallet service", async () => {
     mock.executeWithdrawal.mockResolvedValue({
       transactionRef: "test-only-reference",
+      status: "PROCESSING",
+      alreadyProcessed: false,
+      reconciliationRequired: false,
       updatedWallet: { balance: 5000 },
     });
     const res = await withdraw(walletRequest(canonical));
     expect(res.status).toBe(200);
-    expect(mock.executeWithdrawal).toHaveBeenCalledWith("buyer_1", 2500, "bank-account-1");
+    expect(mock.executeWithdrawal).toHaveBeenCalledWith("buyer_1", 2500, "bank-account-1", "test-withdrawal-key-001");
   });
 });
