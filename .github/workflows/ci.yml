@@ -137,7 +137,7 @@ jobs:
         run: npx prisma generate
 
       - name: Lint password security and tests
-        run: npx eslint src/app/api/user/password/route.ts __tests__/security/p0c2-password-change.test.ts
+        run: npx eslint src/app/api/user/password/route.ts __tests__/security/p0c2-password-change.test.ts __tests__/security/p0c2-role-mutation-guards.test.ts
 
       - name: Run password and origin tests
-        run: npx vitest run __tests__/security/p0c2-password-change.test.ts __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
+        run: npx vitest run __tests__/security/p0c2-password-change.test.ts __tests__/security/p0c2-role-mutation-guards.test.ts __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
