@@ -301,4 +301,56 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       }
     });
   });
+
+  describe("Invariant 4: Escrow Release Must Be Fully Backed", () => {
+    it("rejects an underfunded buyer escrow before executing any payout transaction", async () => {
+      const orderId = "ord_underfunded_release";
+      const buyerWallet = {
+        id: "w_buyer_underfunded",
+        userId: "usr_buyer_underfunded",
+        balance: 0,
+        escrow: 500,
+        pendingWithdrawal: 0,
+        frozen: 0,
+      };
+      const farmerWallet = {
+        id: "w_farmer_underfunded",
+        userId: "usr_farmer_underfunded",
+        balance: 0,
+        escrow: 0,
+        pendingWithdrawal: 0,
+        frozen: 0,
+      };
+      const wallets: Record<string, any> = {
+        [buyerWallet.userId]: buyerWallet,
+        [farmerWallet.userId]: farmerWallet,
+      };
+      const mockOrder = {
+        id: orderId,
+        orderNumber: "ORD-UNDERFUNDED",
+        totalAmount: 1000,
+        status: "DELIVERED",
+        buyer: { userId: buyerWallet.userId },
+        payment: { paymentStatus: "PAID", amount: 1000 },
+        sellerOrders: [{
+          id: "so_underfunded",
+          sellerOrderNumber: "ORD-UNDERFUNDED-S1",
+          subtotal: 1000,
+          totalAmount: 1000,
+          status: "DELIVERED",
+          farmerProfile: { userId: farmerWallet.userId, user: { fullName: "Test Farmer" } },
+        }],
+        orderItems: [],
+      };
+
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue(mockOrder as any);
+      vi.spyOn(prisma.wallet, "findUnique").mockImplementation(async ({ where }: any) => wallets[where.userId] || null);
+      const transaction = vi.spyOn(prisma, "$transaction");
+
+      await expect(WalletService.executeEscrowRelease(orderId)).rejects.toThrow("INSUFFICIENT_ESCROW_FOR_RELEASE");
+      expect(transaction).not.toHaveBeenCalled();
+      expect(buyerWallet.escrow).toBe(500);
+      expect(farmerWallet.balance).toBe(0);
+    });
+  });
 });
