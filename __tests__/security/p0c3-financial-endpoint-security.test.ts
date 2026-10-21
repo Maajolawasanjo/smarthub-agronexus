@@ -416,7 +416,7 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
 
     it("rejects an amount mismatch even when the tx_ref is correct", async () => {
       const txRef = "AGRO-FLW-amount-mismatch";
-      mock.paymentFindUnique.mockResolvedValue({ id: "payment-1", orderId: "order-1" });
+      mock.paymentFindUnique.mockResolvedValue({ id: "payment-1", orderId: "order-1", order: { buyer: { userId: "buyer-1" } } });
       fetchMock.mockResolvedValue(gatewayResponse({
         status: "success",
         data: { id: 98765, status: "successful", tx_ref: txRef, amount: 1000, currency: "NGN" },
