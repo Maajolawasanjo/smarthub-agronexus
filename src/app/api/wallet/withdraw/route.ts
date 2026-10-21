@@ -91,8 +91,20 @@ export async function POST(req: Request) {
       : message.startsWith("GATEWAY_UNCONFIGURED") ? 503
       : message.startsWith("BANK_TRANSFER_FAILED") ? 502
       : 500;
+    const errorCode = [
+      "ACCOUNT_FROZEN",
+      "INSUFFICIENT_FUNDS",
+      "INVALID_AMOUNT",
+      "INVALID_BANK_ACCOUNT",
+      "IDEMPOTENCY_KEY_REUSED",
+      "WITHDRAWAL_IDEMPOTENCY_TERMINAL",
+      "WITHDRAWAL_STATE_CONFLICT",
+      "WITHDRAWAL_ROLLBACK_CONFLICT",
+      "GATEWAY_UNCONFIGURED",
+      "BANK_TRANSFER_FAILED",
+    ].find((code) => message.startsWith(code)) || "WITHDRAWAL_FAILED";
     const res = NextResponse.json(
-      createErrorResponse("WITHDRAWAL_FAILED", message),
+      createErrorResponse(errorCode, message),
       { status }
     );
     return attachTraceHeaders(res, traceCtx);
