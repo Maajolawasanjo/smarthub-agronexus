@@ -164,7 +164,7 @@ export function EscrowTab() {
                         onClick={() => handleReleaseFunds(item.dbOrderId, item.orderId, item.formattedAmount)}
                         className="bg-[#0A3918] hover:bg-[#062610] text-white px-5 py-2.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
                       >
-                        <Unlock size={14} /> Release Payment Early
+                        <Unlock size={14} /> Confirm Delivery & Release
                       </button>
                     ) : (
                       <span className="text-gray-400 text-[11px] font-medium flex items-center gap-1 bg-gray-100 px-3 py-1.5 rounded-full">
