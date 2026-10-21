@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/session";
@@ -28,6 +29,11 @@ export async function PATCH(
         createErrorResponse("FORBIDDEN", "Admin authorization required to freeze users"),
         { status: 403 }
       );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Untrusted mutation origin."), { status: 403 });
       return attachTraceHeaders(res, traceCtx);
     }
 

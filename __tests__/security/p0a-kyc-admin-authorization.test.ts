@@ -65,7 +65,7 @@ const legacyRequest = () => new Request("http://localhost:3000/api/kyc/verify", 
 const reviewRequest = (action: string, remarks?: string) =>
   new Request("http://localhost:3000/api/admin/verifications/verification_1", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
     body: JSON.stringify({ action, remarks }),
   });
 

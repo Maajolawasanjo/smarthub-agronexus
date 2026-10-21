@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/session";
@@ -78,6 +79,10 @@ export async function PATCH(
     const auth = await getAdminSession();
     if (!auth || auth.role !== "ADMIN") {
       return NextResponse.json({ error: "Access denied. Admin authorization required." }, { status: 403 });
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     const { id } = await params;

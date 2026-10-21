@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { middleware } from "@/middleware";
-import { signSessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { WalletService } from "@/services/wallet.service";
 
@@ -64,35 +63,41 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       const farmerBody = await unauthFarmerRes.json();
       expect(farmerBody.error.code).toBe("UNAUTHORIZED");
 
-      // 3. Buyer attempting to access admin API -> 403 Forbidden
-      const buyerToken = signSessionToken({ userId: "usr_buyer_1", email: "buyer@agro.ng", role: "BUYER" });
+      // 3. Buyer realm cookies do not permit access to ADMIN APIs.
+      // Edge presence checks return 401 for a missing target-realm cookie.
       const buyerReq = new NextRequest("http://localhost:3000/api/admin/overview", {
-        headers: { cookie: `smarthub_session=${buyerToken}` },
+        headers: { cookie: "smarthub_buyer_token=buyer-realm-token" },
       });
       const buyerRes = await middleware(buyerReq);
-      expect(buyerRes.status).toBe(403);
+      expect(buyerRes.status).toBe(401);
       const buyerResBody = await buyerRes.json();
-      expect(buyerResBody.error.code).toBe("FORBIDDEN");
+      expect(buyerResBody.error.code).toBe("UNAUTHORIZED");
 
-      // 4. Buyer attempting to access farmer API -> 403 Forbidden
+      // 4. Buyer cannot access Farmer API with only a Buyer realm cookie
       const buyerFarmerReq = new NextRequest("http://localhost:3000/api/farmer/listings", {
-        headers: { cookie: `smarthub_session=${buyerToken}` },
+        headers: { cookie: "smarthub_buyer_token=buyer-realm-token" },
       });
       const buyerFarmerRes = await middleware(buyerFarmerReq);
-      expect(buyerFarmerRes.status).toBe(403);
+      expect(buyerFarmerRes.status).toBe(401);
 
-      // 5. Admin accessing admin API -> 200 Allowed
-      const adminToken = signSessionToken({ userId: "usr_admin_1", email: "admin@agro.ng", role: "ADMIN" });
+      // 5. Legacy JWT alone is no longer a presence credential.
+      const legacyReq = new NextRequest("http://localhost:3000/api/admin/overview", {
+        headers: { cookie: "smarthub_session=legacy-jwt" },
+      });
+      const legacyRes = await middleware(legacyReq);
+      expect(legacyRes.status).toBe(401);
+
+      // 6. Admin realm-cookie presence passes the edge gate.
+      // The API itself still must independently verify PostgreSQL Session.
       const adminReq = new NextRequest("http://localhost:3000/api/admin/overview", {
-        headers: { cookie: `smarthub_session=${adminToken}` },
+        headers: { cookie: "smarthub_admin_token=admin-realm-token" },
       });
       const adminRes = await middleware(adminReq);
       expect(adminRes.status).toBe(200);
 
-      // 6. Farmer accessing farmer API -> 200 Allowed
-      const farmerToken = signSessionToken({ userId: "usr_farmer_1", email: "farmer@agro.ng", role: "FARMER" });
+      // 7. Farmer realm-cookie presence passes its edge gate.
       const farmerReq = new NextRequest("http://localhost:3000/api/farmer/listings", {
-        headers: { cookie: `smarthub_session=${farmerToken}` },
+        headers: { cookie: "smarthub_farmer_token=farmer-realm-token" },
       });
       const farmerRes = await middleware(farmerReq);
       expect(farmerRes.status).toBe(200);
@@ -148,7 +153,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       mockSession.mockResolvedValue(null);
       const req1 = new Request("http://localhost:3000/api/admin/products/p1/approve", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ isApproved: true }),
       });
       const res1 = await PUT(req1, { params: Promise.resolve({ id: "p1" }) });

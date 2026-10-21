@@ -143,7 +143,7 @@ describe("Phase 4 — P1 Production Hardening Integration Suite", () => {
 
       const req = new Request("http://localhost:3000/api/admin/verifications/verif-123", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ action: "APPROVE", remarks: "Identity documents verified." }),
       });
 
@@ -179,7 +179,7 @@ describe("Phase 4 — P1 Production Hardening Integration Suite", () => {
 
       const req = new Request("http://localhost:3000/api/admin/verifications/verif-123", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ action: "REJECT", remarks: "Blurry document upload." }),
       });
 
@@ -202,7 +202,7 @@ describe("Phase 4 — P1 Production Hardening Integration Suite", () => {
 
       const req = new Request("http://localhost:3000/api/admin/verifications/verif-123", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ action: "APPROVE" }),
       });
 

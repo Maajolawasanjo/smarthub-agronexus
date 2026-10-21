@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/session";
@@ -64,6 +65,10 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Access denied. Admin authorization required." }, { status: 403 });
     }
 
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
+    }
+
     const body = await req.json();
     const { userId, isActive } = body;
 
@@ -122,13 +127,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Access denied. Admin authorization required." }, { status: 403 });
     }
 
-    // CSRF origin validation for user creation
-    const origin = req.headers.get("origin");
-    const referer = req.headers.get("referer");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const expectedOrigin = new URL(appUrl).origin;
-    if ((origin && origin !== expectedOrigin) || (referer && !referer.startsWith(expectedOrigin))) {
-      return NextResponse.json({ error: "Forbidden: Cross-origin mutation forbidden." }, { status: 403 });
+    // Do not permit cookie-authenticated cross-origin account changes.
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));
