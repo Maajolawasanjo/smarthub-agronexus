@@ -280,6 +280,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
           75000
         );
         expect(result.gatewayRefunded).toBe(true);
+        expect(payment.paymentStatus).toBe("REFUNDED");
         expect(payment.refundStatus).toBe("SUCCEEDED");
         expect(payment.gatewayRefundId).toBe("refund-provider-55");
         expect(paymentUpdateMany).toHaveBeenCalledTimes(2);
