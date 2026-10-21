@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma, TxStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { evaluateTrustPolicy } from "@/lib/trust";
 import { publishAgroEvent } from "@/lib/events";
@@ -468,7 +468,7 @@ export class WalletService {
     }
 
     const txRecord = initial.txRecord;
-    const rollbackReservedFunds = async (reason: string, allowedStates: string[]) => {
+    const rollbackReservedFunds = async (reason: string, allowedStates: TxStatus[]) => {
       await prisma.$transaction(async (tx) => {
         const claim = await tx.walletTransaction.updateMany({
           where: { id: txRecord.id, status: { in: allowedStates } },
