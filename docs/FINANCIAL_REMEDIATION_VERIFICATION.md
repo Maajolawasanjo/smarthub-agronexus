@@ -24,7 +24,7 @@ The historical figures in earlier versions of this report are not release eviden
 
 ---
 
-## 2. Defect Remediation Register
+## 2. Historical Defect Remediation Register (Prior Audit)
 
 | Defect ID | Severity | Description | Status | Verification Evidence |
 |---|---|---|---|---|
@@ -141,7 +141,7 @@ Implemented as `reconstructGrossFromPayout(netFarmerPayout)` in `src/lib/settlem
 
 ---
 
-## 7. Test Suite Integrity Attestation
+## 7. Historical Test Suite Integrity Attestation
 
 ### Purge of Tautological Tests (P0-4)
 The following 12 test files previously contained 71 synthetic assertions on local JavaScript closures with zero coverage of actual application code. All 12 files were rewritten to test actual Prisma data models, route handlers, and service classes:
@@ -169,7 +169,7 @@ Pass Rate   100.0% of executable tests
 
 ---
 
-## 8. Live PostgreSQL Persistence Verification (P0-5)
+## 8. Historical Live PostgreSQL Persistence Verification (P0-5)
 
 Executed via `__tests__/integration/real-db-persistence.test.ts` connecting directly to Supabase PostgreSQL:
 
