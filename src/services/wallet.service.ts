@@ -697,11 +697,7 @@ export class WalletService {
     if (!order || order.buyer.userId !== userId) {
       throw new Error("REFUND_ORDER_OWNER_MISMATCH");
     }
-    if (
-      !order.payment ||
-      order.payment.paymentMethod !== "CARD" ||
-      (order.payment.gatewayTransactionId && order.payment.gatewayTransactionId !== gatewayId)
-    ) {
+    if (!order.payment || order.payment.paymentMethod !== "CARD") {
       throw new Error("GATEWAY_REFUND_PAYMENT_MISMATCH");
     }
     if (
@@ -719,6 +715,16 @@ export class WalletService {
     });
     if (existingRefund?.status === "SUCCESS") {
       return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: gatewayId };
+    }
+
+    if (!gatewayId || !order.payment.gatewayTransactionId || order.payment.gatewayTransactionId !== gatewayId) {
+      await this.persistManualReviewFlag(
+        userId,
+        orderId,
+        amount,
+        "Verified provider transaction ID is missing or does not match the persisted payment."
+      );
+      throw new Error("CARD_REFUND_FAILED: Verified provider transaction ID is missing or mismatched. Manual review required.");
     }
 
     const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
