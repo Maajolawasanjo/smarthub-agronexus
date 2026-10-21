@@ -76,11 +76,13 @@ export async function processWebhookPaymentEvent(
         amount: event.amount,
         paymentMethod: "CARD",
         paymentStatus: "PAID",
+        financialState: "ESCROWED",
         transactionRef: event.transactionRef,
         paidAt: new Date(),
       },
       update: {
         paymentStatus: "PAID",
+        financialState: "ESCROWED",
         transactionRef: event.transactionRef,
         paidAt: new Date(),
       },
