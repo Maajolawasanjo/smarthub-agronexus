@@ -65,6 +65,10 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Access denied. Admin authorization required." }, { status: 403 });
     }
 
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
+    }
+
     const body = await req.json();
     const { userId, isActive } = body;
 
