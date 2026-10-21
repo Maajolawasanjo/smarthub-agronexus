@@ -204,6 +204,7 @@ model Payment {
   gatewayTransactionId String?       @unique
   gatewayRefundId      String?       @unique
   refundStatus         RefundStatus?
+  financialState       PaymentFinancialState @default(PENDING)
   paidAt                DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -390,6 +391,15 @@ enum RefundStatus {
   PENDING
   SUCCEEDED
   FAILED
+  MANUAL_REVIEW
+}
+
+enum PaymentFinancialState {
+  PENDING
+  ESCROWED
+  SETTLED
+  REFUNDING
+  REFUNDED
   MANUAL_REVIEW
 }
 
