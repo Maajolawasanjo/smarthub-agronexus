@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { X, Building2, AlertCircle, CheckCircle2, Loader2, ArrowRight } from "lucide-react";
 import { LinkedBankDTO } from "@/types/wallet.dto";
-import { useLocalization } from "@/hooks/useLocalization";
 
 interface FarmerWithdrawModalProps {
   isOpen: boolean;
@@ -20,7 +19,6 @@ export function FarmerWithdrawModal({
   linkedBanks,
   onSuccess,
 }: FarmerWithdrawModalProps) {
-  const { formatCurrency } = useLocalization();
   const [amount, setAmount] = useState<string>("");
 
   const [selectedBankId, setSelectedBankId] = useState<string>("");
@@ -29,12 +27,7 @@ export function FarmerWithdrawModal({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const idempotencyKeyRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (linkedBanks.length > 0 && !selectedBankId) {
-      const defaultBank = linkedBanks.find((b) => b.isDefault) || linkedBanks[0];
-      setSelectedBankId(defaultBank.id);
-    }
-  }, [linkedBanks, selectedBankId]);
+  const effectiveSelectedBankId = selectedBankId || linkedBanks.find((bank) => bank.isDefault)?.id || linkedBanks[0]?.id || "";
 
   if (!isOpen) return null;
 
@@ -52,7 +45,7 @@ export function FarmerWithdrawModal({
       return;
     }
 
-    if (!selectedBankId) {
+    if (!effectiveSelectedBankId) {
       setError("Please select or add a verified bank account for payout.");
       return;
     }
@@ -70,7 +63,7 @@ export function FarmerWithdrawModal({
         },
         body: JSON.stringify({
           amount: numAmount,
-          bankAccountId: selectedBankId,
+          bankAccountId: effectiveSelectedBankId,
         }),
       });
 
@@ -96,9 +89,9 @@ export function FarmerWithdrawModal({
         onClose();
         setSuccessMsg(null);
       }, 2500);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Retain the same idempotency key after a network error; the transfer may have been accepted.
-      setError(err.message || "Withdrawal outcome is not confirmed. Retry the same request before initiating another payout.");
+      setError(err instanceof Error ? err.message : "Withdrawal outcome is not confirmed. Retry the same request before initiating another payout.");
     } finally {
       setLoading(false);
     }
@@ -142,7 +135,7 @@ export function FarmerWithdrawModal({
           {/* Available Balance Banner */}
           <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Available Balance</span>
-            <span className="text-base font-extrabold text-gray-900">{formatCurrency(availableBalance)}</span>
+            <span className="text-base font-extrabold text-gray-900">{formattedAvailableBalance}</span>
           </div>
 
           {/* Amount Input */}
@@ -184,7 +177,7 @@ export function FarmerWithdrawModal({
               </div>
             ) : (
               <select
-                value={selectedBankId}
+                value={effectiveSelectedBankId}
                 onChange={(e) => setSelectedBankId(e.target.value)}
                 className="w-full px-4 py-3 bg-white border border-gray-200 rounded-full text-xs font-semibold text-gray-800 focus:outline-none focus:border-[#1B4D28] transition-all"
               >
