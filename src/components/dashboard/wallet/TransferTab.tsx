@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CheckCircle2, Building2, ShieldCheck, ArrowRight, Wallet, Clock } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { WalletPageDTO, LinkedBankDTO } from "@/types/wallet.dto";
@@ -11,6 +11,7 @@ export function TransferTab() {
   const [selectedBankId, setSelectedBankId] = useState("");
   const [loading, setLoading] = useState(false);
   const [walletPage, setWalletPage] = useState<WalletPageDTO | null>(null);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -55,10 +56,15 @@ export function TransferTab() {
     }
 
     setLoading(true);
+    const requestKey = idempotencyKeyRef.current || crypto.randomUUID();
+    idempotencyKeyRef.current = requestKey;
     try {
       const res = await fetch("/api/wallet/withdraw", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": requestKey,
+        },
         body: JSON.stringify({
           amount: amountNum,
           bankAccountId: selectedBankId,
@@ -68,17 +74,27 @@ export function TransferTab() {
       const json = await res.json();
 
       if (json.success) {
+        idempotencyKeyRef.current = null;
         toast(
-          `Withdrawal request sent! ₦${amountNum.toLocaleString()} moved to Pending — funds will be released to your bank once settlement completes. Ref: ${json.data.transactionRef}`,
-          "success"
+          json.data?.reconciliationRequired
+            ? `Withdrawal ${json.data.transactionRef} is pending reconciliation. Funds remain reserved until the bank outcome is verified.`
+            : `Withdrawal request submitted! ₦${amountNum.toLocaleString()} is pending bank settlement. Ref: ${json.data.transactionRef}`,
+          json.data?.reconciliationRequired ? "info" : "success"
         );
         setTransferAmount("");
         await loadData();
       } else {
+        const code = json.error?.code;
+        // A key/payload mismatch means an earlier request may still be pending. Keep
+        // the key so changing the payload cannot silently create a second payout.
+        if (res.status < 500 && code !== "IDEMPOTENCY_KEY_REUSED") {
+          idempotencyKeyRef.current = null;
+        }
         toast(json.error?.message || "Withdrawal failed.", "error");
       }
     } catch (err) {
-      toast("Network error processing bank transfer.", "error");
+      // Keep the same key after a network failure; the server may have submitted the transfer.
+      toast("Withdrawal outcome is not confirmed. Retry the same request before initiating another payout.", "error");
     } finally {
       setLoading(false);
     }
