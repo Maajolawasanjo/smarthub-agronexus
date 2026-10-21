@@ -64,8 +64,7 @@ export async function POST(
     }
     if (order.payment?.paymentStatus !== "PAID") {
       return attachTraceHeaders(
-        NextResponse.json(createErrorResponse("PAYMENT_NOT_SETTLED",
-      "PAYMENT_FINANCIAL_STATE_CONFLICT", "This order has no settled payment to release."), { status: 409 }),
+        NextResponse.json(createErrorResponse("PAYMENT_NOT_SETTLED", "This order has no settled payment to release."), { status: 409 }),
         traceCtx
       );
     }
@@ -107,6 +106,7 @@ export async function POST(
     const conflictCodes = [
       "ORDER_NOT_DELIVERED",
       "PAYMENT_NOT_SETTLED",
+      "PAYMENT_FINANCIAL_STATE_CONFLICT",
       "ACTIVE_DISPUTE_BLOCKS_RELEASE",
       "ESCROW_NOT_FUNDED",
       "INSUFFICIENT_ESCROW",
