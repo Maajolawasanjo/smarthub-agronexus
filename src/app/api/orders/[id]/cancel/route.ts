@@ -181,6 +181,7 @@ export async function POST(
       "GATEWAY_REFUND_PAYMENT_MISMATCH",
       "CARD_REFUND_FAILED",
       "CARD_REFUND_PENDING_RECONCILIATION",
+      "PAYMENT_FINANCIAL_STATE_CONFLICT",
       "REFUND_STATE_CONFLICT",
     ].some((code) => String(message).includes(code));
     const status = conflict ? 409 : 500;
