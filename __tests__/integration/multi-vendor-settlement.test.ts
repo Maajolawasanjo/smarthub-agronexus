@@ -463,6 +463,86 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
     });
   });
 
+  describe("Invariant 1c: Refund and settlement share an exclusive payment state", () => {
+    it("does not debit escrow or credit sellers when a concurrent refund has claimed the payment", async () => {
+      const buyerId = "buyer-financial-state-race";
+      const orderId = "order-financial-state-race";
+      const buyerWallet = {
+        id: "wallet-financial-state-race",
+        userId: buyerId,
+        balance: 0,
+        escrow: 100,
+        pendingWithdrawal: 0,
+        frozen: 0,
+      };
+      const order = {
+        id: orderId,
+        orderNumber: "ORD-FINANCIAL-STATE-RACE",
+        totalAmount: 100,
+        status: "DELIVERED",
+        buyer: { userId: buyerId },
+        payment: {
+          id: "payment-financial-state-race",
+          paymentMethod: "CARD",
+          paymentStatus: "PAID",
+          financialState: "ESCROWED",
+          transactionRef: "TX-FINANCIAL-STATE-RACE",
+          amount: 100,
+        },
+        disputes: [],
+        orderItems: [],
+        sellerOrders: [{
+          id: "seller-order-financial-state-race",
+          sellerOrderNumber: "SO-FINANCIAL-STATE-RACE",
+          subtotal: 100,
+          shippingFee: 0,
+          totalAmount: 100,
+          status: "DELIVERED",
+          farmerProfile: { userId: "farmer-financial-state-race" },
+        }],
+      };
+
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+      vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue({
+        id: "lock-financial-state-race",
+        walletId: buyerWallet.id,
+        wallet: buyerWallet,
+        type: "ESCROW_LOCK",
+        status: "SUCCESS",
+        amount: 100,
+        reference: "TX-FINANCIAL-STATE-RACE",
+      } as any);
+
+      const paymentClaim = vi.fn().mockResolvedValue({ count: 0 });
+      const sellerClaim = vi.fn();
+      const walletDebit = vi.fn();
+      const transactionCreate = vi.fn();
+      vi.spyOn(prisma, "$transaction").mockImplementation(async (callback: any) => callback({
+        payment: { updateMany: paymentClaim },
+        sellerOrder: { updateMany: sellerClaim, count: vi.fn().mockResolvedValue(1) },
+        order: { updateMany: vi.fn() },
+        wallet: { updateMany: walletDebit, update: vi.fn() },
+        walletTransaction: { create: transactionCreate },
+      }));
+
+      await expect(WalletService.executeEscrowRelease(buyerId, orderId))
+        .rejects.toThrow("PAYMENT_FINANCIAL_STATE_CONFLICT");
+
+      expect(paymentClaim).toHaveBeenCalledWith({
+        where: {
+          id: "payment-financial-state-race",
+          paymentStatus: "PAID",
+          financialState: "ESCROWED",
+        },
+        data: { financialState: "SETTLING" },
+      });
+      expect(sellerClaim).not.toHaveBeenCalled();
+      expect(walletDebit).not.toHaveBeenCalled();
+      expect(transactionCreate).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Invariant 2: Card Refund Never Mints Internal Wallet Balance", () => {
     it("records card refund state on Payment and never posts a wallet credit", async () => {
       const buyerId = "usr_card_buyer_success";
