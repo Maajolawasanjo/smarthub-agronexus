@@ -764,6 +764,7 @@ export class WalletService {
       where: { id: effectiveOrderId },
       include: {
         buyer: true,
+        payment: true,
         sellerOrders: {
           include: {
             farmerProfile: {
@@ -786,6 +787,12 @@ export class WalletService {
     // arbitration, and fulfillment jobs, so replay protection must live below the route.
     if (order.status === "COMPLETED") {
       throw new Error("ESCROW_ALREADY_RELEASED");
+    }
+    if (!order.payment || order.payment.paymentStatus !== "PAID") {
+      throw new Error("PAYMENT_NOT_SETTLED");
+    }
+    if (Math.abs(Number(order.payment.amount) - Number(order.totalAmount)) > 0.01) {
+      throw new Error("PAYMENT_AMOUNT_MISMATCH");
     }
 
     const buyerUserId = order.buyer?.userId || (maybeOrderId ? userIdOrOrderId : (order as any).buyerId);
@@ -842,7 +849,10 @@ export class WalletService {
       }
 
       const currentEscrow = Number(buyerWallet.escrow);
-      const escrowDecrement = Math.min(currentEscrow, totalGrossSettled);
+      const escrowDecrement = Number(order.totalAmount);
+      if (currentEscrow + 0.001 < escrowDecrement) {
+        throw new Error("INSUFFICIENT_ESCROW_FOR_RELEASE");
+      }
 
       await prisma.$transaction([
         prisma.order.update({
@@ -919,10 +929,13 @@ export class WalletService {
       );
     }
 
-    // 4. Decrement buyer's escrow column safely (full locked amount including shipping)
+    // 4. The seller sub-order totals must be fully backed by the buyer's locked escrow.
+    // Never pay sellers while clamping an underfunded escrow balance.
     const currentEscrow = Number(buyerWallet.escrow);
-    const escrowDecrement = Math.min(currentEscrow, totalEscrowToRelease);
-
+    if (currentEscrow + 0.001 < totalEscrowToRelease) {
+      throw new Error("INSUFFICIENT_ESCROW_FOR_RELEASE");
+    }
+    const escrowDecrement = totalEscrowToRelease;
 
     settlementOps.push(
       prisma.wallet.update({
