@@ -123,12 +123,31 @@ describe("Phase 4: Checkout & Logistics", () => {
         return { count: 1 };
       });
       const txMock = {
+        payment: {
+          updateMany: vi.fn(async ({ where, data }: any) => {
+            if (where.id !== mockOrder.payment.id || mockOrder.payment.financialState !== where.financialState) return { count: 0 };
+            Object.assign(mockOrder.payment, data);
+            return { count: 1 };
+          }),
+        },
+        order: {
+          updateMany: vi.fn(async ({ where, data }: any) => {
+            if (where.id !== mockOrder.id || mockOrder.status !== where.status) return { count: 0 };
+            Object.assign(mockOrder, data);
+            return { count: 1 };
+          }),
+        },
         wallet: {
           update: (args: any) => (prisma.wallet.update as any)(args),
           updateMany: txWalletUpdateMany,
         },
         walletTransaction: { create: vi.fn(async ({ data }: any) => ({ id: "tx_ok", ...data })) },
-        sellerOrder: { updateMany: txSellerOrderUpdateMany },
+        sellerOrder: {
+          updateMany: txSellerOrderUpdateMany,
+          count: vi.fn(async ({ where }: any) => mockOrder.sellerOrders.filter((so: any) =>
+            so.orderId === where.orderId && so.status !== "COMPLETED"
+          ).length),
+        },
       };
       vi.spyOn(prisma.sellerOrder, "count").mockResolvedValue(0 as any);
       vi.spyOn(prisma.order, "updateMany").mockImplementation(async ({ where, data }: any) => {
