@@ -845,15 +845,28 @@ export class WalletService {
         delivery: true,
         payment: true,
         disputes: { where: { status: { in: ["OPEN", "UNDER_REVIEW"] } } },
+        sellerOrders: { select: { totalAmount: true, status: true } },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    // The escrow dashboard must not represent unpaid orders as funded escrow.
+    // The dashboard reports only funds still locked for paid orders. Partial multi-vendor
+    // settlements reduce the displayed amount as their seller orders are completed.
     const protectedOrders = orders.filter((o) => o.payment?.paymentStatus === "PAID");
-    const totalLockedEscrow = protectedOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+    const remainingEscrowForOrder = (order: (typeof protectedOrders)[number]) => {
+      const sellerOrders = order.sellerOrders || [];
+      if (sellerOrders.length === 0) return Number(order.totalAmount);
+      return sellerOrders
+        .filter((sellerOrder) => sellerOrder.status !== "COMPLETED")
+        .reduce((sum, sellerOrder) => sum + Number(sellerOrder.totalAmount), 0);
+    };
+    const totalLockedEscrow = protectedOrders.reduce(
+      (sum, order) => sum + remainingEscrowForOrder(order),
+      0
+    );
 
     const mappedOrders = protectedOrders.map((o) => {
+      const remainingEscrow = remainingEscrowForOrder(o);
       const firstProduct = o.orderItems[0]?.product?.name || "Agro Produce Shipment";
       const totalItems = o.orderItems.reduce((acc, item) => acc + item.quantity, 0);
       const deliveryStatus = o.delivery?.deliveryStatus || "PENDING";
@@ -868,8 +881,8 @@ export class WalletService {
         dbOrderId: o.id,
         produce: `${firstProduct} (${totalItems} items)`,
         farmer: "Verified Agro Supplier",
-        amount: Number(o.totalAmount),
-        formattedAmount: this.formatNGN(Number(o.totalAmount)),
+        amount: remainingEscrow,
+        formattedAmount: this.formatNGN(remainingEscrow),
         status: o.status,
         deliveryStatus,
         logisticsProgress: progress,
@@ -877,7 +890,7 @@ export class WalletService {
           ? new Date(o.delivery.estimatedDelivery).toLocaleDateString("en-NG", { month: "short", day: "numeric" })
           : "In Transit",
         milestone: `Logistics Checkpoint: ${deliveryStatus}`,
-        canRelease: o.status === "DELIVERED" && o.payment?.paymentStatus === "PAID" && (o.disputes?.length || 0) === 0,
+        canRelease: o.status === "DELIVERED" && remainingEscrow > 0 && o.payment?.paymentStatus === "PAID" && (o.disputes?.length || 0) === 0,
       };
     });
 
