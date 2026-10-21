@@ -226,6 +226,81 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
   });
 
   describe("Invariant 2: Card Refund Never Mints Internal Wallet Balance", () => {
+    it("records card refund state on Payment and never posts a wallet credit", async () => {
+      const buyerId = "usr_card_buyer_success";
+      const orderId = "ord_card_success";
+      const payment = {
+        id: "pay-card-success",
+        paymentMethod: "CARD",
+        paymentStatus: "PAID",
+        transactionRef: "AGRO-FLW-refund-success",
+        gatewayTransactionId: "98765",
+        gatewayRefundId: null,
+        refundStatus: null,
+        amount: 75000,
+      };
+      const order = {
+        id: orderId,
+        orderNumber: "AGRO-CARD-SUCCESS",
+        totalAmount: 75000,
+        buyer: { userId: buyerId },
+        payment,
+      };
+
+      const originalKey = process.env.FLUTTERWAVE_SECRET_KEY;
+      const originalFetch = globalThis.fetch;
+      process.env.FLUTTERWAVE_SECRET_KEY = "test-flutterwave-key";
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: "success", data: { id: "refund-provider-55" } }),
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+      const paymentUpdateMany = vi.spyOn(prisma.payment, "updateMany").mockImplementation(async ({ where, data }: any) => {
+        if (where.id !== payment.id) return { count: 0 };
+        if (where.refundStatus === null && payment.refundStatus === null && payment.paymentStatus === "PAID") {
+          Object.assign(payment, data);
+          return { count: 1 };
+        }
+        if (where.refundStatus === "PENDING" && payment.refundStatus === "PENDING") {
+          Object.assign(payment, data);
+          return { count: 1 };
+        }
+        return { count: 0 };
+      });
+      const walletTransactionCreate = vi.spyOn(prisma.walletTransaction, "create");
+
+      try {
+        const result = await WalletService.executeGatewayCardRefund(
+          buyerId,
+          orderId,
+          "98765",
+          75000
+        );
+        expect(result.gatewayRefunded).toBe(true);
+        expect(payment.refundStatus).toBe("SUCCEEDED");
+        expect(payment.gatewayRefundId).toBe("refund-provider-55");
+        expect(paymentUpdateMany).toHaveBeenCalledTimes(2);
+        expect(walletTransactionCreate).not.toHaveBeenCalled();
+
+        // A retry observes SUCCEEDED and must not submit another gateway refund.
+        const retry = await WalletService.executeGatewayCardRefund(
+          buyerId,
+          orderId,
+          "98765",
+          75000
+        );
+        expect(retry.alreadyRefunded).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalKey === undefined) delete process.env.FLUTTERWAVE_SECRET_KEY;
+        else process.env.FLUTTERWAVE_SECRET_KEY = originalKey;
+      }
+    });
+
     it("throws CARD_REFUND_FAILED and persists REQUIRES_MANUAL_REVIEW when gateway not configured", async () => {
       const buyerId = "usr_card_buyer_55";
       const orderId = "ord_card_checkout_55";
