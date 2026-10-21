@@ -353,6 +353,63 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         .rejects.toThrow("ORDER_NOT_DELIVERED");
       expect(createdTransactions).toHaveLength(4);
     });
+
+    it("rejects a seller order whose commodity, shipping and total amounts do not reconcile", async () => {
+      const orderId = "ord-invalid-seller-total";
+      const buyerWallet = {
+        id: "wallet-buyer-invalid-total",
+        userId: "buyer-invalid-total",
+        balance: 0,
+        escrow: 200,
+        pendingWithdrawal: 0,
+        frozen: 0,
+      };
+      const order = {
+        id: orderId,
+        orderNumber: "ORD-INVALID-TOTAL",
+        totalAmount: 200,
+        status: "DELIVERED",
+        buyer: { userId: "buyer-invalid-total" },
+        payment: {
+          id: "payment-invalid-total",
+          paymentMethod: "CARD",
+          paymentStatus: "PAID",
+          transactionRef: "TX-INVALID-TOTAL",
+          amount: 200,
+        },
+        disputes: [],
+        orderItems: [],
+        sellerOrders: [{
+          id: "seller-order-invalid-total",
+          sellerOrderNumber: "SO-INVALID-TOTAL",
+          subtotal: 100,
+          shippingFee: 50,
+          totalAmount: 200,
+          status: "DELIVERED",
+          farmerProfile: { userId: "farmer-invalid-total" },
+        }],
+      };
+
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue({
+        id: "escrow-lock-invalid-total",
+        walletId: buyerWallet.id,
+        wallet: buyerWallet,
+        type: "ESCROW_LOCK",
+        amount: 200,
+        reference: "TX-INVALID-TOTAL",
+        status: "SUCCESS",
+      } as any);
+      const transactionSpy = vi.spyOn(prisma, "$transaction");
+      const walletUpdateSpy = vi.spyOn(prisma.wallet, "update");
+
+      await expect(WalletService.executeEscrowRelease(orderId))
+        .rejects.toThrow("SELLER_ORDER_TOTAL_MISMATCH");
+
+      expect(transactionSpy).not.toHaveBeenCalled();
+      expect(walletUpdateSpy).not.toHaveBeenCalled();
+      expect(buyerWallet.escrow).toBe(200);
+    });
   });
 
   describe("Invariant 1b: Escrow release fails closed without a funded order intent", () => {
