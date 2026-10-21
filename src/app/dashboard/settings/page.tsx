@@ -298,7 +298,8 @@ export default function SettingsPage() {
         return;
       }
       setPasswords({ oldPassword: "", newPassword: "", confirmPassword: "" });
-      toast("Password updated successfully!", "success");
+      // All sessions are revoked by the server on password change.
+      window.location.assign("/login");
     } catch {
       toast("Failed to update password.", "error");
     } finally {
