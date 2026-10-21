@@ -189,6 +189,9 @@ export default function FarmerSettingsPage() {
           return;
         }
         setFormData((prev) => ({ ...prev, oldPassword: "", newPassword: "", confirmPassword: "" }));
+        // Password rotation revokes all realm sessions. Reauthenticate before further writes.
+        window.location.assign("/login");
+        return;
       }
 
       await refreshUser();
