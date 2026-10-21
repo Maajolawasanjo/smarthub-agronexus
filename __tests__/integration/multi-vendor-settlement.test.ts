@@ -60,6 +60,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         totalAmount: 100000.0,
         status: "DELIVERED",
         buyer: { userId: buyerId },
+        payment: { paymentStatus: "PAID", amount: 100000.0 },
         sellerOrders: [
           {
             id: "so_A",
