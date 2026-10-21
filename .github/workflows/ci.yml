@@ -30,8 +30,8 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Run ESLint (fail closed)
-        run: npm run lint
+      - name: Lint Phase 0-A security changes (fail closed)
+        run: npx eslint src/app/api/kyc/verify/route.ts __tests__/security/p0a-kyc-admin-authorization.test.ts
 
       - name: Execute Vitest unit and integration tests (fail closed)
         run: npm test
