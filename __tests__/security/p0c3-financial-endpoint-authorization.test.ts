@@ -296,6 +296,20 @@ describe("Flutterwave webhook transaction binding", () => {
     expect(mock.settleOrderPaymentFromGateway).not.toHaveBeenCalled();
   });
 
+  it("does not resurrect a failed or cancelled payment from a late gateway webhook", async () => {
+    mock.paymentFindUnique.mockResolvedValue({
+      id: "payment_1",
+      orderId: "order_1",
+      amount: 1250,
+      paymentMethod: "CARD",
+      paymentStatus: "FAILED",
+      transactionRef: "AGRO-FLW-payment_1",
+    });
+    const response = await flutterwaveWebhook(webhookRequest());
+    expect(response.status).toBe(409);
+    expect(mock.settleOrderPaymentFromGateway).not.toHaveBeenCalled();
+  });
+
   it("settles only the exact payment matching the verified transaction reference and amount", async () => {
     mock.paymentFindUnique.mockResolvedValue({
       id: "payment_1",
