@@ -176,7 +176,8 @@ jobs:
           src/services/wallet.service.ts
           src/components/cart/PaymentModal.tsx
           __tests__/integration/wallet-consolidation.test.ts
+          __tests__/integration/multi-vendor-settlement.test.ts
           __tests__/security/p0c3-financial-endpoint-authorization.test.ts
 
       - name: Run financial authorization and refund regression suites
-        run: npx vitest run __tests__/security/p0c3-financial-endpoint-authorization.test.ts __tests__/integration/wallet-consolidation.test.ts
+        run: npx vitest run __tests__/security/p0c3-financial-endpoint-authorization.test.ts __tests__/integration/wallet-consolidation.test.ts __tests__/integration/multi-vendor-settlement.test.ts
