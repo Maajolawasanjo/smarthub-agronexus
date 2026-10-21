@@ -322,6 +322,7 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
 
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [orderNumber, setOrderNumber] = useState<string>("");
+    const [pendingGatewayOrderId, setPendingGatewayOrderId] = useState<string | null>(null);
 
     // Live Wallet Balance State
     const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -437,28 +438,55 @@ export function PaymentModal({ isOpen, onClose, total }: PaymentModalProps) {
                 ? `${selectedAddress.label ? `[${selectedAddress.label}] ` : ""}${selectedAddress.addressLine}, ${selectedAddress.city ? selectedAddress.city + ", " : ""}${selectedAddress.lga}, ${selectedAddress.state} (Recipient: ${selectedAddress.recipientName}, ${selectedAddress.phoneNumber})`
                 : "Lagos Port Terminal, Nigeria";
 
-            // Handle Hosted Payment Gateway (Make Payment)
+            // Create the durable order/payment intent first. Flutterwave must only receive
+            // an orderId whose buyer, amount, status, and pending CARD payment are verified server-side.
             if (method === "flutterwave" || method === "card") {
+                let gatewayOrderId = pendingGatewayOrderId;
+                let gatewayOrderNumber = orderNumber;
+
+                if (!gatewayOrderId) {
+                    const orderRes = await fetch("/api/orders", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            items: orderItems,
+                            shippingAddress: formattedShippingAddress,
+                            shippingAddressId: selectedAddressId || undefined,
+                            incoterm: "FOB",
+                            paymentMethod: "CARD",
+                        }),
+                    });
+                    const orderData = await orderRes.json();
+
+                    if (!orderRes.ok || !orderData?.order?.id) {
+                        setSubmitError(orderData.error || "Could not create the order for payment.");
+                        setIsSubmitting(false);
+                        return;
+                    }
+
+                    gatewayOrderId = String(orderData.order.id);
+                    gatewayOrderNumber = String(orderData.order.orderNumber || "");
+                    setPendingGatewayOrderId(gatewayOrderId);
+                    setOrderNumber(gatewayOrderNumber);
+                }
+
                 const flwRes = await fetch("/api/payments/flutterwave/initialize", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        items: orderItems,
-                        totalAmount: total,
-                        shippingAddress: formattedShippingAddress,
-                        shippingAddressId: selectedAddressId || undefined,
-                    }),
+                    body: JSON.stringify({ orderId: gatewayOrderId }),
                 });
-
                 const flwData = await flwRes.json();
-                if (flwRes.ok && flwData.link) {
+
+                if (flwRes.ok && flwData.status === "success" && flwData.link) {
                     window.location.href = flwData.link;
                     return;
-                } else {
-                    setSubmitError(flwData.error || "Failed to launch payment checkout session.");
-                    setIsSubmitting(false);
-                    return;
                 }
+
+                setSubmitError(
+                    `Order ${gatewayOrderNumber || gatewayOrderId} was created but payment checkout could not be started. Retry to resume payment; the order is not paid yet. ${flwData.error || ""}`.trim()
+                );
+                setIsSubmitting(false);
+                return;
             }
 
             const res = await fetch("/api/orders", {
