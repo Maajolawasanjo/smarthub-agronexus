@@ -1277,7 +1277,8 @@ export class WalletService {
   public static async settleOrderPaymentFromGateway(
     orderIdOrPaymentId: string,
     transactionRef: string,
-    paidAmount: number
+    paidAmount: number,
+    gatewayTransactionId: string
   ) {
     return await prisma.$transaction(async (tx) => {
       // 1. Locate Payment by orderId, paymentId, or transactionRef
@@ -1302,6 +1303,10 @@ export class WalletService {
         throw new Error(`PAYMENT_NOT_FOUND: No payment record found for "${orderIdOrPaymentId}".`);
       }
 
+      if (!/^\\d+$/.test(gatewayTransactionId)) {
+        throw new Error("INVALID_GATEWAY_TRANSACTION_ID");
+      }
+
       // The persisted payment intent is authoritative. A caller may not use an order ID
       // or payment ID to bind a different gateway transaction to this order.
       if (payment.transactionRef !== transactionRef) {
@@ -1310,6 +1315,12 @@ export class WalletService {
 
       // Idempotency is safe only for the same verified gateway reference.
       if (payment.paymentStatus === "PAID") {
+        if (
+          payment.gatewayTransactionId &&
+          payment.gatewayTransactionId !== gatewayTransactionId
+        ) {
+          throw new Error("GATEWAY_TRANSACTION_ID_MISMATCH");
+        }
         return { status: "ALREADY_SETTLED", payment };
       }
       if (payment.paymentStatus !== "PENDING") {
@@ -1353,7 +1364,11 @@ export class WalletService {
           paymentStatus: "PENDING",
           transactionRef,
         },
-        data: { paymentStatus: "PAID", paidAt: new Date() },
+        data: {
+          paymentStatus: "PAID",
+          paidAt: new Date(),
+          gatewayTransactionId,
+        },
       });
       if (paymentClaim.count !== 1) {
         const current = await tx.payment.findUnique({ where: { id: payment.id } });
