@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // ============================================================================
-// MULTI-REALM EDGE ROUTING & PRESENCE GATE (V4.1-FINAL-CORRECTED)
+// MULTI-REALM EDGE ROUTING & PRESENCE GATE (Phase 0-B)
 // Model A: Independent Authenticated Role Contexts within a Shared Browser Origin
 //
 // Middleware is an EARLY ROUTING/PRESENCE GATE.
@@ -12,69 +12,11 @@ import type { NextRequest } from "next/server";
 // ============================================================================
 
 const VAULT_COOKIE_NAME = "smarthub_vault_id";
-const LEGACY_SESSION_COOKIE_NAME = "smarthub_session";
-
 const REALM_COOKIE_NAMES = {
   ADMIN: "smarthub_admin_token",
   FARMER: "smarthub_farmer_token",
   BUYER: "smarthub_buyer_token",
 } as const;
-
-interface LegacyPayload {
-  userId: string;
-  email: string;
-  role: "BUYER" | "FARMER" | "ADMIN";
-  exp: number;
-}
-
-function base64urlDecode(value: string): Uint8Array<ArrayBuffer> {
-  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, "=");
-  const binary = atob(padded);
-  const buffer = new ArrayBuffer(binary.length);
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-async function verifyEdgeLegacyToken(token: string): Promise<LegacyPayload | null> {
-  try {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) return null;
-
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const [header, body, signature] = parts;
-
-    const keyMaterial = new TextEncoder().encode(secret);
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      keyMaterial,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"]
-    );
-
-    const signedData = new TextEncoder().encode(`${header}.${body}`);
-    const signatureBytes = base64urlDecode(signature);
-    const isValid = await crypto.subtle.verify("HMAC", cryptoKey, signatureBytes, signedData);
-
-    if (!isValid) return null;
-
-    const payloadJson = new TextDecoder().decode(base64urlDecode(body));
-    const payload: LegacyPayload = JSON.parse(payloadJson);
-
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-
-    return payload;
-  } catch {
-    return null;
-  }
-}
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -126,9 +68,9 @@ export async function middleware(req: NextRequest) {
   // 3. Check for realm cookie presence
   const targetCookieName = REALM_COOKIE_NAMES[requiredRealm];
   const realmToken = req.cookies.get(targetCookieName)?.value;
-  const legacyToken = req.cookies.get(LEGACY_SESSION_COOKIE_NAME)?.value;
 
-  // If realm token exists for the required realm, proceed to Node.js handler
+  // A realm cookie is a presence hint only; Node.js verifies the PostgreSQL session,
+  // role, user activity and expiry before authorizing every protected operation.
   if (realmToken) {
     requestHeaders.set("x-internal-auth-realm", requiredRealm);
     const vaultId = req.cookies.get(VAULT_COOKIE_NAME)?.value;
@@ -141,56 +83,6 @@ export async function middleware(req: NextRequest) {
         },
       })
     );
-  }
-
-  // If no realm token, check legacy token for rolling migration support
-  if (legacyToken) {
-    const legacySession = await verifyEdgeLegacyToken(legacyToken);
-    if (legacySession) {
-      const legacyRole = legacySession.role?.toUpperCase();
-
-      // Role check for legacy token
-      let isAuthorized = false;
-      if (requiredRealm === "ADMIN") {
-        isAuthorized = legacyRole === "ADMIN";
-      } else if (requiredRealm === "FARMER") {
-        isAuthorized = legacyRole === "FARMER" || legacyRole === "ADMIN";
-      } else if (requiredRealm === "BUYER") {
-        isAuthorized = legacyRole === "BUYER";
-      }
-
-      if (!isAuthorized) {
-        if (isApiRoute) {
-          return attachSecurityHeaders(
-            NextResponse.json(
-              {
-                success: false,
-                error: {
-                  code: "FORBIDDEN",
-                  message: `Privileges for ${requiredRealm.toLowerCase()} required.`,
-                },
-              },
-              { status: 403 }
-            )
-          );
-        }
-
-        // Page redirects for legacy role mismatch
-        if (legacyRole === "BUYER") return attachSecurityHeaders(NextResponse.redirect(new URL("/dashboard", req.url)));
-        if (legacyRole === "FARMER") return attachSecurityHeaders(NextResponse.redirect(new URL("/farmer", req.url)));
-        if (legacyRole === "ADMIN") return attachSecurityHeaders(NextResponse.redirect(new URL("/admin/overview", req.url)));
-        return attachSecurityHeaders(NextResponse.redirect(new URL("/login", req.url)));
-      }
-
-      requestHeaders.set("x-internal-auth-realm", requiredRealm);
-      return attachSecurityHeaders(
-        NextResponse.next({
-          request: {
-            headers: requestHeaders,
-          },
-        })
-      );
-    }
   }
 
   // 4. Missing or invalid credential: 401 or redirect
