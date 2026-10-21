@@ -200,8 +200,10 @@ model Payment {
   amount         Decimal       @db.Decimal(10, 2)
   paymentMethod  PaymentMethod
   paymentStatus  PaymentStatus @default(PENDING)
-  transactionRef       String?   @unique
-  gatewayTransactionId String?   @unique
+  transactionRef       String?       @unique
+  gatewayTransactionId String?       @unique
+  gatewayRefundId      String?       @unique
+  refundStatus         RefundStatus?
   paidAt                DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -382,6 +384,13 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  MANUAL_REVIEW
 }
 
 enum OrderStatus {
