@@ -806,25 +806,26 @@ export class WalletService {
   public static async executeEscrowRelease(
     userIdOrOrderId: string,
     maybeOrderId?: string,
-    targetSellerOrderId?: string
+    targetSellerOrderId?: string,
+    options: { allowActiveDispute?: boolean } = {}
   ) {
     const effectiveOrderId = maybeOrderId || userIdOrOrderId;
+    const actorUserId = maybeOrderId ? userIdOrOrderId : null;
+
     const order = await prisma.order.findUnique({
       where: { id: effectiveOrderId },
       include: {
         buyer: true,
+        payment: true,
+        disputes: { where: { status: { in: ["OPEN", "UNDER_REVIEW"] } } },
         sellerOrders: {
           include: {
-            farmerProfile: {
-              include: { user: true },
-            },
+            farmerProfile: { include: { user: true } },
           },
         },
         orderItems: {
           include: {
-            product: {
-              include: { farmerProfile: true },
-            },
+            product: { include: { farmerProfile: true } },
           },
         },
       },
@@ -832,174 +833,251 @@ export class WalletService {
 
     if (!order) throw new Error("ORDER_NOT_FOUND");
 
-    const buyerUserId = order.buyer?.userId || (maybeOrderId ? userIdOrOrderId : (order as any).buyerId);
-    const buyerWallet = await this.getOrCreateWallet(buyerUserId);
-
-    // Determine seller orders to settle
-    let sellerOrdersToSettle = order.sellerOrders || [];
-    if (targetSellerOrderId) {
-      sellerOrdersToSettle = sellerOrdersToSettle.filter((so) => so.id === targetSellerOrderId);
-      if (sellerOrdersToSettle.length === 0) {
-        throw new Error("SELLER_ORDER_NOT_FOUND");
-      }
-    } else {
-      // Settle all uncompleted seller orders
-      sellerOrdersToSettle = sellerOrdersToSettle.filter((so) => so.status !== "COMPLETED");
+    const buyerUserId = order.buyer?.userId;
+    if (!buyerUserId) throw new Error("ORDER_BUYER_NOT_FOUND");
+    if (actorUserId && actorUserId !== buyerUserId) {
+      throw new Error("ORDER_OWNER_MISMATCH");
+    }
+    if (order.status !== "DELIVERED") {
+      throw new Error("ORDER_NOT_DELIVERED");
+    }
+    if (!order.payment || order.payment.paymentStatus !== "PAID") {
+      throw new Error("PAYMENT_NOT_SETTLED");
+    }
+    if ((order.disputes?.length || 0) > 0 && !options.allowActiveDispute) {
+      throw new Error("ACTIVE_DISPUTE_BLOCKS_RELEASE");
+    }
+    if (!order.payment.transactionRef) {
+      throw new Error("ESCROW_LOCK_REFERENCE_MISSING");
     }
 
-    // Legacy fallback if no SellerOrders exist on order
-    if (sellerOrdersToSettle.length === 0 && (!order.sellerOrders || order.sellerOrders.length === 0)) {
-      const farmerMap = new Map<string, number>();
-      for (const item of order.orderItems) {
-        const fUserId = item.product.farmerProfile?.userId;
-        if (fUserId) {
-          const sub = Number(item.subtotal);
-          farmerMap.set(fUserId, (farmerMap.get(fUserId) || 0) + sub);
+    // A PAID flag is not sufficient proof of funds. The order must have the exact
+    // successful escrow-lock ledger entry tied to its payment reference and buyer wallet.
+    const lockTransaction = await prisma.walletTransaction.findUnique({
+      where: { reference: order.payment.transactionRef },
+      include: { wallet: true },
+    });
+    const orderAmount = Number(order.totalAmount);
+    if (
+      !lockTransaction ||
+      lockTransaction.type !== "ESCROW_LOCK" ||
+      lockTransaction.status !== "SUCCESS" ||
+      lockTransaction.wallet?.userId !== buyerUserId ||
+      Math.abs(Number(lockTransaction.amount) - orderAmount) > 0.01
+    ) {
+      throw new Error("ESCROW_NOT_FUNDED");
+    }
+
+    const buyerWallet = lockTransaction.wallet;
+    const allSellerOrders = order.sellerOrders || [];
+
+    // Legacy single-order records have no SellerOrder rows. Claim the parent order
+    // before posting any credits so replayed/concurrent releases cannot pay twice.
+    if (allSellerOrders.length === 0) {
+      const farmerGross = new Map<string, number>();
+      for (const item of order.orderItems || []) {
+        const farmerUserId = item.product?.farmerProfile?.userId;
+        const gross = Number(item.subtotal);
+        if (farmerUserId && Number.isFinite(gross) && gross > 0) {
+          farmerGross.set(farmerUserId, (farmerGross.get(farmerUserId) || 0) + gross);
         }
+      }
+      if (farmerGross.size === 0) throw new Error("NO_SELLERS_FOR_ORDER");
+
+      const currentEscrow = Number(buyerWallet.escrow);
+      if (!Number.isFinite(currentEscrow) || currentEscrow < orderAmount) {
+        throw new Error("INSUFFICIENT_ESCROW");
+      }
+
+      const farmerWallets = new Map<string, Awaited<ReturnType<typeof this.getOrCreateWallet>>>();
+      for (const farmerUserId of farmerGross.keys()) {
+        farmerWallets.set(farmerUserId, await this.getOrCreateWallet(farmerUserId));
       }
 
       let totalGrossSettled = 0;
-      const settlementOps: any[] = [];
+      await prisma.$transaction(async (tx) => {
+        const claim = await tx.order.updateMany({
+          where: { id: order.id, status: "DELIVERED" },
+          data: { status: "COMPLETED" },
+        });
+        if (claim.count !== 1) throw new Error("ESCROW_ALREADY_RELEASED");
 
-      for (const [farmerUserId, grossAmount] of farmerMap.entries()) {
-        const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
-        totalGrossSettled += grossAmount;
-        const farmerWallet = await this.getOrCreateWallet(farmerUserId);
-        const txRef = `REL-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+        const debit = await tx.wallet.updateMany({
+          where: { id: buyerWallet.id, escrow: { gte: orderAmount } },
+          data: { escrow: { decrement: orderAmount } },
+        });
+        if (debit.count !== 1) throw new Error("INSUFFICIENT_ESCROW");
 
-        settlementOps.push(
-          prisma.wallet.update({
+        await tx.walletTransaction.create({
+          data: {
+            walletId: buyerWallet.id,
+            type: "ESCROW_RELEASE",
+            amount: orderAmount,
+            reference: `ESCROW-DRAIN-${order.orderNumber}`,
+            description: `Buyer escrow debited for completed Order #${order.orderNumber}`,
+            status: "SUCCESS",
+          },
+        });
+
+        for (const [farmerUserId, grossAmount] of farmerGross.entries()) {
+          const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
+          totalGrossSettled += grossAmount;
+          const farmerWallet = farmerWallets.get(farmerUserId)!;
+
+          await tx.wallet.update({
             where: { id: farmerWallet.id },
             data: { balance: { increment: netFarmerPayout } },
-          }),
-          prisma.walletTransaction.create({
+          });
+          await tx.walletTransaction.create({
             data: {
               walletId: farmerWallet.id,
               type: "ESCROW_RELEASE",
               amount: netFarmerPayout,
-              reference: txRef,
-              description: `Escrow released for Order #${order.orderNumber} (Gross: ₦${grossAmount}, Fee: ₦${platformFee})`,
+              reference: `REL-${order.orderNumber}-${farmerUserId}`,
+              description: `Escrow payout for Order #${order.orderNumber} (Gross: ₦${grossAmount}, Fee: ₦${platformFee})`,
               status: "SUCCESS",
             },
-          })
-        );
-      }
+          });
+        }
+      });
 
-      const currentEscrow = Number(buyerWallet.escrow);
-      const escrowDecrement = Math.min(currentEscrow, totalGrossSettled);
-
-      await prisma.$transaction([
-        prisma.order.update({
-          where: { id: order.id },
-          data: { status: "COMPLETED" },
-        }),
-        prisma.wallet.update({
-          where: { id: buyerWallet.id },
-          data: { escrow: { decrement: escrowDecrement } },
-        }),
-        ...settlementOps,
-      ]);
-
-      return { success: true, settledCount: farmerMap.size, totalGrossSettled };
+      return {
+        success: true,
+        settledCount: farmerGross.size,
+        totalGrossSettled,
+        totalEscrowReleased: orderAmount,
+      };
     }
 
+    let sellerOrdersToSettle = targetSellerOrderId
+      ? allSellerOrders.filter((sellerOrder) => sellerOrder.id === targetSellerOrderId)
+      : allSellerOrders.filter((sellerOrder) => sellerOrder.status !== "COMPLETED");
+
+    if (targetSellerOrderId && sellerOrdersToSettle.length === 0) {
+      throw new Error("SELLER_ORDER_NOT_FOUND");
+    }
     if (sellerOrdersToSettle.length === 0) {
-      return { success: true, message: "All seller sub-orders already settled.", totalGrossSettled: 0 };
+      throw new Error("ESCROW_ALREADY_RELEASED");
     }
-
-    // MULTI-VENDOR SETTLEMENT VIA SELLER_ORDERS:
-    // - grossAmount (subtotal): commodity value only — used for commission calculation
-    // - fullOrderAmount (totalAmount): commodity + shipping — used to drain buyer's locked escrow
-    let totalGrossSettled = 0;    // commissionable gross (subtotal only)
-    let totalEscrowToRelease = 0; // full amount to drain from buyer escrow (includes shipping pass-through)
-    const settlementOps: any[] = [];
-    const settledSellerOrderIds: string[] = [];
 
     for (const sellerOrder of sellerOrdersToSettle) {
-      const farmerUserId = sellerOrder.farmerProfile?.userId;
-      if (!farmerUserId) continue;
+      if (sellerOrder.status !== "DELIVERED") {
+        throw new Error("SELLER_ORDER_NOT_DELIVERED");
+      }
+      if (!sellerOrder.farmerProfile?.userId) {
+        throw new Error("SELLER_USER_NOT_FOUND");
+      }
+      if (Number(sellerOrder.subtotal) <= 0 || Number(sellerOrder.totalAmount) <= 0) {
+        throw new Error("INVALID_SELLER_ORDER_AMOUNT");
+      }
+    }
 
-      const grossAmount = Number(sellerOrder.subtotal);       // Commission base: commodity only
-      const fullOrderAmount = Number(sellerOrder.totalAmount); // Includes shipping pass-through
-      const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
-      totalGrossSettled += grossAmount;
-      totalEscrowToRelease += fullOrderAmount; // Release full locked amount from buyer escrow
-      settledSellerOrderIds.push(sellerOrder.id);
+    const completedSellerGross = allSellerOrders
+      .filter((sellerOrder) => sellerOrder.status === "COMPLETED")
+      .reduce((sum, sellerOrder) => sum + Number(sellerOrder.totalAmount), 0);
+    const remainingOrderEscrow = Number((orderAmount - completedSellerGross).toFixed(2));
+    const totalEscrowToRelease = sellerOrdersToSettle.reduce(
+      (sum, sellerOrder) => sum + Number(sellerOrder.totalAmount),
+      0
+    );
+    if (
+      remainingOrderEscrow < -0.01 ||
+      totalEscrowToRelease > remainingOrderEscrow + 0.01 ||
+      (!targetSellerOrderId && Math.abs(totalEscrowToRelease - remainingOrderEscrow) > 0.01)
+    ) {
+      throw new Error("SELLER_ORDER_TOTAL_MISMATCH");
+    }
 
-      const farmerWallet = await this.getOrCreateWallet(farmerUserId);
-      const txRef = `REL-${sellerOrder.sellerOrderNumber}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+    const currentEscrow = Number(buyerWallet.escrow);
+    if (!Number.isFinite(currentEscrow) || currentEscrow < totalEscrowToRelease) {
+      throw new Error("INSUFFICIENT_ESCROW");
+    }
 
-      // 1. Mark SellerOrder as COMPLETED
-      settlementOps.push(
-        prisma.sellerOrder.update({
-          where: { id: sellerOrder.id },
+    const farmerWallets = new Map<string, Awaited<ReturnType<typeof this.getOrCreateWallet>>>();
+    for (const sellerOrder of sellerOrdersToSettle) {
+      const farmerUserId = sellerOrder.farmerProfile.userId;
+      if (!farmerWallets.has(farmerUserId)) {
+        farmerWallets.set(farmerUserId, await this.getOrCreateWallet(farmerUserId));
+      }
+    }
+
+    let totalGrossSettled = 0;
+    await prisma.$transaction(async (tx) => {
+      // Compare-and-set each seller order before crediting any wallet. If another request
+      // has already claimed a seller order, the transaction rolls back all changes.
+      for (const sellerOrder of sellerOrdersToSettle) {
+        const claim = await tx.sellerOrder.updateMany({
+          where: { id: sellerOrder.id, status: "DELIVERED" },
           data: {
             status: "COMPLETED",
             deliveredAt: sellerOrder.deliveredAt || new Date(),
           },
-        })
-      );
+        });
+        if (claim.count !== 1) throw new Error("ESCROW_ALREADY_RELEASED");
+      }
 
-      // 2. Credit farmer wallet with net payout (commodity settlement; shipping is a pass-through)
-      settlementOps.push(
-        prisma.wallet.update({
+      const debit = await tx.wallet.updateMany({
+        where: { id: buyerWallet.id, escrow: { gte: totalEscrowToRelease } },
+        data: { escrow: { decrement: totalEscrowToRelease } },
+      });
+      if (debit.count !== 1) throw new Error("INSUFFICIENT_ESCROW");
+
+      for (const sellerOrder of sellerOrdersToSettle) {
+        const farmerUserId = sellerOrder.farmerProfile.userId;
+        const grossAmount = Number(sellerOrder.subtotal);
+        const fullOrderAmount = Number(sellerOrder.totalAmount);
+        const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
+        totalGrossSettled += grossAmount;
+        const farmerWallet = farmerWallets.get(farmerUserId)!;
+
+        await tx.wallet.update({
           where: { id: farmerWallet.id },
           data: { balance: { increment: netFarmerPayout } },
-        })
-      );
-
-      // 3. Ledger entry on farmer's wallet
-      settlementOps.push(
-        prisma.walletTransaction.create({
+        });
+        await tx.walletTransaction.create({
           data: {
             walletId: farmerWallet.id,
             type: "ESCROW_RELEASE",
             amount: netFarmerPayout,
-            reference: txRef,
+            reference: `REL-${sellerOrder.sellerOrderNumber}`,
             description: `Escrow payout for Sub-Order #${sellerOrder.sellerOrderNumber} (Order #${order.orderNumber}). Commodity gross: ₦${grossAmount}, Fee: ₦${platformFee}`,
             status: "SUCCESS",
           },
-        })
-      );
+        });
+        await tx.walletTransaction.create({
+          data: {
+            walletId: buyerWallet.id,
+            type: "ESCROW_RELEASE",
+            amount: fullOrderAmount,
+            reference: `ESCROW-DRAIN-${sellerOrder.sellerOrderNumber}`,
+            description: `Buyer escrow debited for Sub-Order #${sellerOrder.sellerOrderNumber} (Order #${order.orderNumber})`,
+            status: "SUCCESS",
+          },
+        });
+      }
+    });
+
+    // Finalize the parent only after all seller-order releases have committed. A separate
+    // count handles two different sub-orders completing concurrently.
+    const pendingSellerOrderCount = await prisma.sellerOrder.count({
+      where: { orderId: order.id, status: { not: "COMPLETED" } },
+    });
+    if (pendingSellerOrderCount === 0) {
+      await prisma.order.updateMany({
+        where: { id: order.id, status: "DELIVERED" },
+        data: { status: "COMPLETED" },
+      });
     }
-
-    // 4. Decrement buyer's escrow column safely (full locked amount including shipping)
-    const currentEscrow = Number(buyerWallet.escrow);
-    const escrowDecrement = Math.min(currentEscrow, totalEscrowToRelease);
-
-
-    settlementOps.push(
-      prisma.wallet.update({
-        where: { id: buyerWallet.id },
-        data: { escrow: { decrement: escrowDecrement } },
-      })
-    );
-
-    // 5. If all seller orders for this order are completed, mark master Order as COMPLETED
-    const allSellerOrders = order.sellerOrders || [];
-    const remainingPending = allSellerOrders.filter(
-      (so) => !settledSellerOrderIds.includes(so.id) && so.status !== "COMPLETED"
-    );
-
-    if (remainingPending.length === 0) {
-      settlementOps.push(
-        prisma.order.update({
-          where: { id: effectiveOrderId },
-          data: { status: "COMPLETED" },
-        })
-      );
-    }
-
-    await prisma.$transaction(settlementOps);
 
     console.log(
-      `[MULTI_VENDOR_ESCROW_RELEASE] Order #${order.orderNumber}: Settled ${settledSellerOrderIds.length} seller orders. Total Gross: ₦${totalGrossSettled}`
+      `[MULTI_VENDOR_ESCROW_RELEASE] Order #${order.orderNumber}: Settled ${sellerOrdersToSettle.length} seller orders. Gross: ₦${totalGrossSettled}; escrow: ₦${totalEscrowToRelease}`
     );
 
     return {
       success: true,
-      settledSellerOrdersCount: settledSellerOrderIds.length,
+      settledSellerOrdersCount: sellerOrdersToSettle.length,
       totalGrossSettled,
+      totalEscrowReleased: totalEscrowToRelease,
     };
   }
 
