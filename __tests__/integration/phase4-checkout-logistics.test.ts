@@ -62,6 +62,7 @@ describe("Phase 4: Checkout & Logistics", () => {
         totalAmount: 80000,
         status: "DELIVERED",
         buyer: { userId: buyerId },
+        payment: { paymentStatus: "PAID", amount: 80000 },
         sellerOrders: [
           {
             id: "so_delivery_1",
