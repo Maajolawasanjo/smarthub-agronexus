@@ -139,7 +139,7 @@ function gatewayVerifyPayload(txRef: string, overrides: Record<string, unknown> 
   };
 }
 
-function orderRecord(overrides: Record<string, any> = {}) {
+function orderRecord(overrides: Record<string, unknown> = {}) {
   return {
     id: "order-1",
     orderNumber: "AGRO-001",
@@ -211,8 +211,8 @@ beforeEach(() => {
     sellerOrder: { updateMany: mock.sellerOrderUpdateMany },
     inventory: { updateMany: mock.inventoryUpdateMany },
   };
-  mock.transaction.mockImplementation(async (arg: any) => {
-    if (typeof arg === "function") return arg(tx);
+  mock.transaction.mockImplementation(async (arg: unknown) => {
+    if (typeof arg === "function") return (arg as (transaction: unknown) => unknown)(tx);
     if (Array.isArray(arg)) return Promise.all(arg);
     throw new Error("Unexpected transaction shape");
   });
