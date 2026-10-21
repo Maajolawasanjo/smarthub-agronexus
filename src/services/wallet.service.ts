@@ -422,8 +422,8 @@ export class WalletService {
 
     const bankDesc = `${bankAccount.bankName} (${bankAccount.accountNumber})`;
     let initial: {
-      updatedWallet: Prisma.WalletGetPayload<{}>;
-      txRecord: Prisma.WalletTransactionGetPayload<{}>;
+      updatedWallet: Prisma.WalletGetPayload<true>;
+      txRecord: Prisma.WalletTransactionGetPayload<true>;
     };
     try {
       initial = await prisma.$transaction(async (tx) => {
@@ -731,7 +731,13 @@ export class WalletService {
    * Ledger: REFUND — escrow decrements safely (never negative), balance increments.
    * If escrow is 0 (e.g. card order refunded as platform store credit), funds balance directly without negative escrow.
    */
-  public static async executeRefund(userId: string, amount: number, orderId: string, isStoreCredit: boolean = false) {
+  public static async executeRefund(
+    userId: string,
+    amount: number,
+    orderId: string,
+    isStoreCredit = false,
+    storeCreditNotes?: string
+  ) {
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error("INVALID_REFUND_AMOUNT");
     }
@@ -821,7 +827,7 @@ export class WalletService {
           amount,
           reference: txRef,
           description: isStoreCredit
-            ? `Admin-authorized store credit for Order #${order.orderNumber}`
+            ? `Admin-authorized store credit for Order #${order.orderNumber}. Reason: ${storeCreditNotes?.trim() || "No reason supplied"}`
             : `Wallet escrow refunded for cancelled Order #${order.orderNumber}`,
           status: "SUCCESS",
         },
@@ -1019,7 +1025,10 @@ export class WalletService {
     orderId: string,
     adminNotes: string
   ) {
-    return this.executeRefund(userId, amount, orderId, true);
+    if (!adminNotes.trim()) {
+      throw new Error("STORE_CREDIT_REASON_REQUIRED: Administrative store credit requires an auditable reason.");
+    }
+    return this.executeRefund(userId, amount, orderId, true, adminNotes);
   }
 
 
