@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { getSettlementDTO, executeRefund } from "@/services/payment.service";
+import { isTrustedMutationOrigin } from "@/lib/csrf";
+import { getSettlementDTO } from "@/services/payment.service";
 
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
@@ -13,8 +14,13 @@ export async function GET(
     }
 
     const { orderId } = await params;
-    const dto = await getSettlementDTO(orderId);
+    const dto = await getSettlementDTO(orderId, {
+      userId: session.userId,
+      role: session.role,
+    });
 
+    // Return 404 for non-owners so the endpoint does not disclose whether another
+    // buyer has a settlement record.
     if (!dto) {
       return NextResponse.json({ error: "Settlement record not found." }, { status: 404 });
     }
@@ -30,26 +36,35 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
-  try {
-    const session = await getSession();
-    if (!session || (session.role !== "ADMIN" && session.role !== "BUYER")) {
-      return NextResponse.json({ error: "Authorization required for refund." }, { status: 403 });
-    }
-
-    const { orderId } = await params;
-    const body = await req.json();
-    const { action, reason } = body;
-
-    if (action === "REFUND") {
-      const result = await executeRefund(orderId, reason || "Refund requested by user.");
-      return NextResponse.json({
-        message: "Payment refund successfully executed.",
-        order: result.updatedOrder,
-      });
-    }
-
-    return NextResponse.json({ error: "Invalid settlement action." }, { status: 400 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Failed to process refund." }, { status: 400 });
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
   }
+  if (session.role !== "ADMIN") {
+    return NextResponse.json(
+      { error: "Only an administrator may initiate a formal refund review." },
+      { status: 403 }
+    );
+  }
+  if (!isTrustedMutationOrigin(req)) {
+    return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
+  }
+
+  const { orderId } = await params;
+  const body = await req.json().catch(() => ({}));
+  if (body.action !== "REFUND") {
+    return NextResponse.json({ error: "Invalid settlement action." }, { status: 400 });
+  }
+
+  // Do not mark a payment as REFUNDED unless the source-specific refund has actually
+  // succeeded. This legacy endpoint has no provider transaction ID or refund proof;
+  // use the formal dispute/refund workflow until that capability is available.
+  console.warn("[DIRECT_SETTLEMENT_REFUND_BLOCKED]", { orderId, actorId: session.userId });
+  return NextResponse.json(
+    {
+      error: "Direct settlement refunds are disabled because this endpoint cannot verify a provider refund. Resolve the order through the formal dispute workflow.",
+      code: "REFUND_WORKFLOW_REQUIRED",
+    },
+    { status: 409 }
+  );
 }
