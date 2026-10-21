@@ -581,74 +581,103 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
   });
 
   describe("Invariant 3: Production Withdrawal Fails Safely without Secret Key", () => {
-    it("Reverts funds and throws explicit error if FLUTTERWAVE_SECRET_KEY is missing in production", async () => {
+    it("reverses the reserved balance and throws when FLUTTERWAVE_SECRET_KEY is missing in production", async () => {
       const originalEnv = process.env.NODE_ENV;
       const originalKey = process.env.FLUTTERWAVE_SECRET_KEY;
-
-      (process.env as any).NODE_ENV = "production";
+      process.env.NODE_ENV = "production";
       delete process.env.FLUTTERWAVE_SECRET_KEY;
 
       const userId = "usr_farmer_prod_withdraw";
+      const amount = 20000;
       const userWallet = {
         id: "w_farmer_prod",
         userId,
-        balance: 50000.0,
+        balance: 50000,
         escrow: 0,
         pendingWithdrawal: 0,
         frozen: 0,
       };
+      let record: Record<string, any> | null = null;
 
       vi.spyOn(prisma.user, "findUnique").mockResolvedValue({
         id: userId,
         isActive: true,
       } as any);
-
       vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(userWallet as any);
       vi.spyOn(prisma.bankAccount, "findFirst").mockResolvedValue({
         id: "bank_prod",
+        userId,
         bankCode: "058",
         accountNumber: "0123456789",
         accountName: "Production Farmer",
+        bankName: "Test Bank",
+        isVerified: true,
       } as any);
-      vi.spyOn(prisma.walletTransaction, "update").mockResolvedValue({
-        id: "tx_failed",
-      } as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockImplementation(async ({ where }: any) => {
+        if (record && (where.id === record.id || where.reference === record.reference)) return record as any;
+        return null;
+      });
 
-      let reverted = false;
+      const updateWalletMany = vi.fn(async ({ where, data }: any) => {
+        if (where.balance?.gte !== undefined && userWallet.balance < Number(where.balance.gte)) return { count: 0 };
+        if (where.pendingWithdrawal?.gte !== undefined && userWallet.pendingWithdrawal < Number(where.pendingWithdrawal.gte)) return { count: 0 };
+        if (data.balance?.decrement) userWallet.balance -= Number(data.balance.decrement);
+        if (data.balance?.increment) userWallet.balance += Number(data.balance.increment);
+        if (data.pendingWithdrawal?.increment) userWallet.pendingWithdrawal += Number(data.pendingWithdrawal.increment);
+        if (data.pendingWithdrawal?.decrement) userWallet.pendingWithdrawal -= Number(data.pendingWithdrawal.decrement);
+        return { count: 1 };
+      });
+
+      const updateTransactionMany = vi.fn(async ({ where, data }: any) => {
+        if (!record || where.id !== record.id) return { count: 0 };
+        if (typeof where.status === "string" && record.status !== where.status) return { count: 0 };
+        if (where.status?.in && !where.status.in.includes(record.status)) return { count: 0 };
+        Object.assign(record, data);
+        return { count: 1 };
+      });
+
+      const createTransaction = vi.fn(async ({ data }: any) => {
+        record = { id: "tx_prod_withdraw", walletId: userWallet.id, ...data };
+        return record;
+      });
+
+      const txMock = {
+        wallet: {
+          updateMany: updateWalletMany,
+          findUnique: vi.fn().mockResolvedValue(userWallet),
+        },
+        walletTransaction: {
+          create: createTransaction,
+          updateMany: updateTransactionMany,
+        },
+      };
+
+      vi.spyOn(prisma.walletTransaction, "updateMany").mockImplementation(updateTransactionMany as any);
       vi.spyOn(prisma, "$transaction").mockImplementation(async (callback: any) => {
-        if (typeof callback === "function") {
-          const txMock = {
-            wallet: {
-              update: vi.fn(async ({ data }: any) => {
-                if (data.balance?.decrement) userWallet.balance -= data.balance.decrement;
-                return userWallet;
-              }),
-            },
-            walletTransaction: {
-              create: vi.fn(async () => ({ id: "tx_init" })),
-            },
-          };
-          return callback(txMock);
-        } else if (Array.isArray(callback)) {
-          // Second transaction (rollback)
-          userWallet.balance = 50000;
-          reverted = true;
-          return [userWallet, { id: "tx_failed" }];
-        }
+        if (typeof callback === "function") return callback(txMock);
+        if (Array.isArray(callback)) return Promise.all(callback);
+        throw new Error("Unexpected transaction argument");
       });
 
       try {
         await expect(
-          WalletService.executeWithdrawal(userId, 20000, "bank_prod")
+          WalletService.executeWithdrawal(userId, amount, "bank_prod", "prod-withdraw-key-001")
         ).rejects.toThrow("GATEWAY_UNCONFIGURED");
 
-        // Confirmed that funds were safely reverted
-        expect(reverted).toBe(true);
-        expect(userWallet.balance).toBe(50000.0);
+        expect(record).toMatchObject({
+          type: "WITHDRAWAL",
+          status: "REVERSED",
+          amount,
+        });
+        expect(userWallet.balance).toBe(50000);
+        expect(userWallet.pendingWithdrawal).toBe(0);
+        expect(updateWalletMany).toHaveBeenCalledTimes(2);
       } finally {
-        (process.env as any).NODE_ENV = originalEnv;
-        if (originalKey) process.env.FLUTTERWAVE_SECRET_KEY = originalKey;
+        if (originalEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = originalEnv;
+        if (originalKey === undefined) delete process.env.FLUTTERWAVE_SECRET_KEY;
+        else process.env.FLUTTERWAVE_SECRET_KEY = originalKey;
       }
-    });
+    });;
   });
 });
