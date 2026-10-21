@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { recordAuditEvent } from "@/lib/audit";
 import { WalletService } from "@/services/wallet.service";
-import { createNotification, notifyOrderStateChange } from "@/lib/notifications";
-import { OrderStatus } from "@prisma/client";
-import { isValidFulfillmentTransition, canReleaseEscrow, generateFulfillmentTimeline } from "@/lib/fulfillment";
+import { notifyOrderStateChange } from "@/lib/notifications";
+import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
+import { canReleaseEscrow, generateFulfillmentTimeline } from "@/lib/fulfillment";
 
 export interface ListOrdersParams {
   page?: number;
@@ -43,14 +43,14 @@ export class AdminOrderService {
     const limit = Math.min(Math.max(Number(params.limit) || 20, 1), 100);
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
 
     if (params.status && params.status !== "ALL" && params.status !== "All Orders") {
       where.status = params.status.toUpperCase() as OrderStatus;
     }
 
     if (params.paymentStatus) {
-      where.payment = { paymentStatus: params.paymentStatus.toUpperCase() };
+      where.payment = { paymentStatus: params.paymentStatus.toUpperCase() as PaymentStatus };
     }
 
     if (params.startDate || params.endDate) {
