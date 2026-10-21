@@ -685,59 +685,103 @@ export class WalletService {
   public static async executeGatewayCardRefund(
     userId: string,
     orderId: string,
-    transactionRef: string,
+    gatewayTransactionId: string,
     amount: number
   ) {
+    const gatewayId = String(gatewayTransactionId || "").trim();
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { buyer: true, payment: true },
+    });
+
+    if (!order || order.buyer.userId !== userId) {
+      throw new Error("REFUND_ORDER_OWNER_MISMATCH");
+    }
+    if (
+      !order.payment ||
+      order.payment.paymentMethod !== "CARD" ||
+      (order.payment.gatewayTransactionId && order.payment.gatewayTransactionId !== gatewayId)
+    ) {
+      throw new Error("GATEWAY_REFUND_PAYMENT_MISMATCH");
+    }
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      Math.abs(Number(order.totalAmount) - amount) > 0.01 ||
+      Math.abs(Number(order.payment.amount) - amount) > 0.01
+    ) {
+      throw new Error("REFUND_AMOUNT_MISMATCH");
+    }
+
+    const refundReference = `FLW-REFUND-${orderId}`;
+    const existingRefund = await prisma.walletTransaction.findUnique({
+      where: { reference: refundReference },
+    });
+    if (existingRefund?.status === "SUCCESS") {
+      return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: gatewayId };
+    }
+
     const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
-    if (secretKey && transactionRef) {
-      try {
-        const flwRes = await fetch(`https://api.flutterwave.com/v3/transactions/${transactionRef}/refund`, {
+    if (!secretKey) {
+      await this.persistManualReviewFlag(userId, orderId, amount, "Gateway not configured (missing FLUTTERWAVE_SECRET_KEY)");
+      throw new Error("CARD_REFUND_FAILED: Gateway not configured. Manual review required.");
+    }
+    if (!/^\d+$/.test(gatewayId)) {
+      await this.persistManualReviewFlag(userId, orderId, amount, "Verified provider transaction ID is missing; tx_ref cannot be used as a transaction ID.");
+      throw new Error("CARD_REFUND_FAILED: Verified provider transaction ID is missing. Manual review required.");
+    }
+    if (order.payment.paymentStatus !== "PAID" && order.payment.paymentStatus !== "REFUNDED") {
+      throw new Error("CARD_REFUND_FAILED: Only a captured payment can be refunded.");
+    }
+
+    try {
+      const flwRes = await fetch(
+        `https://api.flutterwave.com/v3/transactions/${encodeURIComponent(gatewayId)}/refund`,
+        {
           method: "POST",
           headers: {
             Authorization: `Bearer ${secretKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ amount }),
-        });
-        const flwData = await flwRes.json();
-        if (flwRes.ok && flwData.status === "success") {
-          // Gateway refund accepted — record audit ledger entry, do NOT touch wallet balance
-          const wallet = await this.getOrCreateWallet(userId);
-          await prisma.walletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              type: "REFUND",
-              amount,
-              reference: `FLW-REFUND-${transactionRef}`,
-              description: `Gateway card refund processed for Order #${orderId} via Flutterwave`,
-              status: "SUCCESS",
-            },
-          });
-          console.log(`[FLUTTERWAVE_REFUND_SUCCESS] Refunded ₦${amount} to card for Order #${orderId}`);
-          return { gatewayRefunded: true, transactionRef };
         }
-
-        // Gateway returned non-success status
+      );
+      const flwData = await flwRes.json().catch(() => ({}));
+      if (!flwRes.ok || flwData.status !== "success") {
         const errMsg = flwData?.message || "Gateway returned non-success status";
-        console.error(`[FLUTTERWAVE_REFUND_FAILED] Order #${orderId}: ${errMsg}`);
         await this.persistManualReviewFlag(userId, orderId, amount, `Gateway rejection: ${errMsg}`);
         throw new Error(`CARD_REFUND_FAILED: ${errMsg}. Manual review required.`);
-
-      } catch (err: unknown) {
-        const error = err as { message?: string };
-        // Re-throw expected failures without masking
-        if (error.message?.startsWith("CARD_REFUND_FAILED")) throw err;
-        // Network / runtime exception — flag for manual review, do NOT mint balance
-        const networkMsg = error.message || "Unknown network error";
-        console.error("[FLUTTERWAVE_REFUND_EXCEPTION] Network error during card refund:", networkMsg);
-        await this.persistManualReviewFlag(userId, orderId, amount, `Network exception: ${networkMsg}`);
-        throw new Error(`CARD_REFUND_FAILED: Network exception during gateway refund. Manual review required.`);
       }
-    }
 
-    // No gateway key configured — flag immediately for manual review
-    await this.persistManualReviewFlag(userId, orderId, amount, "Gateway not configured (missing FLUTTERWAVE_SECRET_KEY)");
-    throw new Error("CARD_REFUND_FAILED: Gateway not configured. Manual review required.");
+      const wallet = await this.getOrCreateWallet(userId);
+      await prisma.$transaction(async (tx) => {
+        const existing = await tx.walletTransaction.findUnique({
+          where: { reference: refundReference },
+        });
+        if (existing?.status === "SUCCESS") return;
+
+        await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: "REFUND",
+            amount,
+            reference: refundReference,
+            description: `Gateway card refund processed for Order #${order.orderNumber} via Flutterwave (provider transaction ${gatewayId})`,
+            status: "SUCCESS",
+          },
+        });
+      });
+
+      console.log(`[FLUTTERWAVE_REFUND_SUCCESS] Refunded ₦${amount} to card for Order #${orderId}`);
+      return { gatewayRefunded: true, alreadyRefunded: false, gatewayTransactionId: gatewayId };
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      if (error.message?.startsWith("CARD_REFUND_FAILED")) throw err;
+      const networkMsg = error.message || "Unknown network error";
+      console.error("[FLUTTERWAVE_REFUND_EXCEPTION] Network or persistence error during gateway refund:", networkMsg);
+      await this.persistManualReviewFlag(userId, orderId, amount, `Refund request could not be conclusively recorded: ${networkMsg}`);
+      throw new Error("CARD_REFUND_FAILED: Refund result requires manual reconciliation.");
+    }
   }
 
   /**
@@ -1303,7 +1347,7 @@ export class WalletService {
         throw new Error(`PAYMENT_NOT_FOUND: No payment record found for "${orderIdOrPaymentId}".`);
       }
 
-      if (!/^\\d+$/.test(gatewayTransactionId)) {
+      if (!/^\d+$/.test(gatewayTransactionId)) {
         throw new Error("INVALID_GATEWAY_TRANSACTION_ID");
       }
 
