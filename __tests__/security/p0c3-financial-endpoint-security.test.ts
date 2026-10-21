@@ -90,6 +90,7 @@ vi.mock("@/lib/audit", () => ({
 import { POST as releaseWalletEscrow } from "@/app/api/wallet/escrow/route";
 import { POST as initializeFlutterwave } from "@/app/api/payments/flutterwave/initialize/route";
 import { POST as flutterwaveWebhook } from "@/app/api/payments/flutterwave/webhook/route";
+import { GET as verifyFlutterwaveRedirect } from "@/app/api/payments/flutterwave/verify/route";
 import { GET as getSettlement, POST as postSettlement } from "@/app/api/payments/settlement/[orderId]/route";
 
 const ORIGIN = "https://www.smarthubagrochain.online";
@@ -514,6 +515,112 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
 
       expect(res.status).toBe(200);
       expect(mock.settleGatewayWalletDeposit).toHaveBeenCalledWith(txRef, 1200, "buyer-1");
+    });
+  });
+
+  describe("Flutterwave browser return verification", () => {
+    it("rejects transaction ID path injection before making a gateway request", async () => {
+      const res = await verifyFlutterwaveRedirect(
+        request("/api/payments/flutterwave/verify?transaction_id=98765%2Frefund&tx_ref=AGRO-FLW-1&status=successful", "GET")
+      );
+
+      const location = new URL(res.headers.get("location")!);
+      expect(location.searchParams.get("payment")).toBe("failed");
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("does not report success before the webhook settles the persisted payment", async () => {
+      const txRef = "AGRO-FLW-return-pending";
+      mock.paymentFindUnique.mockResolvedValue({
+        id: "payment-1",
+        transactionRef: txRef,
+        paymentStatus: "PENDING",
+        gatewayTransactionId: null,
+        amount: 1200,
+        order: { totalAmount: 1200 },
+      });
+      fetchMock.mockResolvedValue(gatewayResponse({
+        status: "success",
+        data: { id: 98765, status: "successful", tx_ref: txRef, amount: 1200, currency: "NGN" },
+      }));
+
+      const res = await verifyFlutterwaveRedirect(
+        request(`/api/payments/flutterwave/verify?transaction_id=98765&tx_ref=${txRef}&status=successful`, "GET")
+      );
+
+      const location = new URL(res.headers.get("location")!);
+      expect(location.searchParams.get("payment")).toBe("processing");
+      expect(mock.paymentFindUnique).toHaveBeenCalledWith(expect.objectContaining({
+        where: { transactionRef: txRef },
+      }));
+    });
+
+    it("reports order payment success only after the exact provider transaction is persisted", async () => {
+      const txRef = "AGRO-FLW-return-paid";
+      mock.paymentFindUnique.mockResolvedValue({
+        id: "payment-1",
+        transactionRef: txRef,
+        paymentStatus: "PAID",
+        gatewayTransactionId: "98765",
+        amount: 1200,
+        order: { totalAmount: 1200 },
+      });
+      fetchMock.mockResolvedValue(gatewayResponse({
+        status: "success",
+        data: { id: 98765, status: "successful", tx_ref: txRef, amount: 1200, currency: "NGN" },
+      }));
+
+      const res = await verifyFlutterwaveRedirect(
+        request(`/api/payments/flutterwave/verify?transaction_id=98765&tx_ref=${txRef}&status=successful`, "GET")
+      );
+
+      const location = new URL(res.headers.get("location")!);
+      expect(location.searchParams.get("payment")).toBe("success");
+      expect(location.searchParams.get("ref")).toBe(txRef);
+    });
+
+    it("returns wallet-funding callbacks to the farmer wallet and requires a successful deposit intent", async () => {
+      const txRef = "AGRO-FLW-wallet-return";
+      mock.paymentFindUnique.mockResolvedValue(null);
+      mock.walletTransactionFindUnique.mockResolvedValue({
+        id: "deposit-1",
+        reference: txRef,
+        type: "DEPOSIT",
+        status: "SUCCESS",
+        amount: 1200,
+        wallet: { userId: "farmer-1" },
+      });
+      mock.userFindUnique.mockResolvedValue({ id: "farmer-1", role: "FARMER" });
+      fetchMock.mockResolvedValue(gatewayResponse({
+        status: "success",
+        data: { id: 98765, status: "successful", tx_ref: txRef, amount: 1200, currency: "NGN" },
+      }));
+
+      const res = await verifyFlutterwaveRedirect(
+        request(`/api/payments/flutterwave/verify?transaction_id=98765&tx_ref=${txRef}&status=successful`, "GET")
+      );
+
+      const location = new URL(res.headers.get("location")!);
+      expect(location.pathname).toBe("/farmer/wallet");
+      expect(location.searchParams.get("funding")).toBe("success");
+    });
+
+    it("does not show success for a verified charge with no persisted intent", async () => {
+      const txRef = "AGRO-FLW-return-unmatched";
+      mock.paymentFindUnique.mockResolvedValue(null);
+      mock.walletTransactionFindUnique.mockResolvedValue(null);
+      fetchMock.mockResolvedValue(gatewayResponse({
+        status: "success",
+        data: { id: 98765, status: "successful", tx_ref: txRef, amount: 1200, currency: "NGN" },
+      }));
+
+      const res = await verifyFlutterwaveRedirect(
+        request(`/api/payments/flutterwave/verify?transaction_id=98765&tx_ref=${txRef}&status=successful`, "GET")
+      );
+
+      const location = new URL(res.headers.get("location")!);
+      expect(location.searchParams.get("payment")).toBe("failed");
+      expect(location.searchParams.get("reason")).toBe("intent_not_found");
     });
   });
 
