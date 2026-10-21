@@ -115,3 +115,29 @@ jobs:
 
       - name: Run origin and admin mutation regression tests
         run: npx vitest run __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-admin-mutation-guards.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
+
+  p0c2-farmer-buyer-security:
+    name: Farmer Buyer password and mutation protection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint password security and tests
+        run: npx eslint src/app/api/user/password/route.ts __tests__/security/p0c2-password-change.test.ts
+
+      - name: Run password and origin tests
+        run: npx vitest run __tests__/security/p0c2-password-change.test.ts __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
