@@ -661,7 +661,7 @@ export class WalletService {
       include: { wallet: true },
     });
 
-    const activePendingStates = ["PENDING", "VALIDATED", "SUBMITTED_TO_FLUTTERWAVE", "PROCESSING"];
+    const activePendingStates: TxStatus[] = ["PENDING", "VALIDATED", "SUBMITTED_TO_FLUTTERWAVE", "PROCESSING"];
     if (!existing || existing.type !== "WITHDRAWAL" || !activePendingStates.includes(existing.status)) {
       console.log(`[TRANSFER_WEBHOOK_SKIP] Transaction ${txRef} is not an active pending withdrawal (current: ${existing?.status}).`);
       return { status: "ALREADY_HANDLED" as const };
