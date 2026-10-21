@@ -174,8 +174,6 @@ export async function POST(req: Request) {
         });
       }
 
-      // 4. Create Order + OrderItems + Payment + Delivery atomically`;
-
       // 4. Create Order + OrderItems + Payment + Delivery atomically
       const createdOrder = await tx.order.create({
         data: {
