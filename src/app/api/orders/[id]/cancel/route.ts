@@ -34,6 +34,7 @@ export async function POST(
         buyer: true,
         orderItems: { include: { product: true } },
         payment: true,
+        disputes: { where: { status: { in: ["OPEN", "UNDER_REVIEW"] } } },
       },
     });
 
@@ -64,6 +65,16 @@ export async function POST(
         { status: 400 }
       );
       return attachTraceHeaders(res, traceCtx);
+    }
+
+    if ((order.disputes?.length || 0) > 0) {
+      return attachTraceHeaders(
+        NextResponse.json(
+          createErrorResponse("ACTIVE_DISPUTE", "Cancel this order through the active dispute workflow."),
+          { status: 409 }
+        ),
+        traceCtx
+      );
     }
 
     const totalAmount = Number(order.totalAmount);
@@ -98,19 +109,25 @@ export async function POST(
     // Refund must succeed before inventory and order/payment states are changed.
     await prisma.$transaction(async (tx) => {
       for (const item of order.orderItems) {
-        await tx.inventory.update({
-          where: { productId: item.productId },
+        const restored = await tx.inventory.updateMany({
+          where: { productId: item.productId, reservedQty: { gte: item.quantity } },
           data: {
             availableQty: { increment: item.quantity },
             reservedQty: { decrement: item.quantity },
           },
         });
+        if (restored.count !== 1) {
+          throw new Error(`INVENTORY_RESTORE_CONFLICT: Cannot restore reserved quantity for product ${item.productId}.`);
+        }
       }
 
-      await tx.order.update({
-        where: { id: order.id },
+      const cancellationClaim = await tx.order.updateMany({
+        where: { id: order.id, status: { in: ["PENDING", "CONFIRMED"] } },
         data: { status: "CANCELLED" },
       });
+      if (cancellationClaim.count !== 1) {
+        throw new Error("ORDER_STATE_CONFLICT: Another request already changed this order.");
+      }
 
       if (order.payment) {
         await tx.payment.update({
