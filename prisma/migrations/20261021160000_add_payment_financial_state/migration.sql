@@ -1,6 +1,7 @@
 CREATE TYPE "PaymentFinancialState" AS ENUM (
   'PENDING',
   'ESCROWED',
+  'SETTLING',
   'SETTLED',
   'REFUNDING',
   'REFUNDED',
