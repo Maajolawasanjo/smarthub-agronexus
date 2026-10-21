@@ -201,11 +201,9 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(flagEntry.description).toContain("REQUIRES_MANUAL_REVIEW");
     });
 
-    it("executeWalletEscrowRefund clamps escrow deduction to available escrow", async () => {
+    it("executeWalletEscrowRefund rejects refunds larger than locked escrow instead of minting the difference", async () => {
       const buyerId = "usr_wallet_buyer_66";
       const orderId = "ord_wallet_66";
-
-      // Buyer only has ₦20,000 in escrow, but refund request is for ₦50,000
       const buyerWallet = {
         id: "w_wallet_buyer",
         userId: buyerId,
@@ -216,30 +214,18 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       };
 
       vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
-      (vi.spyOn(prisma.wallet, "update") as any).mockImplementation(async ({ data }: any) => {
-        if (data.balance?.increment) buyerWallet.balance += data.balance.increment;
-        if (data.escrow?.decrement) buyerWallet.escrow = Math.max(0, buyerWallet.escrow - data.escrow.decrement);
-        return buyerWallet as any;
-      });
-      (vi.spyOn(prisma.walletTransaction, "create") as any).mockImplementation(async ({ data }: any) => ({
-        id: "tx_mock_escrow_ref",
-        ...data,
-      }));
-      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => {
-        if (Array.isArray(arg)) {
-          return Promise.all(arg);
-        }
-        return arg({});
-      });
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+      const walletUpdate = vi.spyOn(prisma.wallet, "update");
+      const transaction = vi.spyOn(prisma, "$transaction");
 
-      const result: any = await WalletService.executeWalletEscrowRefund(buyerId, 50000, orderId);
+      await expect(
+        WalletService.executeWalletEscrowRefund(buyerId, 50000, orderId)
+      ).rejects.toThrow("INSUFFICIENT_ESCROW_FOR_REFUND");
 
-      expect(result.txRecord.amount).toBe(50000);
-      // Escrow decremented by min(20000, 50000) = 20000, leaving exactly 0
-      expect(buyerWallet.escrow).toBe(0.0);
-      expect(buyerWallet.escrow).toBeGreaterThanOrEqual(0.0);
-      // Buyer refunded ₦50,000 back to balance: 10,000 + 50,000 = 60,000
-      expect(buyerWallet.balance).toBe(60000.0);
+      expect(transaction).not.toHaveBeenCalled();
+      expect(walletUpdate).not.toHaveBeenCalled();
+      expect(buyerWallet.escrow).toBe(20000.0);
+      expect(buyerWallet.balance).toBe(10000.0);
     });
   });
 
