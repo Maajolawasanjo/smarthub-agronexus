@@ -225,8 +225,6 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
     expect(result.txRecord.type).toBe("REFUND");
     expect(result.txRecord.amount).toBe(10000);
   });
-});
-
 
   test("7. Business Rule: Refund cannot mint wallet balance when escrow is insufficient", async () => {
     vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue({
@@ -276,3 +274,4 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
     expect(result.txRecord).toEqual(existingRefund);
     expect(transaction).not.toHaveBeenCalled();
   });
+});
