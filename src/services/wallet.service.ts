@@ -207,33 +207,21 @@ export class WalletService {
   /**
    * Executes atomic wallet credit upon webhook or bank transfer confirmation
    */
+  /**
+   * Compatibility entry point for a wallet deposit. It may settle only a previously
+   * persisted PENDING deposit intent; it cannot create balance from an arbitrary reference.
+   */
   public static async executeDeposit(userId: string, amount: number, reference: string) {
-    const wallet = await this.getOrCreateWallet(userId);
+    const result = await this.settleGatewayWalletDeposit(reference, amount, userId);
+    const updatedWallet = "wallet" in result
+      ? result.wallet
+      : await prisma.wallet.findUnique({ where: { userId } });
 
-    const [updatedWallet, txRecord] = await prisma.$transaction([
-      prisma.wallet.update({
-        where: { id: wallet.id },
-        data: { balance: { increment: amount } },
-      }),
-      prisma.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: "DEPOSIT",
-          amount,
-          reference,
-          description: `Wallet funded via Bank Transfer / Webhook (${reference})`,
-          status: "SUCCESS",
-        },
-      }),
-    ]);
-
-    await publishAgroEvent("PAYMENT_COMPLETED", {
-      userId,
-      amount,
-      remarks: `Deposit successful ref ${reference}`,
-    });
-
-    return { updatedWallet, txRecord };
+    return {
+      updatedWallet,
+      txRecord: result.transaction,
+      alreadySettled: result.status === "ALREADY_SETTLED",
+    };
   }
 
   /**
