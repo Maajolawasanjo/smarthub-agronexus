@@ -261,9 +261,13 @@ export class AdminOrderService {
     switch (action) {
       case "CANCEL":
       case "REFUND_ESCROW": {
-        // Validation: Cannot cancel if already COMPLETED or CANCELLED
-        if (order.status === "COMPLETED" || order.status === "CANCELLED") {
-          throw new Error(`Cannot cancel order in ${order.status} state.`);
+        // Direct cancellation is limited to the pre-fulfillment window. Once
+        // preparation or logistics begins, use formal dispute arbitration instead of
+        // restoring stock for produce that may already be in transit or delivered.
+        if (!["PENDING", "CONFIRMED"].includes(order.status)) {
+          throw new Error(
+            `Only PENDING or CONFIRMED orders may be cancelled directly; use the formal dispute workflow for ${order.status} orders.`
+          );
         }
 
         // Refund paid orders through the original payment source before cancelling.
