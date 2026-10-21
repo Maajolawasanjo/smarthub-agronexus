@@ -85,8 +85,7 @@ export async function POST(req: Request) {
     }
     if (order.payment?.paymentStatus !== "PAID") {
       return NextResponse.json(
-        { success: false, error: { code: "PAYMENT_NOT_SETTLED",
-      "PAYMENT_FINANCIAL_STATE_CONFLICT", message: "This order has no settled payment to release." } },
+        { success: false, error: { code: "PAYMENT_NOT_SETTLED", message: "This order has no settled payment to release." } },
         { status: 409 }
       );
     }
@@ -104,6 +103,7 @@ export async function POST(req: Request) {
     const conflictCodes = [
       "ORDER_NOT_DELIVERED",
       "PAYMENT_NOT_SETTLED",
+      "PAYMENT_FINANCIAL_STATE_CONFLICT",
       "ACTIVE_DISPUTE_BLOCKS_RELEASE",
       "ESCROW_NOT_FUNDED",
       "INSUFFICIENT_ESCROW",
