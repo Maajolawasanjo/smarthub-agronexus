@@ -578,6 +578,157 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(flagEntry.description).toContain("REQUIRES_MANUAL_REVIEW");
     });
 
+    it("records a definitive provider rejection and does not credit wallet balance", async () => {
+      const buyerId = "usr_card_buyer_rejected";
+      const orderId = "ord_card_rejected";
+      const buyerWallet = { id: "w-card-rejected", userId: buyerId, balance: 1200, escrow: 0 };
+      const payment = {
+        id: "pay-card-rejected",
+        paymentMethod: "CARD",
+        paymentStatus: "PAID",
+        transactionRef: "AGRO-FLW-rejected",
+        gatewayTransactionId: "98766",
+        gatewayRefundId: null,
+        refundStatus: null as string | null,
+        amount: 75000,
+      };
+      const order = {
+        id: orderId,
+        orderNumber: "AGRO-CARD-REJECTED",
+        totalAmount: 75000,
+        buyer: { userId: buyerId },
+        payment,
+      };
+      const originalKey = process.env.FLUTTERWAVE_SECRET_KEY;
+      const originalFetch = globalThis.fetch;
+      process.env.FLUTTERWAVE_SECRET_KEY = "test-flutterwave-key";
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ status: "error", message: "Provider rejected refund" }),
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+      vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
+      const paymentUpdateMany = vi.spyOn(prisma.payment, "updateMany").mockImplementation(async ({ where, data }: any) => {
+        if (where.id !== payment.id) return { count: 0 };
+        if (where.refundStatus === null && payment.refundStatus === null) {
+          Object.assign(payment, data);
+          return { count: 1 };
+        }
+        if (where.refundStatus === "PENDING" && payment.refundStatus === "PENDING") {
+          Object.assign(payment, data);
+          return { count: 1 };
+        }
+        return { count: 0 };
+      });
+      const manualReviewEntries: any[] = [];
+      vi.spyOn(prisma.walletTransaction, "create").mockImplementation(async ({ data }: any) => {
+        manualReviewEntries.push(data);
+        return { id: "manual-review-rejected", ...data } as any;
+      });
+      const walletUpdate = vi.spyOn(prisma.wallet, "update");
+
+      try {
+        await expect(
+          WalletService.executeGatewayCardRefund(buyerId, orderId, "98766", 75000)
+        ).rejects.toThrow("CARD_REFUND_FAILED");
+
+        expect(payment.refundStatus).toBe("FAILED");
+        expect(paymentUpdateMany).toHaveBeenCalledTimes(2);
+        expect(manualReviewEntries).toHaveLength(1);
+        expect(manualReviewEntries[0]).toMatchObject({
+          type: "REFUND",
+          status: "FAILED",
+          amount: 75000,
+        });
+        expect(manualReviewEntries[0].description).toContain("REQUIRES_MANUAL_REVIEW");
+        expect(walletUpdate).not.toHaveBeenCalled();
+        expect(buyerWallet.balance).toBe(1200);
+
+        await expect(
+          WalletService.executeGatewayCardRefund(buyerId, orderId, "98766", 75000)
+        ).rejects.toThrow("CARD_REFUND_FAILED");
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalKey === undefined) delete process.env.FLUTTERWAVE_SECRET_KEY;
+        else process.env.FLUTTERWAVE_SECRET_KEY = originalKey;
+      }
+    });
+
+    it("marks a network-uncertain refund for manual reconciliation and blocks automatic retry", async () => {
+      const buyerId = "usr_card_buyer_timeout";
+      const orderId = "ord_card_timeout";
+      const buyerWallet = { id: "w-card-timeout", userId: buyerId, balance: 900, escrow: 0 };
+      const payment = {
+        id: "pay-card-timeout",
+        paymentMethod: "CARD",
+        paymentStatus: "PAID",
+        transactionRef: "AGRO-FLW-timeout",
+        gatewayTransactionId: "98767",
+        gatewayRefundId: null,
+        refundStatus: null as string | null,
+        amount: 75000,
+      };
+      const order = {
+        id: orderId,
+        orderNumber: "AGRO-CARD-TIMEOUT",
+        totalAmount: 75000,
+        buyer: { userId: buyerId },
+        payment,
+      };
+      const originalKey = process.env.FLUTTERWAVE_SECRET_KEY;
+      const originalFetch = globalThis.fetch;
+      process.env.FLUTTERWAVE_SECRET_KEY = "test-flutterwave-key";
+      const fetchMock = vi.fn().mockRejectedValue(new Error("socket timeout"));
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+      vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
+      const paymentUpdateMany = vi.spyOn(prisma.payment, "updateMany").mockImplementation(async ({ where, data }: any) => {
+        if (where.id !== payment.id) return { count: 0 };
+        if (where.refundStatus === null && payment.refundStatus === null) {
+          Object.assign(payment, data);
+          return { count: 1 };
+        }
+        if (where.refundStatus === "PENDING" && payment.refundStatus === "PENDING") {
+          Object.assign(payment, data);
+          return { count: 1 };
+        }
+        return { count: 0 };
+      });
+      const manualReviewEntries: any[] = [];
+      vi.spyOn(prisma.walletTransaction, "create").mockImplementation(async ({ data }: any) => {
+        manualReviewEntries.push(data);
+        return { id: "manual-review-timeout", ...data } as any;
+      });
+      const walletUpdate = vi.spyOn(prisma.wallet, "update");
+
+      try {
+        await expect(
+          WalletService.executeGatewayCardRefund(buyerId, orderId, "98767", 75000)
+        ).rejects.toThrow("CARD_REFUND_PENDING_RECONCILIATION");
+
+        expect(payment.refundStatus).toBe("MANUAL_REVIEW");
+        expect(paymentUpdateMany).toHaveBeenCalledTimes(2);
+        expect(manualReviewEntries).toHaveLength(1);
+        expect(manualReviewEntries[0].description).toContain("REQUIRES_MANUAL_REVIEW");
+        expect(walletUpdate).not.toHaveBeenCalled();
+        expect(buyerWallet.balance).toBe(900);
+
+        await expect(
+          WalletService.executeGatewayCardRefund(buyerId, orderId, "98767", 75000)
+        ).rejects.toThrow("CARD_REFUND_PENDING_RECONCILIATION");
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalKey === undefined) delete process.env.FLUTTERWAVE_SECRET_KEY;
+        else process.env.FLUTTERWAVE_SECRET_KEY = originalKey;
+      }
+    });
+
     it("rejects an escrow refund larger than the order's actual locked escrow without crediting balance", async () => {
       const buyerId = "usr_wallet_buyer_66";
       const orderId = "ord_wallet_66";
