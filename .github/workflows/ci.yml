@@ -85,7 +85,7 @@ jobs:
         run: npx prisma generate
 
       - name: Lint session migration files (fail closed)
-        run: npx eslint src/lib/session.ts src/app/api/auth/login/route.ts src/app/api/auth/register/route.ts __tests__/security/p0b-revocable-realm-sessions.test.ts __tests__/security/p0b-auth-flow-regression.test.ts
+        run: npx eslint src/middleware.ts src/lib/session.ts src/app/api/auth/login/route.ts src/app/api/auth/register/route.ts __tests__/security/p0b-revocable-realm-sessions.test.ts __tests__/security/p0b-auth-flow-regression.test.ts
 
       - name: Run session and auth regression suites
         run: npx vitest run __tests__/security/p0b-revocable-realm-sessions.test.ts __tests__/security/p0b-auth-flow-regression.test.ts
