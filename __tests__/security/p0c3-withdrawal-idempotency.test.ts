@@ -44,10 +44,39 @@ const key = "withdrawal-request-001";
 const amount = 50;
 const reference = `WD-${crypto.createHash("sha256").update(`${userId}:${key}`).digest("hex").slice(0, 32).toUpperCase()}`;
 
-let wallet: { id: string; userId: string; balance: number; pendingWithdrawal: number; escrow: number };
-let record: Record<string, any> | null;
+type WithdrawalRecord = {
+  id: string;
+  walletId: string;
+  type: string;
+  amount: number;
+  reference: string;
+  bankAccountId: string;
+  status: string;
+  description: string;
+};
 
-function makeRecord(overrides: Record<string, unknown> = {}) {
+type WalletUpdateArgs = {
+  where: {
+    balance?: { gte?: number };
+    pendingWithdrawal?: { gte?: number };
+  };
+  data: {
+    balance?: { decrement?: number; increment?: number };
+    pendingWithdrawal?: { decrement?: number; increment?: number };
+  };
+};
+
+type TransactionFindArgs = { where: { reference?: string; id?: string } };
+type TransactionCreateArgs = { data: Omit<WithdrawalRecord, "id"> };
+type TransactionUpdateArgs = {
+  where: { id?: string; status?: string | { in: string[] } };
+  data: Partial<WithdrawalRecord>;
+};
+
+let wallet: { id: string; userId: string; balance: number; pendingWithdrawal: number; escrow: number };
+let record: WithdrawalRecord | null;
+
+function makeRecord(overrides: Partial<WithdrawalRecord> = {}): WithdrawalRecord {
   return {
     id: "withdrawal-tx-1",
     walletId: wallet.id,
@@ -80,7 +109,7 @@ beforeEach(() => {
   });
   mock.walletFindUnique.mockImplementation(async () => wallet);
   mock.walletCreate.mockResolvedValue(wallet);
-  mock.walletUpdateMany.mockImplementation(async ({ where, data }: any) => {
+  mock.walletUpdateMany.mockImplementation(async ({ where, data }: WalletUpdateArgs) => {
     if (where.balance?.gte !== undefined && wallet.balance < Number(where.balance.gte)) return { count: 0 };
     if (where.pendingWithdrawal?.gte !== undefined && wallet.pendingWithdrawal < Number(where.pendingWithdrawal.gte)) return { count: 0 };
     if (data.balance?.decrement) wallet.balance -= Number(data.balance.decrement);
@@ -89,18 +118,18 @@ beforeEach(() => {
     if (data.pendingWithdrawal?.decrement) wallet.pendingWithdrawal -= Number(data.pendingWithdrawal.decrement);
     return { count: 1 };
   });
-  mock.walletTransactionFindUnique.mockImplementation(async ({ where }: any) => {
+  mock.walletTransactionFindUnique.mockImplementation(async ({ where }: TransactionFindArgs) => {
     if (record && (where.reference === record.reference || where.id === record.id)) return record;
     return null;
   });
-  mock.walletTransactionCreate.mockImplementation(async ({ data }: any) => {
+  mock.walletTransactionCreate.mockImplementation(async ({ data }: TransactionCreateArgs) => {
     record = { id: "withdrawal-tx-1", ...data };
     return record;
   });
-  mock.walletTransactionUpdateMany.mockImplementation(async ({ where, data }: any) => {
+  mock.walletTransactionUpdateMany.mockImplementation(async ({ where, data }: TransactionUpdateArgs) => {
     if (!record || where.id !== record.id) return { count: 0 };
     if (where.status && typeof where.status === "string" && record.status !== where.status) return { count: 0 };
-    if (where.status?.in && !where.status.in.includes(record.status)) return { count: 0 };
+    if (typeof where.status === "object" && where.status !== null && !where.status.in.includes(record.status)) return { count: 0 };
     Object.assign(record, data);
     return { count: 1 };
   });
