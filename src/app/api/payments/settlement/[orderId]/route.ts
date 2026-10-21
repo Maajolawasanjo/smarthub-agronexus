@@ -182,6 +182,7 @@ export async function POST(
       "REFUND_STATE_CONFLICT",
       "INVENTORY_RESTORE_CONFLICT",
       "PAYMENT_NOT_SETTLED",
+      "PAYMENT_FINANCIAL_STATE_CONFLICT",
       "REFUND_ALREADY_RECORDED",
     ].some((code) => message.includes(code)) ? 409 : 500;
     console.error("[SETTLEMENT_REFUND_ERROR]", { message, status });
