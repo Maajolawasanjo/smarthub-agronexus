@@ -284,10 +284,15 @@ export class AdminOrderService {
 
         // Transactional update of order, payment and seller orders
         const updated = await prisma.$transaction(async (tx) => {
-          const updatedOrder = await tx.order.update({
-            where: { id: order.id },
+          const cancellationClaim = await tx.order.updateMany({
+            where: { id: order.id, status: order.status },
             data: { status: "CANCELLED" },
           });
+          if (cancellationClaim.count !== 1) {
+            throw new Error("ORDER_STATE_CONFLICT: Another request already changed this order.");
+          }
+          const updatedOrder = await tx.order.findUnique({ where: { id: order.id } });
+          if (!updatedOrder) throw new Error("ORDER_NOT_FOUND");
 
           if (order.payment) {
             await tx.payment.update({
@@ -305,13 +310,16 @@ export class AdminOrderService {
 
           // Restore inventory
           for (const item of order.orderItems) {
-            await tx.inventory.updateMany({
-              where: { productId: item.productId },
+            const restored = await tx.inventory.updateMany({
+              where: { productId: item.productId, reservedQty: { gte: item.quantity } },
               data: {
                 reservedQty: { decrement: item.quantity },
                 availableQty: { increment: item.quantity },
               },
             });
+            if (restored.count !== 1) {
+              throw new Error(`INVENTORY_RESTORE_CONFLICT: Cannot restore reserved quantity for product ${item.productId}.`);
+            }
           }
 
           return updatedOrder;
