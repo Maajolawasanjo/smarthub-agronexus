@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Building2, AlertCircle, CheckCircle2, Loader2, ArrowRight } from "lucide-react";
 import { LinkedBankDTO } from "@/types/wallet.dto";
 import { useLocalization } from "@/hooks/useLocalization";
@@ -27,6 +27,7 @@ export function FarmerWithdrawModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (linkedBanks.length > 0 && !selectedBankId) {
@@ -57,11 +58,16 @@ export function FarmerWithdrawModal({
     }
 
     setLoading(true);
+    const requestKey = idempotencyKeyRef.current || crypto.randomUUID();
+    idempotencyKeyRef.current = requestKey;
 
     try {
       const res = await fetch("/api/wallet/withdraw", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": requestKey,
+        },
         body: JSON.stringify({
           amount: numAmount,
           bankAccountId: selectedBankId,
@@ -71,11 +77,18 @@ export function FarmerWithdrawModal({
       const json = await res.json();
 
       if (!res.ok || !json.success) {
+        const code = json.error?.code;
+        if (res.status < 500 && code !== "IDEMPOTENCY_KEY_REUSED") {
+          idempotencyKeyRef.current = null;
+        }
         throw new Error(json.error?.message || "Bank withdrawal request failed.");
       }
 
+      idempotencyKeyRef.current = null;
       setSuccessMsg(
-        `Withdrawal of ₦${numAmount.toLocaleString("en-NG")} initiated! Status is PENDING bank settlement.`
+        json.data?.reconciliationRequired
+          ? `Withdrawal ${json.data.transactionRef} needs manual reconciliation. Funds remain pending until the bank outcome is verified.`
+          : `Withdrawal of ₦${numAmount.toLocaleString("en-NG")} submitted. Status: ${json.data?.status || "PROCESSING"}.`
       );
       setAmount("");
       setTimeout(() => {
@@ -84,7 +97,8 @@ export function FarmerWithdrawModal({
         setSuccessMsg(null);
       }, 2500);
     } catch (err: any) {
-      setError(err.message || "Failed to process withdrawal.");
+      // Retain the same idempotency key after a network error; the transfer may have been accepted.
+      setError(err.message || "Withdrawal outcome is not confirmed. Retry the same request before initiating another payout.");
     } finally {
       setLoading(false);
     }
