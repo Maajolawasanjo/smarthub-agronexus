@@ -435,7 +435,7 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
 
     it("rejects verified data whose transaction reference differs from the signed callback", async () => {
       const txRef = "AGRO-FLW-callback-ref";
-      mock.paymentFindUnique.mockResolvedValue({ id: "payment-1", orderId: "order-1" });
+      mock.paymentFindUnique.mockResolvedValue({ id: "payment-1", orderId: "order-1", order: { buyer: { userId: "buyer-1" } } });
       fetchMock.mockResolvedValue(gatewayResponse({
         status: "success",
         data: { id: 98765, status: "successful", tx_ref: "another-ref", amount: 1200, currency: "NGN" },
@@ -454,7 +454,7 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
 
     it("settles only the exact pending order reference using verified amount and provider ID", async () => {
       const txRef = "AGRO-FLW-order-verified";
-      mock.paymentFindUnique.mockResolvedValue({ id: "payment-1", orderId: "order-1" });
+      mock.paymentFindUnique.mockResolvedValue({ id: "payment-1", orderId: "order-1", order: { buyer: { userId: "buyer-1" } } });
       fetchMock.mockResolvedValue(gatewayResponse({
         status: "success",
         data: { id: 98765, status: "successful", tx_ref: txRef, amount: 1200, currency: "NGN" },
