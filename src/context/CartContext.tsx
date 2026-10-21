@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 
 export interface Product {
     id: number | string;
@@ -45,11 +45,12 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
     const [cartItems, setCartItems] = useState<CartItem[]>([]);
+    const [isHydrated, setIsHydrated] = useState(false);
 
     useEffect(() => {
-        const storedCart = localStorage.getItem("smarthub_cart");
-        if (storedCart) {
-            try {
+        try {
+            const storedCart = localStorage.getItem("smarthub_cart");
+            if (storedCart) {
                 const parsed = JSON.parse(storedCart);
                 if (Array.isArray(parsed)) {
                     // Sanitize: Purge any legacy items missing a valid string/number ID or with id=null/undefined/NaN
@@ -60,15 +61,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     });
                     setCartItems(sanitized);
                 }
-            } catch (error) {
-                console.error("Failed to parse cart from local storage", error);
             }
+        } catch (error) {
+            console.error("Failed to parse cart from local storage", error);
+        } finally {
+            setIsHydrated(true);
         }
     }, []);
 
     useEffect(() => {
+        if (!isHydrated) return;
         localStorage.setItem("smarthub_cart", JSON.stringify(cartItems));
-    }, [cartItems]);
+    }, [cartItems, isHydrated]);
 
     const addToCart = (product: Product, customQty?: number): void => {
         // Boundary Guard: Reject invalid product objects immediately
@@ -116,7 +120,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setCartItems((prevItems) => prevItems.filter((item) => item.id !== id));
     };
 
-    const clearCart = (): void => setCartItems([]);
+    const clearCart = useCallback((): void => setCartItems([]), []);
 
     const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
     const cartTotal = cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
@@ -125,6 +129,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         <CartContext.Provider
             value={{
                 cartItems,
+                isHydrated,
                 addToCart,
                 updateQuantity,
                 removeFromCart,
