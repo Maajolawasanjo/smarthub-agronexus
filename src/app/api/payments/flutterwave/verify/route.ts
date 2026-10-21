@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-function redirectToCart(appUrl: string, payment: string, reason?: string, ref?: string, amount?: number) {
-  const url = new URL("/cart", appUrl);
-  url.searchParams.set("payment", payment);
+function redirectToPage(
+  appUrl: string,
+  path: string,
+  statusKey: "payment" | "funding",
+  status: string,
+  reason?: string,
+  ref?: string,
+  amount?: number
+) {
+  const url = new URL(path, appUrl);
+  url.searchParams.set(statusKey, status);
   if (reason) url.searchParams.set("reason", reason);
   if (ref) url.searchParams.set("ref", ref);
   if (amount !== undefined) url.searchParams.set("amount", String(amount));
   return NextResponse.redirect(url);
+}
+
+function redirectToCart(appUrl: string, payment: string, reason?: string, ref?: string, amount?: number) {
+  return redirectToPage(appUrl, "/cart", "payment", payment, reason, ref, amount);
 }
 
 export async function GET(req: Request) {
@@ -92,13 +104,19 @@ export async function GET(req: Request) {
     ) {
       return redirectToCart(appUrl, "failed", "intent_not_found", txRef);
     }
+    const walletOwner = await prisma.user.findUnique({
+      where: { id: walletIntent.wallet.userId },
+      select: { role: true },
+    });
+    const walletPath = walletOwner?.role === "FARMER" ? "/farmer/wallet" : "/dashboard/wallet";
+
     if (walletIntent.status === "SUCCESS") {
-      return redirectToCart(appUrl, "success", undefined, txRef, paidAmount);
+      return redirectToPage(appUrl, walletPath, "funding", "success", undefined, txRef, paidAmount);
     }
     if (walletIntent.status === "PENDING") {
-      return redirectToCart(appUrl, "processing", undefined, txRef, paidAmount);
+      return redirectToPage(appUrl, walletPath, "funding", "processing", undefined, txRef, paidAmount);
     }
-    return redirectToCart(appUrl, "failed", "intent_not_settled", txRef);
+    return redirectToPage(appUrl, walletPath, "funding", "failed", "intent_not_settled", txRef);
   } catch (error) {
     console.error("[FLUTTERWAVE_VERIFY_ERROR]", error);
     return redirectToCart(appUrl, "error");
