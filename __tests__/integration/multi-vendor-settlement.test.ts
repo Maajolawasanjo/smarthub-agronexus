@@ -11,6 +11,127 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
     vi.restoreAllMocks();
   });
 
+  describe("Invariant 0: Verified gateway settlement", () => {
+    it("settles the exact pending payment and records provider ID plus escrow lock atomically", async () => {
+      const buyerId = "usr_gateway_buyer";
+      const order = {
+        id: "ord-gateway-settle",
+        orderNumber: "AGRO-GW-001",
+        totalAmount: 75000,
+        status: "PENDING",
+        buyer: { userId: buyerId, user: { id: buyerId } },
+      };
+      const payment = {
+        id: "pay-gateway-settle",
+        orderId: order.id,
+        transactionRef: "AGRO-FLW-verified-001",
+        paymentStatus: "PENDING",
+        paymentMethod: "CARD",
+        amount: 75000,
+        order,
+      };
+      const buyerWallet = {
+        id: "wallet-gateway-buyer",
+        userId: buyerId,
+        balance: 0,
+        escrow: 0,
+        pendingWithdrawal: 0,
+        frozen: 0,
+      };
+      const txRecord: any[] = [];
+      const txPaymentClaim = vi.fn(async ({ data }: any) => {
+        Object.assign(payment, data);
+        return { count: 1 };
+      });
+      const txOrderClaim = vi.fn(async ({ data }: any) => {
+        Object.assign(order, data);
+        return { count: 1 };
+      });
+      const txWalletUpdate = vi.fn(async ({ data }: any) => {
+        if (data.escrow?.increment) buyerWallet.escrow += Number(data.escrow.increment);
+        return buyerWallet;
+      });
+      const txWalletTransactionCreate = vi.fn(async ({ data }: any) => {
+        txRecord.push(data);
+        return { id: "tx-gateway-lock", ...data };
+      });
+      const txMock = {
+        payment: {
+          findFirst: vi.fn().mockResolvedValue(payment),
+          updateMany: txPaymentClaim,
+          findUnique: vi.fn().mockImplementation(async () => payment),
+        },
+        order: { updateMany: txOrderClaim },
+        wallet: {
+          findUnique: vi.fn().mockResolvedValue(buyerWallet),
+          update: txWalletUpdate,
+        },
+        walletTransaction: { create: txWalletTransactionCreate },
+      };
+      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => arg(txMock));
+
+      const result = await WalletService.settleOrderPaymentFromGateway(
+        payment.id,
+        payment.transactionRef,
+        75000,
+        "98765"
+      );
+
+      expect(result.status).toBe("SUCCESSFULLY_SETTLED");
+      expect(payment.paymentStatus).toBe("PAID");
+      expect(payment.gatewayTransactionId).toBe("98765");
+      expect(order.status).toBe("CONFIRMED");
+      expect(buyerWallet.escrow).toBe(75000);
+      expect(txRecord).toHaveLength(1);
+      expect(txRecord[0]).toMatchObject({
+        type: "ESCROW_LOCK",
+        amount: 75000,
+        reference: "AGRO-FLW-verified-001",
+        status: "SUCCESS",
+      });
+    });
+
+    it("rejects a transaction-reference mismatch before mutating payment or escrow", async () => {
+      const payment = {
+        id: "pay-gateway-mismatch",
+        orderId: "ord-gateway-mismatch",
+        transactionRef: "AGRO-FLW-persisted",
+        paymentStatus: "PENDING",
+        paymentMethod: "CARD",
+        amount: 75000,
+        order: {
+          id: "ord-gateway-mismatch",
+          orderNumber: "AGRO-GW-002",
+          totalAmount: 75000,
+          status: "PENDING",
+          buyer: { userId: "buyer-mismatch", user: { id: "buyer-mismatch" } },
+        },
+      };
+      const txPaymentClaim = vi.fn();
+      const txWalletUpdate = vi.fn();
+      const txMock = {
+        payment: {
+          findFirst: vi.fn().mockResolvedValue(payment),
+          updateMany: txPaymentClaim,
+        },
+        wallet: { update: txWalletUpdate },
+      };
+      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => arg(txMock));
+
+      await expect(
+        WalletService.settleOrderPaymentFromGateway(
+          payment.id,
+          "AGRO-FLW-attacker-reference",
+          75000,
+          "98765"
+        )
+      ).rejects.toThrow("TRANSACTION_REFERENCE_MISMATCH");
+
+      expect(txPaymentClaim).not.toHaveBeenCalled();
+      expect(txWalletUpdate).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Invariant 1: Multi-Vendor SellerOrder Escrow Distribution", () => {
     it("Settles multi-vendor order: commission on commodity subtotal only, full totalAmount released from buyer escrow", async () => {
       const orderId = "ord_multi_vendor_99";
