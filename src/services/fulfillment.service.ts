@@ -143,41 +143,26 @@ export async function confirmBuyerDeliveryAndReleaseEscrow(orderId: string, buye
     throw new Error("Only the order buyer can confirm delivery and release escrow.");
   }
 
-  if (order.status !== "DELIVERED" && order.status !== "IN_TRANSIT") {
-    throw new Error("Delivery confirmation can only be performed on delivered orders.");
+  if (order.status !== "DELIVERED") {
+    throw new Error("Delivery confirmation can only be performed after the order is marked DELIVERED.");
+  }
+  if (order.payment?.paymentStatus !== "PAID") {
+    throw new Error("Only an order with a settled payment can release escrow.");
   }
 
-  // Atomic update: Mark Order as COMPLETED and release payment escrow
-  const updatedOrder = await prisma.$transaction(async (tx) => {
-    const completedOrder = await tx.order.update({
-      where: { id: orderId },
-      data: { status: "COMPLETED" },
+  // Do not mark the order completed or mark a pending payment as paid here. The
+  // wallet service atomically claims the delivery, debits funded escrow, credits
+  // seller wallets and finalizes the parent order.
+  if (order.delivery && order.delivery.deliveryStatus !== "DELIVERED") {
+    await prisma.delivery.update({
+      where: { orderId },
+      data: { deliveryStatus: "DELIVERED", deliveredAt: new Date() },
     });
+  }
 
-    // Fix 13: Only update payment to PAID if it is in a valid pre-paid state
-    if (order.payment && ["PENDING", "PAID"].includes(order.payment.paymentStatus)) {
-      await tx.payment.update({
-        where: { id: order.payment.id },
-        data: { paymentStatus: "PAID" },
-      });
-    }
-
-    if (order.delivery) {
-      await tx.delivery.update({
-        where: { orderId: orderId },
-        data: { deliveryStatus: "DELIVERED", deliveredAt: new Date() },
-      });
-    }
-
-    return completedOrder;
-  });
-
-  // Fix 4: Credit the farmer wallet after the DB transaction succeeds.
-  // WalletService.executeEscrowRelease atomically:
-  //   1. Decrements buyer's escrow column
-  //   2. Credits farmer wallet with (grossAmount - platformFee - VAT)
-  //   3. Logs the WalletTransaction ESCROW_RELEASE record
   await WalletService.executeEscrowRelease(buyerUserId, orderId);
+  const updatedOrder = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!updatedOrder) throw new Error("Order disappeared after escrow release.");
 
   logger.security(`Escrow released for order #${order.orderNumber}`, {
     orderId: order.id,
