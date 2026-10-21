@@ -1,60 +1,93 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/session";
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
-import crypto from "crypto";
 
-function hashPassword(password: string): string {
-  return crypto.pbkdf2Sync(password, "agrosalt", 1000, 64, "sha512").toString("hex");
-}
-
-// POST /api/user/password — Change user password securely
+// POST /api/user/password — Change the authenticated account's password.
+// Never use caller-supplied user IDs, direct userId cookies, or demo fallbacks.
 export async function POST(req: Request) {
   const traceCtx = createTraceContext(req);
+
   try {
-    const cookieStore = await cookies();
-    const userId = cookieStore.get("userId")?.value || "usr_demo_buyer";
-    const body = await req.json();
-
-    const { currentPassword, newPassword } = body;
-
-    if (!currentPassword || !newPassword || newPassword.length < 8) {
-      const res = NextResponse.json(
-        createErrorResponse("INVALID_INPUT", "New password must be at least 8 characters long"),
-        { status: 400 }
+    const session = await getSession();
+    if (!session?.userId) {
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("UNAUTHORIZED", "Authentication required."), { status: 401 }),
+        traceCtx
       );
-      return attachTraceHeaders(res, traceCtx);
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("FORBIDDEN", "Untrusted mutation origin."), { status: 403 }),
+        traceCtx
+      );
+    }
+
+    const body = await req.json().catch(() => null);
+    const currentPassword = body?.currentPassword;
+    const newPassword = body?.newPassword;
+    if (
+      typeof currentPassword !== "string" || !currentPassword ||
+      typeof newPassword !== "string" ||
+      newPassword.length < 8 || Buffer.byteLength(newPassword, "utf8") > 72 ||
+      newPassword === currentPassword
+    ) {
+      return attachTraceHeaders(
+        NextResponse.json(
+          createErrorResponse("INVALID_INPUT", "Provide your current password and a different new password of 8–72 UTF-8 bytes."),
+          { status: 400 }
+        ),
+        traceCtx
+      );
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: session.userId },
+      select: { id: true, password: true, isActive: true },
     });
 
-    if (!user) {
-      const res = NextResponse.json(createErrorResponse("NOT_FOUND", "User not found"), { status: 404 });
-      return attachTraceHeaders(res, traceCtx);
+    // Do not leak whether an account exists or its password hash format.
+    if (!user?.isActive || !user.password || !(await bcrypt.compare(currentPassword, user.password))) {
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("INVALID_CREDENTIALS", "Current password is incorrect."), { status: 401 }),
+        traceCtx
+      );
     }
 
-    const currentHash = hashPassword(currentPassword);
-    const isMatch = user.password === currentHash || user.password === currentPassword;
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
-    if (!isMatch) {
-      const res = NextResponse.json(createErrorResponse("INVALID_CREDENTIALS", "Current password is incorrect"), { status: 401 });
-      return attachTraceHeaders(res, traceCtx);
-    }
-
-    const newHashedPassword = hashPassword(newPassword);
-
-    await prisma.user.update({
-      where: { id: userId },
-      data: { password: newHashedPassword },
+    // The password change and revocation of ALL existing login sessions
+    // commit together. The user must sign in again with the new password.
+    await prisma.$transaction(async (tx) => {
+      const changed = await tx.user.updateMany({
+        where: { id: session.userId, isActive: true, password: user.password },
+        data: { password: newPasswordHash },
+      });
+      if (changed.count !== 1) {
+        throw new Error("PASSWORD_CHANGE_CONFLICT");
+      }
+      await tx.session.updateMany({
+        where: { userId: session.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
     });
 
-    const res = NextResponse.json(createSuccessResponse({ message: "Password updated successfully" }));
-    return attachTraceHeaders(res, traceCtx);
-  } catch (err: any) {
-    const res = NextResponse.json(createErrorResponse("UPDATE_FAILED", err.message || "Failed to update password"), { status: 500 });
-    return attachTraceHeaders(res, traceCtx);
+    return attachTraceHeaders(
+      NextResponse.json(createSuccessResponse({
+        message: "Password updated successfully. Sign in again with your new password.",
+        requiresReauthentication: true,
+      })),
+      traceCtx
+    );
+  } catch (error) {
+    console.error("[PASSWORD_CHANGE_FAILED]", error instanceof Error ? error.name : "Unknown");
+    return attachTraceHeaders(
+      NextResponse.json(createErrorResponse("UPDATE_FAILED", "Unable to update password. Please try again."), { status: 500 }),
+      traceCtx
+    );
   }
 }

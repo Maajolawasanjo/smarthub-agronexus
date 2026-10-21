@@ -69,6 +69,7 @@ describe("Phase 3 Verification Gate — Remediation Suite", () => {
       vi.mocked(getSession).mockResolvedValue(null as any);
       const req = new Request("http://localhost/api/deliveries/del-123/pod", {
         method: "POST",
+        headers: { Origin: "http://localhost:3000" },
         body: JSON.stringify({ deliveryState: "DELIVERED" }),
       });
       const res = await submitPOD(req, { params: Promise.resolve({ id: "del-123" }) });
@@ -92,6 +93,7 @@ describe("Phase 3 Verification Gate — Remediation Suite", () => {
 
       const req = new Request("http://localhost/api/deliveries/del-123/pod", {
         method: "POST",
+        headers: { Origin: "http://localhost:3000" },
         body: JSON.stringify({
           deliveryState: "DELIVERED",
           driver: { fullName: "Driver Bob" },
@@ -119,6 +121,7 @@ describe("Phase 3 Verification Gate — Remediation Suite", () => {
 
       const req = new Request("http://localhost/api/deliveries/del-123/pod", {
         method: "POST",
+        headers: { Origin: "http://localhost:3000" },
         body: JSON.stringify({
           deliveryState: "DELIVERED",
           driver: { fullName: "Driver Bob" },

@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -41,6 +42,10 @@ export async function POST(req: Request) {
         { status: 401 }
       );
       return attachTraceHeaders(res, traceCtx);
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     const body = await req.json();
@@ -87,6 +92,10 @@ export async function PATCH(req: Request) {
       return attachTraceHeaders(res, traceCtx);
     }
 
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
+    }
+
     const { bankAccountId } = await req.json();
     if (!bankAccountId) {
       const res = NextResponse.json(createErrorResponse("INVALID_INPUT", "bankAccountId is required"), { status: 400 });
@@ -128,6 +137,10 @@ export async function DELETE(req: Request) {
         { status: 401 }
       );
       return attachTraceHeaders(res, traceCtx);
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);

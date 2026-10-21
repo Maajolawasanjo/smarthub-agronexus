@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { getSharedSession, AuthRealm } from "@/lib/session";
 import {
@@ -41,6 +42,10 @@ export async function PUT(req: Request) {
     ]);
     if (!auth) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     const body = await req.json();

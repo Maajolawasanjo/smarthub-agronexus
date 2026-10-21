@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { prisma, executeWithDbRetry } from "@/lib/prisma";
 import { ProductDTO, MarketplaceProductItemDTO } from "@/dto";
@@ -330,6 +331,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     }
 
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
+    }
+
     const product = await prisma.product.findUnique({
       where: { id },
       include: { farmerProfile: true },
@@ -399,6 +404,10 @@ export async function DELETE(
 
     if (!session?.userId) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     const product = await prisma.product.findUnique({

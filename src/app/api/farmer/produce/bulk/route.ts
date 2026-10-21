@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -21,6 +22,11 @@ export async function POST(req: Request) {
         createErrorResponse("UNAUTHORIZED", "Authentication required for bulk produce updates."),
         { status: 401 }
       );
+      return attachTraceHeaders(res, traceCtx);
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Untrusted mutation origin."), { status: 403 });
       return attachTraceHeaders(res, traceCtx);
     }
 

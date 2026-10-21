@@ -3,8 +3,8 @@ name: SmartHub AgroChain CI/CD Pipeline
 on:
   push:
     branches: [ main, develop ]
+  # Include stacked security PRs targeting intermediate fix branches as well.
   pull_request:
-    branches: [ main, develop ]
 # Safe, intentionally unreachable placeholder for Prisma client initialization and
 # Next.js build-time route discovery. Never use Production DATABASE_URL in CI.
 env:
@@ -63,3 +63,81 @@ jobs:
 
       - name: Run KYC authorization regression suite
         run: npx vitest run __tests__/security/p0a-kyc-admin-authorization.test.ts
+
+  p0b-revocable-sessions:
+    name: Database-backed session security (required verification)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint session migration files (fail closed)
+        run: npx eslint src/middleware.ts src/lib/session.ts src/app/api/auth/login/route.ts src/app/api/auth/register/route.ts __tests__/security/p0b-revocable-realm-sessions.test.ts __tests__/security/p0b-auth-flow-regression.test.ts
+
+      - name: Run session and auth regression suites
+        run: npx vitest run __tests__/security/p0b-revocable-realm-sessions.test.ts __tests__/security/p0b-auth-flow-regression.test.ts
+
+  p0c-origin-security:
+    name: Admin and wallet CSRF origin policy (required verification)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint new origin policy and regression tests
+        run: npx eslint src/lib/csrf.ts __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-admin-mutation-guards.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
+
+      - name: Run origin and admin mutation regression tests
+        run: npx vitest run __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-admin-mutation-guards.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts
+
+  p0c2-farmer-buyer-security:
+    name: Farmer Buyer password and mutation protection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint password security and tests
+        run: npx eslint src/app/api/user/password/route.ts __tests__/security/p0c2-password-change.test.ts __tests__/security/p0c2-role-mutation-guards.test.ts
+
+      - name: Run password and origin tests
+        run: npx vitest run __tests__/security/p0c2-password-change.test.ts __tests__/security/p0c2-role-mutation-guards.test.ts __tests__/security/p0c-origin-validation.test.ts __tests__/security/p0c-wallet-withdraw-origin.test.ts

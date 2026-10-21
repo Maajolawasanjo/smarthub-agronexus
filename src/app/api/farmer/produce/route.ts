@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getFarmerSession, getAdminSession, getSession } from "@/lib/session";
@@ -52,6 +53,10 @@ export async function POST(req: Request) {
         { error: "Authentication required to manage produce." },
         { status: 401 }
       );
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     // Resolve Farmer Profile

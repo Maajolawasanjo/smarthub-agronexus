@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { WalletService } from "@/services/wallet.service";
@@ -30,6 +31,10 @@ export async function POST(req: Request) {
         { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
         { status: 401 }
       );
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     const { orderId, title, description } = await req.json();

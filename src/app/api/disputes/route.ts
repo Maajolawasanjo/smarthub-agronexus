@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
@@ -13,6 +14,10 @@ export async function POST(req: Request) {
         createErrorResponse("UNAUTHORIZED", "Authentication required to open a dispute."),
         { status: 401 }
       );
+    }
+
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
     const body = await req.json().catch(() => ({}));

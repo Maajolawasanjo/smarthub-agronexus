@@ -48,7 +48,7 @@ describe("Phase 3 Hardening Integration Suite", () => {
       const { POST } = await import("@/app/api/farmer/produce/route");
       const req = new Request("http://localhost:3000/api/farmer/produce", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({
           name: "Organic Cassava Tubers",
           price: 1500,
@@ -95,7 +95,7 @@ describe("Phase 3 Hardening Integration Suite", () => {
       const { POST } = await import("@/app/api/deliveries/[id]/pod/route");
       const req = new Request("http://localhost:3000/api/deliveries/del_123/pod", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({
           deliveryState: "DELIVERED",
           driver: {
