@@ -343,67 +343,183 @@ export class WalletService {
    * REQUESTED → VALIDATED → SUBMITTED_TO_FLUTTERWAVE → PROCESSING → SUCCESS (or FAILED → REVERSED)
    * Ledger: WITHDRAWAL — balance decrements, pendingWithdrawal increments atomically.
    */
-  public static async executeWithdrawal(userId: string, amount: number, bankAccountId: string) {
-    // ── 1. REQUESTED State Validation ──
+  public static async executeWithdrawal(
+    userId: string,
+    amount: number,
+    bankAccountId: string,
+    idempotencyKey?: string
+  ) {
+    const requestedAmount = Number(amount);
+    if (
+      !Number.isFinite(requestedAmount) ||
+      requestedAmount <= 0 ||
+      Math.abs(requestedAmount * 100 - Math.round(requestedAmount * 100)) > 0.000001
+    ) {
+      throw new Error("INVALID_AMOUNT: Withdrawal amount must be a positive NGN amount with at most two decimal places.");
+    }
+    const normalizedAmount = Math.round(requestedAmount * 100) / 100;
+    const requestKey = typeof idempotencyKey === "string" && idempotencyKey.trim()
+      ? idempotencyKey.trim()
+      : crypto.randomUUID();
+    if (requestKey.length > 200) {
+      throw new Error("INVALID_IDEMPOTENCY_KEY");
+    }
+
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error("USER_NOT_FOUND");
-
     if (!user.isActive) {
       throw new Error("ACCOUNT_FROZEN: Withdrawals are disabled for suspended accounts.");
     }
 
     const wallet = await this.getOrCreateWallet(userId);
     const currentBalance = Number(wallet.balance);
-
-    if (amount > currentBalance) {
-      throw new Error(`INSUFFICIENT_FUNDS: Requested ${this.formatNGN(amount)} exceeds available balance of ${this.formatNGN(currentBalance)}`);
+    if (normalizedAmount > currentBalance) {
+      throw new Error(`INSUFFICIENT_FUNDS: Requested ${this.formatNGN(normalizedAmount)} exceeds available balance of ${this.formatNGN(currentBalance)}`);
     }
+
+    // The same user/key always resolves to the same persisted reference. The raw
+    // client key is never stored or exposed. A DB unique constraint makes concurrent
+    // retries converge on one withdrawal record.
+    const txRef = `WD-${crypto.createHash("sha256").update(`${userId}:${requestKey}`).digest("hex").slice(0, 32).toUpperCase()}`;
+    const getCurrentResult = async (record: any, alreadyProcessed = true) => {
+      if (
+        record.type !== "WITHDRAWAL" ||
+        record.walletId !== wallet.id ||
+        record.bankAccountId !== bankAccountId ||
+        Math.abs(Number(record.amount) - normalizedAmount) > 0.01
+      ) {
+        throw new Error("IDEMPOTENCY_KEY_REUSED: This key was already used with a different withdrawal request.");
+      }
+      if (record.status === "FAILED" || record.status === "REVERSED") {
+        throw new Error(`WITHDRAWAL_IDEMPOTENCY_TERMINAL: This withdrawal already ended as ${record.status}. Use a new idempotency key for a new attempt.`);
+      }
+      const latestWallet = await prisma.wallet.findUnique({ where: { id: wallet.id } });
+      return {
+        updatedWallet: latestWallet || wallet,
+        txRecord: record,
+        transactionRef: txRef,
+        status: record.status,
+        alreadyProcessed,
+        reconciliationRequired: String(record.description || "").includes("[MANUAL_REVIEW]"),
+      };
+    };
+
+    const existing = await prisma.walletTransaction.findUnique({
+      where: { reference: txRef },
+      include: { wallet: true },
+    });
+    if (existing) return getCurrentResult(existing);
 
     const bankAccount = await prisma.bankAccount.findFirst({
-      where: { id: bankAccountId, userId },
+      where: { id: bankAccountId, userId, isVerified: true },
     });
-
     if (!bankAccount) {
-      throw new Error("INVALID_BANK_ACCOUNT: Bank account not found or unverified.");
+      throw new Error("INVALID_BANK_ACCOUNT: Verified bank account not found for this user.");
     }
 
-    const txRef = `WD-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
     const bankDesc = `${bankAccount.bankName} (${bankAccount.accountNumber})`;
+    let initial: { updatedWallet: any; txRecord: any };
+    try {
+      initial = await prisma.$transaction(async (tx) => {
+        // Compare-and-set is the authoritative funds check. A prior balance read is
+        // not enough: two concurrent requests must never debit the same available funds.
+        const debit = await tx.wallet.updateMany({
+          where: { id: wallet.id, balance: { gte: normalizedAmount } },
+          data: {
+            balance: { decrement: normalizedAmount },
+            pendingWithdrawal: { increment: normalizedAmount },
+          },
+        });
+        if (debit.count !== 1) {
+          throw new Error("INSUFFICIENT_FUNDS: Available balance changed before withdrawal reservation.");
+        }
 
-    // ── 2. VALIDATED State — Ledger lock: shift available balance → pendingWithdrawal ──
-    const [updatedWallet, txRecord] = await prisma.$transaction([
-      prisma.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          balance: { decrement: amount },
-          pendingWithdrawal: { increment: amount },
-        },
-      }),
-      prisma.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: "WITHDRAWAL",
-          amount,
-          reference: txRef,
-          description: `[VALIDATED] Payout initiated to ${bankDesc}`,
-          status: "VALIDATED",
-        },
-      }),
-    ]);
+        const txRecord = await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: "WITHDRAWAL",
+            amount: normalizedAmount,
+            reference: txRef,
+            bankAccountId,
+            description: `[VALIDATED] Payout initiated to ${bankDesc}`,
+            status: "VALIDATED",
+          },
+        });
+        const updatedWallet = await tx.wallet.findUnique({ where: { id: wallet.id } });
+        return { updatedWallet: updatedWallet || wallet, txRecord };
+      });
+    } catch (error: unknown) {
+      // If another identical request won the unique-reference race, return its
+      // persisted state. Its transaction rollback also rolls back this request's debit.
+      if ((error as { code?: string })?.code === "P2002") {
+        const concurrent = await prisma.walletTransaction.findUnique({
+          where: { reference: txRef },
+          include: { wallet: true },
+        });
+        if (concurrent) return getCurrentResult(concurrent);
+      }
+      throw error;
+    }
 
-    // ── 3. SUBMITTED_TO_FLUTTERWAVE State ──
-    await prisma.walletTransaction.update({
-      where: { id: txRecord.id },
+    const txRecord = initial.txRecord;
+    const rollbackReservedFunds = async (reason: string, allowedStates: string[]) => {
+      await prisma.$transaction(async (tx) => {
+        const claim = await tx.walletTransaction.updateMany({
+          where: { id: txRecord.id, status: { in: allowedStates } },
+          data: { status: "REVERSED", description: `[REVERSED] ${reason} (funds restored to available balance).` },
+        });
+        if (claim.count !== 1) throw new Error("WITHDRAWAL_STATE_CONFLICT: Cannot reverse a withdrawal that has already changed state.");
+
+        const restored = await tx.wallet.updateMany({
+          where: { id: wallet.id, pendingWithdrawal: { gte: normalizedAmount } },
+          data: {
+            balance: { increment: normalizedAmount },
+            pendingWithdrawal: { decrement: normalizedAmount },
+          },
+        });
+        if (restored.count !== 1) {
+          throw new Error("WITHDRAWAL_ROLLBACK_CONFLICT: Could not safely restore the reserved withdrawal amount.");
+        }
+      });
+    };
+
+    const markOutcomeUnknown = async (reason: string) => {
+      // A timeout or malformed response does not prove that Flutterwave rejected the
+      // transfer. Keep funds in pendingWithdrawal to prevent a payout + wallet refund.
+      await prisma.walletTransaction.updateMany({
+        where: { id: txRecord.id, status: "SUBMITTED_TO_FLUTTERWAVE" },
+        data: {
+          status: "PROCESSING",
+          description: `[MANUAL_REVIEW] Flutterwave transfer outcome is unknown; funds remain pending. Reference: ${txRef}. Reason: ${reason}`,
+        },
+      });
+      const latest = await prisma.walletTransaction.findUnique({
+        where: { reference: txRef },
+        include: { wallet: true },
+      });
+      if (!latest) throw new Error("WITHDRAWAL_STATE_CONFLICT: Withdrawal record disappeared during reconciliation.");
+      return latest;
+    };
+
+    // No gateway request is made until the persisted record has entered its submission state.
+    const submitted = await prisma.walletTransaction.updateMany({
+      where: { id: txRecord.id, status: "VALIDATED" },
       data: {
         status: "SUBMITTED_TO_FLUTTERWAVE",
-        description: `[SUBMITTED] Transferred to Flutterwave API (${bankAccount.bankName})`,
+        description: `[SUBMITTED] Transfer request prepared for ${bankDesc} (${bankAccountId})`,
       },
     });
+    if (submitted.count !== 1) {
+      await rollbackReservedFunds("Unable to persist gateway submission state", ["VALIDATED"]);
+      throw new Error("WITHDRAWAL_STATE_CONFLICT: Could not prepare withdrawal submission.");
+    }
 
     const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
     if (secretKey) {
+      let flwRes: Response;
+      let flwData: any;
       try {
-        const flwRes = await fetch("https://api.flutterwave.com/v3/transfers", {
+        flwRes = await fetch("https://api.flutterwave.com/v3/transfers", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${secretKey}`,
@@ -412,106 +528,107 @@ export class WalletService {
           body: JSON.stringify({
             account_bank: bankAccount.bankCode || "011",
             account_number: bankAccount.accountNumber,
-            amount,
+            amount: normalizedAmount,
             narration: `SmartHub AgroChain Payout ${txRef}`,
             currency: "NGN",
             reference: txRef,
           }),
         });
+        flwData = await flwRes.json();
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown network/response error";
+        const latest = await markOutcomeUnknown(message);
+        const latestWallet = await prisma.wallet.findUnique({ where: { id: wallet.id } });
+        return {
+          updatedWallet: latestWallet || initial.updatedWallet,
+          txRecord: latest,
+          transactionRef: txRef,
+          status: latest.status,
+          alreadyProcessed: false,
+          reconciliationRequired: String(latest.description || "").includes("[MANUAL_REVIEW]"),
+        };
+      }
 
-        const flwData = await flwRes.json();
-        if (!flwRes.ok || flwData.status !== "success") {
-          console.error("[FLUTTERWAVE_TRANSFER_REJECTED]", flwData);
-
-          // ── FAILED → REVERSED State Transition ──
-          await prisma.$transaction([
-            prisma.wallet.update({
-              where: { id: wallet.id },
-              data: {
-                balance: { increment: amount },
-                pendingWithdrawal: { decrement: amount },
-              },
-            }),
-            prisma.walletTransaction.update({
-              where: { id: txRecord.id },
-              data: {
-                status: "REVERSED",
-                description: `[REVERSED] Gateway rejected: ${flwData.message || "Transfer error"}`,
-              },
-            }),
-          ]);
-
-          throw new Error(`BANK_TRANSFER_FAILED: ${flwData.message || "Banking payout gateway rejected transfer."}`);
-        }
-
-        // ── 4. PROCESSING State — Transfer accepted by gateway, pending webhook settlement ──
-        await prisma.walletTransaction.update({
-          where: { id: txRecord.id },
+      if (flwRes.ok && flwData?.status === "success") {
+        const accepted = await prisma.walletTransaction.updateMany({
+          where: { id: txRecord.id, status: "SUBMITTED_TO_FLUTTERWAVE" },
           data: {
             status: "PROCESSING",
-            description: `[PROCESSING] Flutterwave payout pending bank settlement (ID: ${flwData.data?.id || txRef})`,
+            description: `[PROCESSING] Flutterwave payout pending bank settlement (ID: ${flwData.data?.id || txRef}; destination: ${bankAccountId})`,
           },
         });
-      } catch (err: unknown) {
-        const error = err as { message?: string };
-        if (error.message?.startsWith("BANK_TRANSFER_FAILED")) throw err;
-        // Network / runtime exception — rollback pendingWithdrawal so funds are not trapped
-        console.error("[FLUTTERWAVE_TRANSFER_EXCEP] Network exception during transfer, rolling back:", err);
-        await prisma.$transaction([
-          prisma.wallet.update({
-            where: { id: wallet.id },
-            data: {
-              balance: { increment: amount },
-              pendingWithdrawal: { decrement: amount },
-            },
-          }),
-          prisma.walletTransaction.update({
-            where: { id: txRecord.id },
-            data: {
-              status: "FAILED",
-              description: `[FAILED] Network exception during Flutterwave transfer (funds restored to balance): ${(err as Error).message || "Unknown error"}`,
-            },
-          }),
-        ]);
-        throw new Error(`WITHDRAWAL_NETWORK_ERROR: Transfer attempt failed. Funds have been restored to your wallet balance.`);
+        const latest = await prisma.walletTransaction.findUnique({
+          where: { reference: txRef },
+          include: { wallet: true },
+        });
+        if (accepted.count !== 1 && latest?.status !== "SUCCESS") {
+          throw new Error("WITHDRAWAL_STATE_CONFLICT: Gateway accepted a transfer whose local state changed unexpectedly.");
+        }
+      } else if (
+        !flwRes.ok &&
+        flwRes.status >= 400 &&
+        flwRes.status < 500 &&
+        flwData?.status === "error"
+      ) {
+        const message = String(flwData.message || "Flutterwave rejected the transfer.");
+        await rollbackReservedFunds(`Gateway rejected transfer: ${message}`, ["SUBMITTED_TO_FLUTTERWAVE"]);
+        throw new Error(`BANK_TRANSFER_FAILED: ${message}`);
+      } else {
+        const reason = `Ambiguous provider response (HTTP ${flwRes.status}; status ${String(flwData?.status || "missing")})`;
+        const latest = await markOutcomeUnknown(reason);
+        const latestWallet = await prisma.wallet.findUnique({ where: { id: wallet.id } });
+        return {
+          updatedWallet: latestWallet || initial.updatedWallet,
+          txRecord: latest,
+          transactionRef: txRef,
+          status: latest.status,
+          alreadyProcessed: false,
+          reconciliationRequired: String(latest.description || "").includes("[MANUAL_REVIEW]"),
+        };
       }
     } else if (process.env.NODE_ENV === "production") {
-      // Production without key is a critical financial misconfiguration: restore funds and fail immediately
-      await prisma.$transaction([
-        prisma.wallet.update({
-          where: { id: wallet.id },
-          data: {
-            balance: { increment: amount },
-            pendingWithdrawal: { decrement: amount },
-          },
-        }),
-        prisma.walletTransaction.update({
-          where: { id: txRecord.id },
-          data: {
-            status: "FAILED",
-            description: "[FAILED] Payout gateway unconfigured in production environment.",
-          },
-        }),
-      ]);
+      // No request was sent to Flutterwave, so this is a safe reversal—not an ambiguous
+      // network outcome. Only restore funds after the state compare-and-set succeeds.
+      await rollbackReservedFunds("Gateway unconfigured in production", ["SUBMITTED_TO_FLUTTERWAVE"]);
       throw new Error("GATEWAY_UNCONFIGURED: Banking payout service is not configured in production.");
     } else {
-      // In development/test mode without API key, set to PROCESSING with clear notice
-      await prisma.walletTransaction.update({
-        where: { id: txRecord.id },
+      await prisma.walletTransaction.updateMany({
+        where: { id: txRecord.id, status: "SUBMITTED_TO_FLUTTERWAVE" },
         data: {
           status: "PROCESSING",
-          description: `[DEV_MODE] Mock transfer accepted without gateway key (${txRef})`,
+          description: `[DEV_MODE] Mock transfer accepted without gateway key (${txRef}; destination: ${bankAccountId})`,
         },
       });
     }
 
-    await publishAgroEvent("PAYMENT_COMPLETED", {
-      userId,
-      amount,
-      remarks: `Withdrawal submitted ref ${txRef}`,
-    });
+    // Notifications must not turn a persisted transfer into a failed HTTP response.
+    try {
+      await publishAgroEvent("PAYMENT_COMPLETED", {
+        userId,
+        amount: normalizedAmount,
+        remarks: `Withdrawal submitted ref ${txRef}`,
+      });
+    } catch (error) {
+      console.error("[WITHDRAWAL_EVENT_PUBLISH_FAILED]", error);
+    }
 
-    return { updatedWallet, txRecord, transactionRef: txRef, status: "PROCESSING" };
+    const [latestWallet, latestRecord] = await Promise.all([
+      prisma.wallet.findUnique({ where: { id: wallet.id } }),
+      prisma.walletTransaction.findUnique({ where: { reference: txRef }, include: { wallet: true } }),
+    ]);
+    if (!latestRecord) throw new Error("WITHDRAWAL_STATE_CONFLICT: Withdrawal record disappeared after submission.");
+    if (latestRecord.status === "FAILED" || latestRecord.status === "REVERSED") {
+      throw new Error(`WITHDRAWAL_IDEMPOTENCY_TERMINAL: This withdrawal already ended as ${latestRecord.status}. Use a new idempotency key for a new attempt.`);
+    }
+
+    return {
+      updatedWallet: latestWallet || initial.updatedWallet,
+      txRecord: latestRecord,
+      transactionRef: txRef,
+      status: latestRecord.status,
+      alreadyProcessed: false,
+      reconciliationRequired: String(latestRecord.description || "").includes("[MANUAL_REVIEW]"),
+    };
   }
 
   /**
