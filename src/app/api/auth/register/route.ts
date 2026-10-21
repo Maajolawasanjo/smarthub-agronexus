@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { setSessionCookie } from "@/lib/session";
+import {
+  AuthRealm,
+  VAULT_COOKIE_NAME,
+  createRealmSession,
+  setRealmSessionCookie,
+  clearSessionCookie,
+} from "@/lib/session";
 import { formatAuthenticatedUser } from "@/lib/user-dto";
 
 export async function POST(req: Request) {
@@ -63,8 +71,14 @@ export async function POST(req: Request) {
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedPhone = userPhone.trim();
     const requestedRole = String(role).toUpperCase();
-    // Public registration strictly prohibits ADMIN creation. Only FARMER or BUYER allowed.
-    const targetRole = requestedRole === "FARMER" ? "FARMER" : "BUYER";
+    // Public registration cannot create privileged accounts or silently coerce them.
+    if (requestedRole !== "FARMER" && requestedRole !== "BUYER") {
+      return NextResponse.json(
+        { error: "Public registration supports Buyer and Farmer accounts only." },
+        { status: 403 }
+      );
+    }
+    const targetRole = requestedRole as "FARMER" | "BUYER";
 
     if (targetRole === "FARMER" && (!farmName || !farmName.trim())) {
       return NextResponse.json(
@@ -142,12 +156,36 @@ export async function POST(req: Request) {
       });
     });
 
-    // 5. Establish HTTP-only session cookie
-    await setSessionCookie({
-      userId: newUser.id,
-      email: newUser.email,
-      role: newUser.role,
-    });
+    // 5. Establish a revocable realm session in PostgreSQL, just like login.
+    // The user/profile transaction has already committed; if session creation
+    // fails, explain that the account exists rather than telling clients to
+    // retry registration (which would trigger a misleading duplicate error).
+    const realm = newUser.role === "FARMER" ? AuthRealm.FARMER : AuthRealm.BUYER;
+    try {
+      const cookieStore = await cookies();
+      const vaultId = cookieStore.get(VAULT_COOKIE_NAME)?.value || `vlt_${crypto.randomUUID()}`;
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        req.headers.get("x-real-ip") || undefined;
+      const userAgent = req.headers.get("user-agent") || undefined;
+      const { rawSecret } = await createRealmSession(
+        newUser.id,
+        realm,
+        vaultId,
+        ip,
+        userAgent
+      );
+      await setRealmSessionCookie(realm, rawSecret, vaultId);
+      await clearSessionCookie();
+    } catch (sessionError) {
+      console.error("[REGISTER_SESSION_FAILED]", sessionError instanceof Error ? sessionError.name : "Unknown");
+      return NextResponse.json(
+        {
+          error: "Account created, but your session could not be started. Please sign in.",
+          accountCreated: true,
+        },
+        { status: 503 }
+      );
+    }
 
     // 6. Format standardized user payload
     const userPayload = formatAuthenticatedUser(newUser);
