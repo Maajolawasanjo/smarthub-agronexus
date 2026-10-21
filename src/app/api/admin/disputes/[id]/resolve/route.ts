@@ -83,6 +83,16 @@ export async function POST(
     const buyerUserId = order.buyer.userId;
 
     if (action === "REFUND_BUYER") {
+      if (!order.payment) {
+        return attachTraceHeaders(
+          NextResponse.json(
+            createErrorResponse("PAYMENT_NOT_SETTLED", "This order has no payment record."),
+            { status: 409 }
+          ),
+          traceCtx
+        );
+      }
+
       // A gateway/card payment must be refunded through the gateway using its provider
       // transaction ID. Never convert a card capture into wallet credit implicitly.
       const priorWalletRefund =
