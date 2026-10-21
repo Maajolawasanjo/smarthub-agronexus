@@ -24,9 +24,9 @@ The current financial endpoint hardening is being implemented on branch `fix/p0c
 The historical figures in earlier versions of this report are not release evidence for the current branch unless re-run against the exact final commit.
 
 ### Verification record — October 21, 2026
-- **Latest application code head tested:** `63068841525fd8fecb1d1ee3003c8577ca66943c`
-- **GitHub Actions:** [Run 39624929103](https://github.com/Maajolawasanjo/smarthub-agronexus/actions/runs/39624929103) — all six jobs passed, including the production Next.js build, full test suite, and required security suites.
-- **Automated suite:** 42 test files passed, 1 skipped; 268 tests passed, 7 skipped.
+- **Latest application code head tested:** `8b174a41ade04bf5f978441a67fc37ddb532cca2`
+- **GitHub Actions:** [Run 39636323205](https://github.com/Maajolawasanjo/smarthub-agronexus/actions/runs/39636323205) — all six jobs passed, including the production Next.js build, full test suite, and required security suites.
+- **Automated suite:** 42 test files passed, 1 skipped; 269 tests passed, 7 skipped.
 - **Live PostgreSQL persistence tests:** The real-database test file was skipped in this CI run (7 tests skipped); these results do not prove the latest migration was applied to staging or production.
 - **Staging/browser verification:** **Not completed.** Vercel preview creation was previously blocked by the account's daily deployment API quota (HTTP 402). The latest available branch preview was for an older commit and was in an error state. No runtime verification of the current PR head and no production deployment are claimed.
 
@@ -115,6 +115,19 @@ Implemented as `reconstructGrossFromPayout(netFarmerPayout)` in `src/lib/settlem
 - **Verification**: Covered by `__tests__/integration/multi-vendor-settlement.test.ts` (card-refund state/idempotency and no wallet-ledger credit) and `__tests__/security/p0c3-financial-endpoint-security.test.ts` (refund endpoint authorization/source checks).
 
 ---
+
+### Invariant 3A: Exclusive Financial Lifecycle for Refund vs. Escrow Release
+
+- **Rule**: A payment cannot be refunded while its escrow is being released, and escrow cannot be released while a refund is in progress or awaiting reconciliation.
+- **Persisted state machine** (`Payment.financialState`):
+  - `PENDING` → `ESCROWED` after a verified wallet or gateway payment is locked.
+  - `ESCROWED` → `SETTLING` inside the same database transaction that claims the order/seller orders and posts settlement ledger entries.
+  - `SETTLING` → `SETTLED` after a full release; partial seller-order releases return to `ESCROWED`.
+  - `ESCROWED` → `REFUNDED` atomically with wallet escrow refund, or `ESCROWED` → `REFUNDING` before a card-provider refund request.
+  - Provider uncertainty or rejection transitions to `MANUAL_REVIEW`, which blocks both release and automatic refund retries. Confirmed card refunds transition to `REFUNDED`.
+- **Concurrency control**: Release and refund operations use compare-and-set updates on the same Payment row. Only one operation can claim `ESCROWED`; the loser fails before posting wallet credits/debits. The release claim, escrow movement, seller credits, and final state transition share one database transaction.
+- **Migration**: `prisma/migrations/20261021160000_add_payment_financial_state/migration.sql` adds the state enum/column and conservatively backfills existing payments. Apply and verify it in staging before deploying this code.
+- **Regression verification**: `__tests__/integration/multi-vendor-settlement.test.ts` now tests that a failed financial-state claim prevents seller credits and escrow debits. CI passing proves the mocked transaction regression and production build; a live PostgreSQL concurrency test is still required before production approval.
 
 ## 6. Withdrawal Network Exception Invariants
 
