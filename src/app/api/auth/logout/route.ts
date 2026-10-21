@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
@@ -9,6 +10,10 @@ import {
 
 export async function POST(req: Request) {
   try {
+    if (!isTrustedMutationOrigin(req)) {
+      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
+    }
+
     const realmHeader = req.headers.get("x-auth-realm")?.toUpperCase();
     const referer = req.headers.get("referer") || "";
     const body = await req.json().catch(() => null);
