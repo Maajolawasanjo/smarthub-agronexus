@@ -473,6 +473,7 @@ model WalletTransaction {
   type        TransactionType
   amount      Decimal         @db.Decimal(10, 2)
   reference   String          @unique
+  bankAccountId String?
   description String?
   status      TxStatus        @default(SUCCESS)
   createdAt   DateTime        @default(now())
