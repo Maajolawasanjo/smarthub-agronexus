@@ -57,6 +57,16 @@ The replacement:
 - CI `p0c2-farmer-buyer-security` plus prior Phase 0-A/B/C gates and full Vitest/build must pass **on the final PR head**.
 - Mocked route security tests do **not** prove production persistence; three-role browser E2E and staging DB fixtures remain a release blocker.
 
+## CRITICAL follow-up: money-moving authorization (not addressed in this CSRF patch)
+
+A final code-path review found the following direct money-moving entry points. They must be contained **before enabling payment operations or real-money escrow**:
+
+- `POST /api/wallet/escrow` accepts any authenticated user session and a caller-provided `dbOrderId`, then calls `WalletService.executeEscrowRelease(session.userId, dbOrderId)`. In its current service implementation, the order's buyer is derived from the loaded order; the passed `session.userId` does **not** enforce ownership. Consequently, the route has no reliable order-owner authorization or financial eligibility check before release.
+- `POST /api/payments/settlement/[orderId]` accepts any session whose role is ADMIN or BUYER and invokes `executeRefund(orderId, ...)` without verifying that a Buyer owns that specific order, or that the caller is authorized to perform a direct refund. A Buyer should submit a dispute/refund request; only the authorized financial workflow may execute an actual payout reversal.
+- `POST /api/payments/flutterwave/initialize` reads a session but does not enforce its presence or order ownership before initializing payment for a provided order ID. Review authenticated intent ownership, transaction integrity and signed gateway callbacks together.
+
+These are authorization/financial domain defects, **not merely CSRF omissions**. Adding an Origin header check alone cannot resolve them. Address in a dedicated, reviewed financial-security hotfix with tests proving other buyers cannot release/refund orders, invalid fulfillment/dispute/payment states reject, retries remain idempotent and money is reconciled. Do not move real funds during tests.
+
 ## Explicit exclusions / follow-up audit obligations
 
 1. **Flutterwave initialize, verify, settlement, bank transfer callbacks:** Require distinct payment state-machine, authenticated buyer ownership, payment-intent idempotency, signed provider webhook and order-total checks. **Do not indiscriminately attach cookie browser CSRF checks to signed callbacks or server-to-server webhook handlers.** No payment enablement until Phase 5 financial gate.
