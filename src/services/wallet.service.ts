@@ -1295,8 +1295,20 @@ export class WalletService {
       if (!sellerOrder.farmerProfile?.userId) {
         throw new Error("SELLER_USER_NOT_FOUND");
       }
-      if (Number(sellerOrder.subtotal) <= 0 || Number(sellerOrder.totalAmount) <= 0) {
+
+      const commoditySubtotal = Number(sellerOrder.subtotal);
+      const shippingFee = Number(sellerOrder.shippingFee ?? 0);
+      const sellerOrderTotal = Number(sellerOrder.totalAmount);
+      if (
+        ![commoditySubtotal, shippingFee, sellerOrderTotal].every(Number.isFinite) ||
+        commoditySubtotal <= 0 ||
+        shippingFee < 0 ||
+        sellerOrderTotal <= 0
+      ) {
         throw new Error("INVALID_SELLER_ORDER_AMOUNT");
+      }
+      if (Math.abs(commoditySubtotal + shippingFee - sellerOrderTotal) > 0.01) {
+        throw new Error("SELLER_ORDER_TOTAL_MISMATCH");
       }
     }
 
