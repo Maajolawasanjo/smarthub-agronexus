@@ -2,19 +2,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({
   getSession: vi.fn(),
+  getAdminSession: vi.fn(),
   trustedOrigin: vi.fn(),
   orderFindUnique: vi.fn(),
+  orderUpdate: vi.fn(),
+  disputeFindUnique: vi.fn(),
+  disputeUpdate: vi.fn(),
+  walletFindUnique: vi.fn(),
   userFindUnique: vi.fn(),
   paymentUpdate: vi.fn(),
+  recordAuditEvent: vi.fn(),
   paymentFindUnique: vi.fn(),
   executeEscrowRelease: vi.fn(),
   settleOrderPaymentFromGateway: vi.fn(),
   handleTransferWebhook: vi.fn(),
+  executeWalletEscrowRefund: vi.fn(),
   verifyWebhookSignature: vi.fn(),
   getSettlementDTO: vi.fn(),
 }));
 
-vi.mock("@/lib/session", () => ({ getSession: mock.getSession }));
+vi.mock("@/lib/session", () => ({ getSession: mock.getSession, getAdminSession: mock.getAdminSession }));
 vi.mock("@/lib/csrf", () => ({ isTrustedMutationOrigin: mock.trustedOrigin }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -28,6 +35,7 @@ vi.mock("@/services/wallet.service", () => ({
     executeEscrowRelease: mock.executeEscrowRelease,
     settleOrderPaymentFromGateway: mock.settleOrderPaymentFromGateway,
     handleTransferWebhook: mock.handleTransferWebhook,
+    executeWalletEscrowRefund: mock.executeWalletEscrowRefund,
   },
 }));
 vi.mock("@/services/payment.service", () => ({
@@ -38,6 +46,7 @@ import { POST as initializeFlutterwave } from "@/app/api/payments/flutterwave/in
 import { POST as releaseWalletEscrow } from "@/app/api/wallet/escrow/route";
 import { POST as flutterwaveWebhook } from "@/app/api/payments/flutterwave/webhook/route";
 import { GET as getSettlement, POST as postSettlement } from "@/app/api/payments/settlement/[orderId]/route";
+import { POST as resolveDispute } from "@/app/api/admin/disputes/[id]/resolve/route";
 
 const buyerSession = { userId: "buyer_1", email: "buyer@example.test", role: "BUYER" as const };
 const orderFixture = () => ({
@@ -76,12 +85,14 @@ describe("P0-C3 financial endpoint authorization and payment binding", () => {
     vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "test-gateway-secret");
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://www.smarthubagrochain.online");
     mock.getSession.mockResolvedValue(buyerSession);
+    mock.getAdminSession.mockResolvedValue(null);
     mock.trustedOrigin.mockReturnValue(true);
     mock.orderFindUnique.mockResolvedValue(orderFixture());
     mock.userFindUnique.mockResolvedValue({ email: "buyer@example.test", fullName: "Buyer One" });
     mock.paymentUpdate.mockResolvedValue({});
     mock.paymentFindUnique.mockResolvedValue(null);
     mock.executeEscrowRelease.mockResolvedValue({ success: true });
+    mock.executeWalletEscrowRefund.mockResolvedValue({ success: true });
     mock.settleOrderPaymentFromGateway.mockResolvedValue({ status: "SUCCESS" });
     mock.handleTransferWebhook.mockResolvedValue(undefined);
     mock.verifyWebhookSignature.mockReturnValue(true);
@@ -293,5 +304,53 @@ describe("Flutterwave webhook transaction binding", () => {
     const response = await flutterwaveWebhook(webhookRequest());
     expect(response.status).toBe(200);
     expect(mock.settleOrderPaymentFromGateway).toHaveBeenCalledWith("payment_1", "AGRO-FLW-payment_1", 1250);
+  });
+});
+
+
+describe("Admin dispute refund source protection", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mock.getAdminSession.mockResolvedValue({
+      userId: "admin_1",
+      role: "ADMIN",
+      user: { id: "admin_1", email: "admin@example.test" },
+    });
+    mock.trustedOrigin.mockReturnValue(true);
+    mock.disputeFindUnique.mockResolvedValue({
+      id: "dispute_1",
+      status: "OPEN",
+      order: {
+        id: "order_1",
+        orderNumber: "AGRO-000001",
+        totalAmount: 1250,
+        buyer: { userId: "buyer_1" },
+        payment: {
+          id: "payment_1",
+          paymentMethod: "CARD",
+          paymentStatus: "PAID",
+          transactionRef: "AGRO-FLW-payment_1",
+        },
+        orderItems: [],
+      },
+    });
+  });
+
+  it("does not credit a wallet when arbitrating a card-funded refund", async () => {
+    const response = await resolveDispute(
+      request("https://www.smarthubagrochain.online/api/admin/disputes/dispute_1/resolve", "POST", {
+        action: "REFUND_BUYER",
+        notes: "Buyer claim accepted",
+      }),
+      { params: Promise.resolve({ id: "dispute_1" }) },
+    );
+    expect(response.status).toBe(409);
+    expect(mock.executeWalletEscrowRefund).not.toHaveBeenCalled();
+    expect(mock.paymentUpdate).not.toHaveBeenCalled();
+    expect(mock.orderUpdate).not.toHaveBeenCalled();
+    expect(mock.disputeUpdate).not.toHaveBeenCalled();
+    expect(mock.recordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: "CARD_REFUND_REQUIRES_MANUAL_REVIEW",
+    }));
   });
 });
