@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
-import { setSessionCookie } from "@/lib/session";
+import crypto from "crypto";
+import { createRealmSession, setRealmSessionCookie, setSessionCookie, AuthRealm, VAULT_COOKIE_NAME } from "@/lib/session";
+import { cookies } from "next/headers";
 import { formatAuthenticatedUser } from "@/lib/user-dto";
 
 export async function POST(req: Request) {
@@ -142,7 +144,16 @@ export async function POST(req: Request) {
       });
     });
 
-    // 5. Establish HTTP-only session cookie
+    // 5. Establish the same database-backed realm session used by login.
+    const realm = newUser.role === "FARMER" ? AuthRealm.FARMER : AuthRealm.BUYER;
+    const cookieStore = await cookies();
+    const vaultId = cookieStore.get(VAULT_COOKIE_NAME)?.value || `vlt_${crypto.randomUUID()}`;
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || undefined;
+    const userAgent = req.headers.get("user-agent") || undefined;
+    const { rawSecret } = await createRealmSession(newUser.id, realm, vaultId, ip, userAgent);
+    await setRealmSessionCookie(realm, rawSecret, vaultId);
+
+    // Maintain existing JWT cookie during the authentication migration.
     await setSessionCookie({
       userId: newUser.id,
       email: newUser.email,
