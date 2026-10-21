@@ -6,7 +6,11 @@ const mock = vi.hoisted(() => ({
   orderFindUnique: vi.fn(),
   userFindUnique: vi.fn(),
   paymentUpdate: vi.fn(),
+  paymentFindUnique: vi.fn(),
   executeEscrowRelease: vi.fn(),
+  settleOrderPaymentFromGateway: vi.fn(),
+  handleTransferWebhook: vi.fn(),
+  verifyWebhookSignature: vi.fn(),
   getSettlementDTO: vi.fn(),
 }));
 
@@ -16,11 +20,15 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     order: { findUnique: mock.orderFindUnique },
     user: { findUnique: mock.userFindUnique },
-    payment: { update: mock.paymentUpdate },
+    payment: { update: mock.paymentUpdate, findUnique: mock.paymentFindUnique },
   },
 }));
 vi.mock("@/services/wallet.service", () => ({
-  WalletService: { executeEscrowRelease: mock.executeEscrowRelease },
+  WalletService: {
+    executeEscrowRelease: mock.executeEscrowRelease,
+    settleOrderPaymentFromGateway: mock.settleOrderPaymentFromGateway,
+    handleTransferWebhook: mock.handleTransferWebhook,
+  },
 }));
 vi.mock("@/services/payment.service", () => ({
   getSettlementDTO: mock.getSettlementDTO,
@@ -28,6 +36,7 @@ vi.mock("@/services/payment.service", () => ({
 
 import { POST as initializeFlutterwave } from "@/app/api/payments/flutterwave/initialize/route";
 import { POST as releaseWalletEscrow } from "@/app/api/wallet/escrow/route";
+import { POST as flutterwaveWebhook } from "@/app/api/payments/flutterwave/webhook/route";
 import { GET as getSettlement, POST as postSettlement } from "@/app/api/payments/settlement/[orderId]/route";
 
 const buyerSession = { userId: "buyer_1", email: "buyer@example.test", role: "BUYER" as const };
@@ -71,7 +80,11 @@ describe("P0-C3 financial endpoint authorization and payment binding", () => {
     mock.orderFindUnique.mockResolvedValue(orderFixture());
     mock.userFindUnique.mockResolvedValue({ email: "buyer@example.test", fullName: "Buyer One" });
     mock.paymentUpdate.mockResolvedValue({});
+    mock.paymentFindUnique.mockResolvedValue(null);
     mock.executeEscrowRelease.mockResolvedValue({ success: true });
+    mock.settleOrderPaymentFromGateway.mockResolvedValue({ status: "SUCCESS" });
+    mock.handleTransferWebhook.mockResolvedValue(undefined);
+    mock.verifyWebhookSignature.mockReturnValue(true);
     mock.getSettlementDTO.mockResolvedValue({ orderId: "order_1" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
@@ -198,5 +211,87 @@ describe("P0-C3 financial endpoint authorization and payment binding", () => {
     });
     expect(response.status).toBe(409);
     expect(mock.paymentUpdate).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("Flutterwave webhook transaction binding", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "test-gateway-secret");
+    mock.verifyWebhookSignature.mockReturnValue(true);
+    mock.settleOrderPaymentFromGateway.mockResolvedValue({ status: "SUCCESS" });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: "success",
+        data: { status: "successful", tx_ref: "AGRO-FLW-payment_1", amount: 1250, currency: "NGN" },
+      }),
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  function webhookRequest(amount = 1250) {
+    return new Request("https://www.smarthubagrochain.online/api/payments/flutterwave/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "verif-hash": "signed-test" },
+      body: JSON.stringify({
+        event: "charge.completed",
+        data: {
+          id: 123456,
+          status: "successful",
+          tx_ref: "AGRO-FLW-payment_1",
+          amount,
+          currency: "NGN",
+          meta: { userId: "buyer_1", orderId: "order_1", paymentId: "payment_1" },
+        },
+      }),
+    });
+  }
+
+  it("does not credit a wallet when a signed charge has no stored payment intent", async () => {
+    mock.paymentFindUnique.mockResolvedValue(null);
+    const response = await flutterwaveWebhook(webhookRequest());
+    expect(response.status).toBe(404);
+    expect(mock.settleOrderPaymentFromGateway).not.toHaveBeenCalled();
+  });
+
+  it("rejects an amount mismatch against the persisted payment before settlement", async () => {
+    mock.paymentFindUnique.mockResolvedValue({
+      id: "payment_1",
+      orderId: "order_1",
+      amount: 1250,
+      paymentMethod: "CARD",
+      paymentStatus: "PENDING",
+      transactionRef: "AGRO-FLW-payment_1",
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: "success",
+        data: { status: "successful", tx_ref: "AGRO-FLW-payment_1", amount: 1, currency: "NGN" },
+      }),
+    }));
+    const response = await flutterwaveWebhook(webhookRequest(1));
+    expect(response.status).toBe(400);
+    expect(mock.settleOrderPaymentFromGateway).not.toHaveBeenCalled();
+  });
+
+  it("settles only the exact payment matching the verified transaction reference and amount", async () => {
+    mock.paymentFindUnique.mockResolvedValue({
+      id: "payment_1",
+      orderId: "order_1",
+      amount: 1250,
+      paymentMethod: "CARD",
+      paymentStatus: "PENDING",
+      transactionRef: "AGRO-FLW-payment_1",
+    });
+    const response = await flutterwaveWebhook(webhookRequest());
+    expect(response.status).toBe(200);
+    expect(mock.settleOrderPaymentFromGateway).toHaveBeenCalledWith("payment_1", "AGRO-FLW-payment_1", 1250);
   });
 });
