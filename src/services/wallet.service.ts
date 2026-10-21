@@ -237,6 +237,78 @@ export class WalletService {
   }
 
   /**
+   * Settle a previously persisted Flutterwave wallet-funding intent.
+   * The intent's unique reference, owner, amount and PENDING state are authoritative;
+   * webhook metadata alone can never create a wallet credit.
+   */
+  public static async settleGatewayWalletDeposit(
+    reference: string,
+    paidAmount: number,
+    expectedUserId: string
+  ) {
+    const result = await prisma.$transaction(async (tx) => {
+      const intent = await tx.walletTransaction.findUnique({
+        where: { reference },
+        include: { wallet: true },
+      });
+
+      if (!intent || intent.type !== "DEPOSIT") {
+        throw new Error("WALLET_FUNDING_INTENT_NOT_FOUND");
+      }
+      if (intent.wallet.userId !== expectedUserId) {
+        throw new Error("WALLET_FUNDING_OWNER_MISMATCH");
+      }
+      if (Math.abs(Number(intent.amount) - paidAmount) > 0.01) {
+        throw new Error("WALLET_FUNDING_AMOUNT_MISMATCH");
+      }
+      if (intent.status === "SUCCESS") {
+        return { status: "ALREADY_SETTLED" as const, transaction: intent };
+      }
+      if (intent.status !== "PENDING") {
+        throw new Error("WALLET_FUNDING_INTENT_NOT_PENDING");
+      }
+
+      const claimed = await tx.walletTransaction.updateMany({
+        where: { id: intent.id, type: "DEPOSIT", status: "PENDING" },
+        data: {
+          status: "SUCCESS",
+          description: `Wallet funded through verified Flutterwave transaction (${reference})`,
+        },
+      });
+
+      if (claimed.count !== 1) {
+        const current = await tx.walletTransaction.findUnique({ where: { reference } });
+        if (current?.status === "SUCCESS") {
+          return { status: "ALREADY_SETTLED" as const, transaction: current };
+        }
+        throw new Error("WALLET_FUNDING_INTENT_STATE_CONFLICT");
+      }
+
+      const updatedWallet = await tx.wallet.update({
+        where: { id: intent.walletId },
+        data: { balance: { increment: paidAmount } },
+      });
+
+      const updatedTransaction = await tx.walletTransaction.findUnique({ where: { reference } });
+      return {
+        status: "SUCCESS" as const,
+        wallet: updatedWallet,
+        transaction: updatedTransaction,
+      };
+    });
+
+    if (result.status === "SUCCESS") {
+      await publishAgroEvent("PAYMENT_COMPLETED", {
+        userId: expectedUserId,
+        amount: paidAmount,
+        remarks: `Verified Flutterwave wallet funding ref ${reference}`,
+      });
+    }
+
+    return result;
+  }
+
+  /**
    * Executes atomic wallet payment for Checkout (Debits wallet & locks escrow)
    * Ledger: ESCROW_LOCK — balance decrements, escrow increments atomically.
    */
