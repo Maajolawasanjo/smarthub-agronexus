@@ -5,6 +5,10 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+# Safe, intentionally unreachable placeholder for Prisma client initialization and
+# Next.js build-time route discovery. Never use Production DATABASE_URL in CI.
+env:
+  DATABASE_URL: "postgresql://smarthub_ci:placeholder@127.0.0.1:5432/smarthub_ci"
 
 jobs:
   build-and-test:
