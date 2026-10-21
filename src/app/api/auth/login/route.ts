@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   createRealmSession,
   setRealmSessionCookie,
-  setSessionCookie,
+  clearSessionCookie,
   isRealmAllowed,
   AuthRealm,
   VAULT_COOKIE_NAME,
@@ -131,12 +131,9 @@ export async function POST(req: Request) {
     // 6. Set only the target realm cookie and ensure vault ID cookie exists
     await setRealmSessionCookie(targetRealm, rawSecret, vaultId);
 
-    // 7. Maintain legacy cookie for backward compatibility during rollout
-    await setSessionCookie({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    // 7. Remove any older, non-revocable JWT credential.
+    // Realm sessions are the only authorization authority.
+    await clearSessionCookie();
 
     // 8. Format standardized user payload
     const userPayload = formatAuthenticatedUser(user);
