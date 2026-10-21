@@ -63,3 +63,29 @@ jobs:
 
       - name: Run KYC authorization regression suite
         run: npx vitest run __tests__/security/p0a-kyc-admin-authorization.test.ts
+
+  p0b-revocable-sessions:
+    name: Database-backed session security (required verification)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint session migration files (fail closed)
+        run: npx eslint src/lib/session.ts src/app/api/auth/login/route.ts src/app/api/auth/register/route.ts __tests__/security/p0b-revocable-realm-sessions.test.ts __tests__/security/p0b-auth-flow-regression.test.ts
+
+      - name: Run session and auth regression suites
+        run: npx vitest run __tests__/security/p0b-revocable-realm-sessions.test.ts __tests__/security/p0b-auth-flow-regression.test.ts
