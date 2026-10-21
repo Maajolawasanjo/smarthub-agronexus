@@ -539,6 +539,11 @@ export class WalletService {
         const message = error instanceof Error ? error.message : "Unknown network/response error";
         const latest = await markOutcomeUnknown(message);
         const latestWallet = await prisma.wallet.findUnique({ where: { id: wallet.id } });
+        await publishAgroEvent("WITHDRAWAL_SUBMITTED", {
+          userId,
+          amount: normalizedAmount,
+          remarks: `${txRef} pending reconciliation`,
+        }).catch((eventError) => console.error("[WITHDRAWAL_EVENT_PUBLISH_FAILED]", eventError));
         return {
           updatedWallet: latestWallet || initial.updatedWallet,
           txRecord: latest,
@@ -577,6 +582,11 @@ export class WalletService {
         const reason = `Ambiguous provider response (HTTP ${flwRes.status}; status ${String(flwData?.status || "missing")})`;
         const latest = await markOutcomeUnknown(reason);
         const latestWallet = await prisma.wallet.findUnique({ where: { id: wallet.id } });
+        await publishAgroEvent("WITHDRAWAL_SUBMITTED", {
+          userId,
+          amount: normalizedAmount,
+          remarks: `${txRef} pending reconciliation`,
+        }).catch((eventError) => console.error("[WITHDRAWAL_EVENT_PUBLISH_FAILED]", eventError));
         return {
           updatedWallet: latestWallet || initial.updatedWallet,
           txRecord: latest,
@@ -603,10 +613,10 @@ export class WalletService {
 
     // Notifications must not turn a persisted transfer into a failed HTTP response.
     try {
-      await publishAgroEvent("PAYMENT_COMPLETED", {
+      await publishAgroEvent("WITHDRAWAL_SUBMITTED", {
         userId,
         amount: normalizedAmount,
-        remarks: `Withdrawal submitted ref ${txRef}`,
+        remarks: txRef,
       });
     } catch (error) {
       console.error("[WITHDRAWAL_EVENT_PUBLISH_FAILED]", error);
