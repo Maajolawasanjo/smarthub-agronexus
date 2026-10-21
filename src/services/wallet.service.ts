@@ -1,6 +1,6 @@
 import crypto from "crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { config } from "@/lib/config";
 import { evaluateTrustPolicy } from "@/lib/trust";
 import { publishAgroEvent } from "@/lib/events";
 import { calculateSettlement } from "@/lib/settlement";
@@ -381,7 +381,10 @@ export class WalletService {
     // client key is never stored or exposed. A DB unique constraint makes concurrent
     // retries converge on one withdrawal record.
     const txRef = `WD-${crypto.createHash("sha256").update(`${userId}:${requestKey}`).digest("hex").slice(0, 32).toUpperCase()}`;
-    const getCurrentResult = async (record: any, alreadyProcessed = true) => {
+    const getCurrentResult = async (
+      record: Prisma.WalletTransactionGetPayload<{ include: { wallet: true } }>,
+      alreadyProcessed = true
+    ) => {
       if (
         record.type !== "WITHDRAWAL" ||
         record.walletId !== wallet.id ||
@@ -418,7 +421,10 @@ export class WalletService {
     }
 
     const bankDesc = `${bankAccount.bankName} (${bankAccount.accountNumber})`;
-    let initial: { updatedWallet: any; txRecord: any };
+    let initial: {
+      updatedWallet: Awaited<ReturnType<typeof this.getOrCreateWallet>>;
+      txRecord: Prisma.WalletTransactionGetPayload<{}>;
+    };
     try {
       initial = await prisma.$transaction(async (tx) => {
         // Compare-and-set is the authoritative funds check. A prior balance read is
@@ -517,7 +523,11 @@ export class WalletService {
     const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
     if (secretKey) {
       let flwRes: Response;
-      let flwData: any;
+      let flwData: {
+        status?: string;
+        message?: string;
+        data?: { id?: string | number };
+      };
       try {
         flwRes = await fetch("https://api.flutterwave.com/v3/transfers", {
           method: "POST",
@@ -534,7 +544,7 @@ export class WalletService {
             reference: txRef,
           }),
         });
-        flwData = await flwRes.json();
+        flwData = await flwRes.json() as typeof flwData;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown network/response error";
         const latest = await markOutcomeUnknown(message);
