@@ -1171,15 +1171,34 @@ export class WalletService {
         throw new Error(`PAYMENT_NOT_FOUND: No payment record found for "${orderIdOrPaymentId}".`);
       }
 
-      // Idempotency: If already paid, return safely without mutating balances again
+      // The persisted payment intent is authoritative. A caller may not use an order ID
+      // or payment ID to bind a different gateway transaction to this order.
+      if (payment.transactionRef !== transactionRef) {
+        throw new Error("TRANSACTION_REFERENCE_MISMATCH");
+      }
+
+      // Idempotency is safe only for the same verified gateway reference.
       if (payment.paymentStatus === "PAID") {
         return { status: "ALREADY_SETTLED", payment };
       }
+      if (payment.paymentStatus !== "PENDING") {
+        throw new Error(`PAYMENT_NOT_PENDING: Current payment state is ${payment.paymentStatus}.`);
+      }
+      if (payment.paymentMethod !== "CARD") {
+        throw new Error("PAYMENT_METHOD_MISMATCH");
+      }
+      if (payment.order.status !== "PENDING") {
+        throw new Error(`ORDER_NOT_PAYABLE: Current order state is ${payment.order.status}.`);
+      }
 
       const expectedAmount = Number(payment.amount);
-      if (Math.abs(paidAmount - expectedAmount) > 0.01) {
+      if (
+        !Number.isFinite(paidAmount) ||
+        Math.abs(paidAmount - expectedAmount) > 0.01 ||
+        Math.abs(Number(payment.order.totalAmount) - expectedAmount) > 0.01
+      ) {
         throw new Error(
-          `AMOUNT_MISMATCH: Gateway paid amount (₦${paidAmount}) does not match expected order amount (₦${expectedAmount}).`
+          `AMOUNT_MISMATCH: Gateway paid amount (₦${paidAmount}) does not match the persisted order/payment amount (₦${expectedAmount}).`
         );
       }
 
@@ -1195,21 +1214,33 @@ export class WalletService {
         });
       }
 
-      // 3. Mark Payment as PAID
-      const updatedPayment = await tx.payment.update({
-        where: { id: payment.id },
-        data: {
-          paymentStatus: "PAID",
+      // 3. Claim the pending payment and order with compare-and-set guards. Concurrent
+      // webhook retries must not both increment the escrow balance.
+      const paymentClaim = await tx.payment.updateMany({
+        where: {
+          id: payment.id,
+          paymentStatus: "PENDING",
           transactionRef,
-          paidAt: new Date(),
         },
+        data: { paymentStatus: "PAID", paidAt: new Date() },
       });
+      if (paymentClaim.count !== 1) {
+        const current = await tx.payment.findUnique({ where: { id: payment.id } });
+        if (current?.paymentStatus === "PAID" && current.transactionRef === transactionRef) {
+          return { status: "ALREADY_SETTLED", payment: current };
+        }
+        throw new Error("PAYMENT_STATE_CONFLICT");
+      }
 
-      // 4. Confirm Order status
-      await tx.order.update({
-        where: { id: payment.orderId },
+      const orderClaim = await tx.order.updateMany({
+        where: { id: payment.orderId, status: "PENDING" },
         data: { status: "CONFIRMED" },
       });
+      if (orderClaim.count !== 1) {
+        throw new Error("ORDER_STATE_CONFLICT");
+      }
+
+      const updatedPayment = await tx.payment.findUnique({ where: { id: payment.id } });
 
       // 5. Lock funds in Buyer Escrow
       await tx.wallet.update({
