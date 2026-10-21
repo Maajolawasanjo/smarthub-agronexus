@@ -1,27 +1,26 @@
 # SmartHub AgroChain — P0/P1 Financial Integrity Remediation Verification Report
 
-**Document Version**: 1.0.0  
-**Date**: September 12, 2026  
+**Document Version**: 1.1.0  
+**Date**: October 21, 2026  
 **Repository**: `Maajolawasanjo/smarthub-agronexus`  
-**Target Environment**: Production / Staging  
-**Verification Verdict**: **REMEDIATION VERIFIED — FINANCIAL INTEGRITY OPERATIONAL**
+**Target Environment**: Staging first; production remains gated  
+**Verification Verdict**: **CODE REMEDIATION UNDER CI — NOT APPROVED FOR PRODUCTION**
 
 ---
 
 ## 1. Executive Summary & Verification Attestation
 
-Following the forensic findings documented in `docs/POST_REMEDIATION_FORENSIC_AUDIT.md`, a comprehensive remediation pass was executed across the SmartHub AgroChain codebase to resolve all critical (P0) and high-priority (P1) financial integrity defects.
+This document preserves the financial invariants and historical audit evidence established in earlier remediation work. Its prior production-readiness attestation is superseded: historical test counts and live-database results do not, by themselves, verify the current security branch.
 
-Every fix was implemented directly in production source files, validated against strict accounting invariants, and verified using automated test suites, static TypeScript type compilation, and real PostgreSQL database queries against the live Supabase instance.
+The current financial endpoint hardening is being implemented on branch `fix/p0c3-financial-endpoint-security-20261021` and pull request [#9](https://github.com/Maajolawasanjo/smarthub-agronexus/pull/9). The changes include server-derived order ownership, strict persisted payment-intent matching, source-aware refunds, an explicit provider-refund lifecycle, withdrawal idempotency, and regression coverage for authorization and ledger invariants.
 
-### Key Verification Metrics:
-- **Commercial Formulas Unified**: 4 conflicting formulas consolidated into 1 canonical settlement engine (`src/lib/settlement.ts`).
-- **Commission Base Enforced**: Commodity merchandise subtotal only (`SellerOrder.subtotal`). Shipping fees (`shippingFee`) are 100% pass-through and exempt from platform commission.
-- **Card Refund Semantics Hardened**: Zero unauthorized minting of wallet balances on gateway refund failures; `REQUIRES_MANUAL_REVIEW` failure ledger records enforced.
-- **Withdrawal Safety Secured**: Atomic rollback of `pendingWithdrawal` to available `balance` on gateway network exceptions.
-- **Tautological Test Suite Purged**: 71 synthetic inline closure tests eliminated and replaced with genuine integration test suites.
-- **Automated Test Results**: **27 test files passed, 1 skipped (gated live DB), 119 tests passing, 0 failures**.
-- **Live PostgreSQL Persistence**: **7/7 tests passed** against live Supabase PostgreSQL (`aws-0-eu-west-1.pooler.supabase.com:5432`).
+### Release gates for this branch
+- Required GitHub Actions jobs must pass on the final PR head, including the production Next.js build and full unit/integration suite.
+- The new Prisma migration for provider refund state must be applied and verified in staging before deploying application code that reads those fields.
+- Staging tests must exercise buyer, farmer, and admin flows against the migrated database, including checkout/webhook settlement, card and wallet refunds, escrow release, and withdrawal retry/reconciliation.
+- Production deployment and production smoke tests must be independently confirmed; no deployment is asserted by this report.
+
+The historical figures in earlier versions of this report are not release evidence for the current branch unless re-run against the exact final commit.
 
 ---
 
@@ -205,6 +204,6 @@ npx tsc --noEmit
 
 ## 10. Conclusion & Deployment Recommendation
 
-All P0 and P1 financial integrity defects identified in the forensic audit have been remediated, verified, and locked in by automated regression tests. The financial foundation of SmartHub AgroChain is mathematically sound, compliant with Nigerian statutory VAT laws, resilient against payment gateway failures, and verified against production database storage.
+The settlement and ledger rules documented above remain the required financial invariants. The current PR adds endpoint authorization and gateway-refund lifecycle controls, but code-level CI is only one part of verification. Until the final CI run is green and the migration plus browser-driven end-to-end checks pass in staging, production readiness is unproven.
 
-**Recommendation**: **APPROVED FOR PRODUCTION DEPLOYMENT**.
+**Recommendation**: **HOLD PRODUCTION DEPLOYMENT pending final CI, staging migration, and end-to-end verification**.
