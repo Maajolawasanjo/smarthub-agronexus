@@ -261,9 +261,11 @@ export class AdminOrderService {
     switch (action) {
       case "CANCEL":
       case "REFUND_ESCROW": {
-        // Direct cancellation is limited to the pre-fulfillment window. Once
-        // preparation or logistics begins, use formal dispute arbitration instead of
-        // restoring stock for produce that may already be in transit or delivered.
+        // Preserve explicit terminal-state errors, then restrict direct cancellation
+        // to the pre-fulfillment window. Later-stage orders require formal arbitration.
+        if (order.status === "COMPLETED" || order.status === "CANCELLED") {
+          throw new Error(`Cannot cancel order in ${order.status} state.`);
+        }
         if (!["PENDING", "CONFIRMED"].includes(order.status)) {
           throw new Error(
             `Only PENDING or CONFIRMED orders may be cancelled directly; use the formal dispute workflow for ${order.status} orders.`
