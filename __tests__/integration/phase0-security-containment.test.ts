@@ -153,7 +153,7 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       mockSession.mockResolvedValue(null);
       const req1 = new Request("http://localhost:3000/api/admin/products/p1/approve", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
         body: JSON.stringify({ isApproved: true }),
       });
       const res1 = await PUT(req1, { params: Promise.resolve({ id: "p1" }) });
