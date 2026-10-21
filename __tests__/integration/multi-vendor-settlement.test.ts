@@ -254,6 +254,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         },
       } as any);
       vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+      vi.spyOn(prisma.payment, "updateMany").mockResolvedValue({ count: 1 } as any);
       vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
       (vi.spyOn(prisma.wallet, "update") as any).mockImplementation(async ({ data }: any) => {
         // Track any balance increments — these must NOT happen on failed card refund
