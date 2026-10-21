@@ -397,6 +397,7 @@ enum RefundStatus {
 enum PaymentFinancialState {
   PENDING
   ESCROWED
+  SETTLING
   SETTLED
   REFUNDING
   REFUNDED
