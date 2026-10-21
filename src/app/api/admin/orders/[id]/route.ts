@@ -1,3 +1,4 @@
+import { isTrustedMutationOrigin } from "@/lib/csrf";
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/session";
 import { AdminOrderService, AdminOrderAction } from "@/services/admin-order.service";
@@ -53,13 +54,9 @@ export async function PUT(
       return attachTraceHeaders(res, traceCtx);
     }
 
-    // CSRF origin validation for state-changing order action
-    const origin = req.headers.get("origin");
-    const referer = req.headers.get("referer");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const expectedOrigin = new URL(appUrl).origin;
-    if ((origin && origin !== expectedOrigin) || (referer && !referer.startsWith(expectedOrigin))) {
-      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Cross-origin request forbidden."), { status: 403 });
+    // Enforce the same deployment-pinned CSRF policy on every admin mutation.
+    if (!isTrustedMutationOrigin(req)) {
+      const res = NextResponse.json(createErrorResponse("FORBIDDEN", "Untrusted mutation origin."), { status: 403 });
       return attachTraceHeaders(res, traceCtx);
     }
 
