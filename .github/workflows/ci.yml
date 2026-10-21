@@ -166,3 +166,46 @@ jobs:
 
       - name: Run financial authorization and ledger regression suites
         run: npx vitest run __tests__/security/p0c3-financial-endpoint-security.test.ts __tests__/integration/multi-vendor-settlement.test.ts __tests__/integration/wallet-consolidation.test.ts __tests__/integration/auto-complete-escrow-release.test.ts __tests__/security/p0c3-admin-financial-actions.test.ts __tests__/security/p0c3-withdrawal-idempotency.test.ts __tests__/security/p0c3-wallet-checkout-race.test.ts
+
+  p0c3-financial-state-postgres:
+    name: PostgreSQL refund-vs-release concurrency verification (required verification)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smarthub_ci
+          POSTGRES_PASSWORD: smarthub_ci
+          POSTGRES_DB: smarthub_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smarthub_ci -d smarthub_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://smarthub_ci:smarthub_ci@localhost:5432/smarthub_ci
+      REAL_DB_TESTS: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Initialize isolated PostgreSQL schema
+        run: npx prisma db push --force-reset --accept-data-loss
+
+      - name: Verify concurrent refund and release claims against PostgreSQL
+        run: npx vitest run __tests__/integration/financial-state-postgres.test.ts
