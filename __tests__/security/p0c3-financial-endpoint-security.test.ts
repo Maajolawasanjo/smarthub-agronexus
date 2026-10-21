@@ -267,6 +267,21 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
       expect(mock.orderFindUnique).not.toHaveBeenCalled();
     });
 
+    it("freezes escrow when an active dispute exists", async () => {
+      mock.orderFindUnique.mockResolvedValue(orderRecord({
+        status: "DELIVERED",
+        payment: { paymentStatus: "PAID" },
+        disputes: [{ id: "dispute-1", status: "OPEN" }],
+      }));
+
+      const res = await releaseWalletEscrow(
+        request("/api/wallet/escrow", "POST", { dbOrderId: "order-1" })
+      );
+
+      expect(res.status).toBe(409);
+      expect(mock.executeEscrowRelease).not.toHaveBeenCalled();
+    });
+
     it("releases only after owner, paid status, delivery and dispute checks pass", async () => {
       mock.orderFindUnique.mockResolvedValue(orderRecord({
         status: "DELIVERED",
@@ -381,6 +396,40 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
       expect(fetchMock).not.toHaveBeenCalled();
       expect(mock.settleOrderPaymentFromGateway).not.toHaveBeenCalled();
       expect(mock.settleGatewayWalletDeposit).not.toHaveBeenCalled();
+    });
+
+    it("fails closed when the Flutterwave API key is missing", async () => {
+      vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "");
+
+      const res = await flutterwaveWebhook(request(
+        "/api/payments/flutterwave/webhook",
+        "POST",
+        gatewayVerifyPayload("AGRO-FLW-no-secret"),
+        { "verif-hash": "test-webhook-hash" }
+      ));
+
+      expect(res.status).toBe(503);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(mock.settleOrderPaymentFromGateway).not.toHaveBeenCalled();
+    });
+
+    it("rejects an amount mismatch even when the tx_ref is correct", async () => {
+      const txRef = "AGRO-FLW-amount-mismatch";
+      mock.paymentFindUnique.mockResolvedValue({ id: "payment-1", orderId: "order-1" });
+      fetchMock.mockResolvedValue(gatewayResponse({
+        status: "success",
+        data: { id: 98765, status: "successful", tx_ref: txRef, amount: 1000, currency: "NGN" },
+      }));
+
+      const res = await flutterwaveWebhook(request(
+        "/api/payments/flutterwave/webhook",
+        "POST",
+        gatewayVerifyPayload(txRef),
+        { "verif-hash": "test-webhook-hash" }
+      ));
+
+      expect(res.status).toBe(400);
+      expect(mock.settleOrderPaymentFromGateway).not.toHaveBeenCalled();
     });
 
     it("rejects verified data whose transaction reference differs from the signed callback", async () => {
