@@ -266,21 +266,37 @@ export class AdminOrderService {
           throw new Error(`Cannot cancel order in ${order.status} state.`);
         }
 
-        // Only wallet-paid orders can be refunded from internal escrow. Card/bank
-        // payments require a provider-backed refund and must not be credited as wallet funds.
+        // Refund paid orders through the original payment source before cancelling.
         if (order.payment?.paymentStatus === "PAID") {
-          if (order.payment.paymentMethod !== "WALLET") {
-            throw new Error("GATEWAY_REFUND_REQUIRED: Resolve the provider refund before cancelling this paid order.");
+          if (order.payment.paymentMethod === "WALLET") {
+            await WalletService.executeWalletEscrowRefund(buyerUserId, Number(order.totalAmount), order.id);
+          } else if (order.payment.paymentMethod === "CARD" && order.payment.gatewayTransactionId) {
+            await WalletService.executeGatewayCardRefund(
+              buyerUserId,
+              order.id,
+              order.payment.gatewayTransactionId,
+              Number(order.totalAmount)
+            );
+          } else {
+            throw new Error("GATEWAY_REFUND_REQUIRED: A verified provider transaction ID is required before cancelling this paid order.");
           }
-          await WalletService.executeWalletEscrowRefund(buyerUserId, Number(order.totalAmount), order.id);
         }
 
-        // Transactional update of order and seller orders
+        // Transactional update of order, payment and seller orders
         const updated = await prisma.$transaction(async (tx) => {
           const updatedOrder = await tx.order.update({
             where: { id: order.id },
             data: { status: "CANCELLED" },
           });
+
+          if (order.payment) {
+            await tx.payment.update({
+              where: { id: order.payment.id },
+              data: {
+                paymentStatus: order.payment.paymentStatus === "PAID" ? "REFUNDED" : "FAILED",
+              },
+            });
+          }
 
           await tx.sellerOrder.updateMany({
             where: { orderId: order.id },
