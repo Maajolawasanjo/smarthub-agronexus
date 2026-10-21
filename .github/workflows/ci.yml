@@ -162,7 +162,7 @@ jobs:
         run: npx prisma generate
 
       - name: Lint financial security implementation and tests
-        run: npx eslint src/app/api/payments/flutterwave/initialize/route.ts src/app/api/payments/flutterwave/webhook/route.ts src/app/api/payments/flutterwave/verify/route.ts src/app/api/wallet/escrow/route.ts 'src/app/api/orders/[id]/release-escrow/route.ts' 'src/app/api/payments/settlement/[orderId]/route.ts' src/services/wallet.service.ts src/services/payment.service.ts src/jobs/index.ts __tests__/security/p0c3-financial-endpoint-security.test.ts __tests__/integration/auto-complete-escrow-release.test.ts
+        run: npx eslint src/app/api/payments/flutterwave/initialize/route.ts src/app/api/payments/flutterwave/webhook/route.ts src/app/api/payments/flutterwave/verify/route.ts src/app/api/wallet/escrow/route.ts 'src/app/api/orders/[id]/release-escrow/route.ts' 'src/app/api/payments/settlement/[orderId]/route.ts' src/services/wallet.service.ts src/services/payment.service.ts src/services/admin-order.service.ts src/jobs/index.ts __tests__/security/p0c3-financial-endpoint-security.test.ts __tests__/security/p0c3-admin-financial-actions.test.ts __tests__/integration/auto-complete-escrow-release.test.ts
 
       - name: Run financial authorization and ledger regression suites
-        run: npx vitest run __tests__/security/p0c3-financial-endpoint-security.test.ts __tests__/integration/multi-vendor-settlement.test.ts __tests__/integration/wallet-consolidation.test.ts __tests__/integration/auto-complete-escrow-release.test.ts
+        run: npx vitest run __tests__/security/p0c3-financial-endpoint-security.test.ts __tests__/integration/multi-vendor-settlement.test.ts __tests__/integration/wallet-consolidation.test.ts __tests__/integration/auto-complete-escrow-release.test.ts __tests__/security/p0c3-admin-financial-actions.test.ts
