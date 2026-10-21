@@ -169,10 +169,23 @@ export async function POST(
     );
     return attachTraceHeaders(res, traceCtx);
   } catch (err: any) {
-    console.error("Error in POST /api/orders/[id]/cancel:", err);
+    const message = err?.message || "Failed to cancel order";
+    const conflict = [
+      "ORDER_STATE_CONFLICT",
+      "INVENTORY_RESTORE_CONFLICT",
+      "INSUFFICIENT_ESCROW",
+      "ESCROW_NOT_FUNDED",
+      "REFUND_AMOUNT_MISMATCH",
+      "REFUND_ORDER_OWNER_MISMATCH",
+      "PAYMENT_SOURCE_MISMATCH",
+      "GATEWAY_REFUND_PAYMENT_MISMATCH",
+      "CARD_REFUND_FAILED",
+    ].some((code) => String(message).includes(code));
+    const status = conflict ? 409 : 500;
+    console.error("Error in POST /api/orders/[id]/cancel:", { message, status });
     const res = NextResponse.json(
-      createErrorResponse("CANCEL_FAILED", err.message || "Failed to cancel order"),
-      { status: 500 }
+      createErrorResponse(conflict ? "CANCEL_CONFLICT" : "CANCEL_FAILED", message),
+      { status }
     );
     return attachTraceHeaders(res, traceCtx);
   }
