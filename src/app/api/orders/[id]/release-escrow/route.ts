@@ -7,7 +7,7 @@ import { createSuccessResponse, createErrorResponse } from "@/lib/api-response";
 import { createTraceContext, attachTraceHeaders } from "@/lib/tracing";
 import { recordAuditEvent } from "@/lib/audit";
 
-// POST /api/orders/[id]/release-escrow — Release escrow funds to farmer upon buyer delivery confirmation
+// POST /api/orders/[id]/release-escrow — Buyer confirms delivery and releases funded escrow.
 export async function POST(
   req: Request,
   context: { params: Promise<{ id: string }> }
@@ -16,47 +16,63 @@ export async function POST(
   try {
     const session = await getSession();
     if (!session?.userId) {
-      const res = NextResponse.json(
-        createErrorResponse("UNAUTHORIZED", "Authentication required to release escrow."),
-        { status: 401 }
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("UNAUTHORIZED", "Authentication required to release escrow."), { status: 401 }),
+        traceCtx
       );
-      return attachTraceHeaders(res, traceCtx);
     }
-
+    if (session.role !== "BUYER") {
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("FORBIDDEN", "Only the buyer can confirm delivery and release escrow."), { status: 403 }),
+        traceCtx
+      );
+    }
     if (!isTrustedMutationOrigin(req)) {
-      return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("FORBIDDEN", "Untrusted mutation origin."), { status: 403 }),
+        traceCtx
+      );
     }
 
     const { id: orderId } = await context.params;
-
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { buyer: true },
+      include: {
+        buyer: true,
+        payment: true,
+        disputes: { where: { status: { in: ["OPEN", "UNDER_REVIEW"] } } },
+      },
     });
 
     if (!order) {
-      const res = NextResponse.json(
-        createErrorResponse("NOT_FOUND", "Order not found."),
-        { status: 404 }
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("NOT_FOUND", "Order not found."), { status: 404 }),
+        traceCtx
       );
-      return attachTraceHeaders(res, traceCtx);
     }
-
-    // Verify buyer owns this order or user is admin
-    if (order.buyer.userId !== session.userId && session.role !== "ADMIN") {
-      const res = NextResponse.json(
-        createErrorResponse("FORBIDDEN", "Only the buyer who placed the order can confirm delivery & release escrow."),
-        { status: 403 }
+    if (order.buyer.userId !== session.userId) {
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("FORBIDDEN", "You are not authorized to release this order's escrow."), { status: 403 }),
+        traceCtx
       );
-      return attachTraceHeaders(res, traceCtx);
     }
-
-    if (order.status === "COMPLETED") {
-      const res = NextResponse.json(
-        createErrorResponse("ALREADY_RELEASED", "Escrow has already been released for this order."),
-        { status: 400 }
+    if (order.status !== "DELIVERED") {
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("ORDER_NOT_DELIVERED", "Escrow can only be released after delivery is confirmed."), { status: 409 }),
+        traceCtx
       );
-      return attachTraceHeaders(res, traceCtx);
+    }
+    if (order.payment?.paymentStatus !== "PAID") {
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("PAYMENT_NOT_SETTLED", "This order has no settled payment to release."), { status: 409 }),
+        traceCtx
+      );
+    }
+    if ((order.disputes?.length || 0) > 0) {
+      return attachTraceHeaders(
+        NextResponse.json(createErrorResponse("ACTIVE_DISPUTE", "Escrow is frozen while an order dispute is active."), { status: 409 }),
+        traceCtx
+      );
     }
 
     const result = await WalletService.executeEscrowRelease(session.userId, orderId);
@@ -68,25 +84,51 @@ export async function POST(
       actorId: session.userId,
       actorEmail: session.email,
       resourceId: order.id,
-      metadata: { orderNumber: order.orderNumber, amount: Number(order.totalAmount) },
+      metadata: {
+        orderNumber: order.orderNumber,
+        amount: Number(order.totalAmount),
+        settledSellerOrdersCount: "settledSellerOrdersCount" in result ? result.settledSellerOrdersCount : result.settledCount,
+      },
       req,
     });
 
-    const res = NextResponse.json(
-      createSuccessResponse({
+    return attachTraceHeaders(
+      NextResponse.json(createSuccessResponse({
         orderId: order.id,
         orderNumber: order.orderNumber,
         status: "COMPLETED",
-        message: "Delivery confirmed! Escrow funds released to farmer wallet (minus 5.0% platform commission).",
-      })
+        message: "Delivery confirmed and escrow release processed.",
+      })),
+      traceCtx
     );
-    return attachTraceHeaders(res, traceCtx);
-  } catch (err: any) {
-    console.error("Error in POST /api/orders/[id]/release-escrow:", err);
-    const res = NextResponse.json(
-      createErrorResponse("ESCROW_RELEASE_FAILED", err.message || "Failed to release escrow"),
-      { status: 500 }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to release escrow.";
+    const conflictCodes = [
+      "ORDER_NOT_DELIVERED",
+      "PAYMENT_NOT_SETTLED",
+      "ACTIVE_DISPUTE_BLOCKS_RELEASE",
+      "ESCROW_NOT_FUNDED",
+      "INSUFFICIENT_ESCROW",
+      "ESCROW_ALREADY_RELEASED",
+      "SELLER_ORDER_NOT_DELIVERED",
+      "SELLER_ORDER_TOTAL_MISMATCH",
+      "PAYMENT_AMOUNT_MISMATCH",
+      "INVALID_ORDER_AMOUNT",
+      "SELLER_GROSS_EXCEEDS_ORDER_AMOUNT",
+      "ORDER_OWNER_MISMATCH",
+      "ESCROW_LOCK_REFERENCE_MISSING",
+      "NO_SELLERS_FOR_ORDER",
+      "SELLER_USER_NOT_FOUND",
+      "INVALID_SELLER_ORDER_AMOUNT",
+    ];
+    const status = conflictCodes.some((code) => message.includes(code)) ? 409 : 500;
+    console.error("[ORDER_ESCROW_RELEASE_ERROR]", { message, status });
+    return attachTraceHeaders(
+      NextResponse.json(createErrorResponse(
+        status === 409 ? "ESCROW_RELEASE_CONFLICT" : "ESCROW_RELEASE_FAILED",
+        message
+      ), { status }),
+      traceCtx
     );
-    return attachTraceHeaders(res, traceCtx);
   }
 }

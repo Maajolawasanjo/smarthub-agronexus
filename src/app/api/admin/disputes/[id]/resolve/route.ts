@@ -49,6 +49,7 @@ export async function POST(
         order: {
           include: {
             buyer: true,
+            payment: true,
             orderItems: {
               include: {
                 product: {
@@ -82,13 +83,58 @@ export async function POST(
     const buyerUserId = order.buyer.userId;
 
     if (action === "REFUND_BUYER") {
-      // 1. Return locked escrow funds back to buyer's available wallet balance
-      await WalletService.executeRefund(buyerUserId, orderTotal, order.id);
+      // A gateway/card payment must be refunded through the gateway using its provider
+      // transaction ID. Never convert a card capture into wallet credit implicitly.
+      const priorWalletRefund =
+        order.payment?.paymentMethod === "WALLET" && order.payment.paymentStatus === "REFUNDED"
+          ? await prisma.walletTransaction.findUnique({ where: { reference: `WALLET-REFUND-${order.id}` } })
+          : null;
+      const refundAlreadyConfirmed =
+        order.payment?.paymentStatus === "REFUNDED" &&
+        ((order.payment.paymentMethod === "CARD" && order.payment.refundStatus === "SUCCEEDED") ||
+          (order.payment.paymentMethod === "WALLET" && priorWalletRefund?.status === "SUCCESS"));
 
-      // 2. Mark order as CANCELLED
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { status: "CANCELLED" },
+      if (order.payment?.paymentStatus !== "PAID" && !refundAlreadyConfirmed) {
+        return attachTraceHeaders(
+          NextResponse.json(
+            createErrorResponse("PAYMENT_NOT_SETTLED", "Only settled orders can be refunded."),
+            { status: 409 }
+          ),
+          traceCtx
+        );
+      }
+      if (order.payment.paymentMethod === "WALLET") {
+        await WalletService.executeWalletEscrowRefund(buyerUserId, orderTotal, order.id);
+      } else if (order.payment.paymentMethod === "CARD" && order.payment.gatewayTransactionId) {
+        await WalletService.executeGatewayCardRefund(
+          buyerUserId,
+          order.id,
+          order.payment.gatewayTransactionId,
+          orderTotal
+        );
+      } else {
+        return attachTraceHeaders(
+          NextResponse.json(
+            createErrorResponse(
+              "GATEWAY_REFUND_REQUIRED",
+              "A verified provider transaction ID is required for this refund. The dispute remains open."
+            ),
+            { status: 409 }
+          ),
+          traceCtx
+        );
+      }
+
+      // 2. Persist the order/payment state only after the source-specific refund succeeds.
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: "CANCELLED" },
+        });
+        await tx.payment.update({
+          where: { id: order.payment!.id },
+          data: { paymentStatus: "REFUNDED" },
+        });
       });
 
       // 3. Mark dispute as RESOLVED
@@ -155,7 +201,7 @@ export async function POST(
     } else {
       // action === "RELEASE_TO_FARMER"
       // 1. Release escrow funds to the farmer wallet (minus platform fee) & complete order
-      await WalletService.executeEscrowRelease(buyerUserId, order.id);
+      await WalletService.executeEscrowRelease(buyerUserId, order.id, undefined, { allowActiveDispute: true });
 
       // 2. Mark dispute as RESOLVED
       const resolutionText = notes?.trim()
@@ -220,10 +266,27 @@ export async function POST(
       return attachTraceHeaders(res, traceCtx);
     }
   } catch (error: any) {
-    console.error("Error arbitrating dispute:", error);
+    const message = error?.message || "Failed to arbitrate dispute.";
+    const conflict = [
+      "CARD_REFUND_FAILED",
+      "CARD_REFUND_PENDING_RECONCILIATION",
+      "GATEWAY_REFUND_REQUIRED",
+      "INSUFFICIENT_ESCROW",
+      "ESCROW_NOT_FUNDED",
+      "ESCROW_ALREADY_RELEASED",
+      "ORDER_NOT_DELIVERED",
+      "PAYMENT_NOT_SETTLED",
+      "REFUND_AMOUNT_MISMATCH",
+      "REFUND_ORDER_OWNER_MISMATCH",
+      "PAYMENT_SOURCE_MISMATCH",
+      "SELLER_ORDER_NOT_DELIVERED",
+      "SELLER_ORDER_TOTAL_MISMATCH",
+    ].some((code) => String(message).includes(code));
+    const status = conflict ? 409 : 500;
+    console.error("Error arbitrating dispute:", { message, status });
     const res = NextResponse.json(
-      createErrorResponse("INTERNAL_SERVER_ERROR", error.message || "Failed to arbitrate dispute."),
-      { status: 500 }
+      createErrorResponse(conflict ? "DISPUTE_FINANCIAL_CONFLICT" : "INTERNAL_SERVER_ERROR", message),
+      { status }
     );
     return attachTraceHeaders(res, traceCtx);
   }

@@ -266,17 +266,42 @@ export class AdminOrderService {
           throw new Error(`Cannot cancel order in ${order.status} state.`);
         }
 
-        // If payment was settled, refund escrow to buyer wallet
-        if (order.payment && order.payment.paymentStatus === "PAID") {
-          await WalletService.executeWalletEscrowRefund(buyerUserId, Number(order.totalAmount), order.id);
+        // Refund paid orders through the original payment source before cancelling.
+        if (order.payment?.paymentStatus === "PAID") {
+          if (order.payment.paymentMethod === "WALLET") {
+            await WalletService.executeWalletEscrowRefund(buyerUserId, Number(order.totalAmount), order.id);
+          } else if (order.payment.paymentMethod === "CARD" && order.payment.gatewayTransactionId) {
+            await WalletService.executeGatewayCardRefund(
+              buyerUserId,
+              order.id,
+              order.payment.gatewayTransactionId,
+              Number(order.totalAmount)
+            );
+          } else {
+            throw new Error("GATEWAY_REFUND_REQUIRED: A verified provider transaction ID is required before cancelling this paid order.");
+          }
         }
 
-        // Transactional update of order and seller orders
+        // Transactional update of order, payment and seller orders
         const updated = await prisma.$transaction(async (tx) => {
-          const updatedOrder = await tx.order.update({
-            where: { id: order.id },
+          const cancellationClaim = await tx.order.updateMany({
+            where: { id: order.id, status: order.status },
             data: { status: "CANCELLED" },
           });
+          if (cancellationClaim.count !== 1) {
+            throw new Error("ORDER_STATE_CONFLICT: Another request already changed this order.");
+          }
+          const updatedOrder = await tx.order.findUnique({ where: { id: order.id } });
+          if (!updatedOrder) throw new Error("ORDER_NOT_FOUND");
+
+          if (order.payment) {
+            await tx.payment.update({
+              where: { id: order.payment.id },
+              data: {
+                paymentStatus: order.payment.paymentStatus === "PAID" ? "REFUNDED" : "FAILED",
+              },
+            });
+          }
 
           await tx.sellerOrder.updateMany({
             where: { orderId: order.id },
@@ -285,13 +310,16 @@ export class AdminOrderService {
 
           // Restore inventory
           for (const item of order.orderItems) {
-            await tx.inventory.updateMany({
-              where: { productId: item.productId },
+            const restored = await tx.inventory.updateMany({
+              where: { productId: item.productId, reservedQty: { gte: item.quantity } },
               data: {
                 reservedQty: { decrement: item.quantity },
                 availableQty: { increment: item.quantity },
               },
             });
+            if (restored.count !== 1) {
+              throw new Error(`INVENTORY_RESTORE_CONFLICT: Cannot restore reserved quantity for product ${item.productId}.`);
+            }
           }
 
           return updatedOrder;

@@ -4,7 +4,7 @@ import { publishAgroEvent } from "@/lib/events";
 import { calculateSettlement, generateReceipt, verifyWebhookSignature } from "@/lib/settlement";
 import { SettlementDTO } from "@/dto";
 
-export async function getSettlementDTO(orderId: string): Promise<SettlementDTO | null> {
+export async function getSettlementDTO(orderId: string, viewer?: { userId: string; role: string }): Promise<SettlementDTO | null> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
@@ -14,6 +14,7 @@ export async function getSettlementDTO(orderId: string): Promise<SettlementDTO |
   });
 
   if (!order || !order.payment) return null;
+  if (viewer && viewer.role !== "ADMIN" && order.buyer.userId !== viewer.userId) return null;
 
   const grossAmount = Number(order.totalAmount);
   const breakdown = calculateSettlement(grossAmount);
@@ -108,49 +109,4 @@ export async function processWebhookPaymentEvent(
   });
 
   return { status: "SUCCESS", payment: result.payment };
-}
-
-export async function executeRefund(orderId: string, reason: string) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { payment: true, buyer: true },
-  });
-
-  if (!order || !order.payment) {
-    throw new Error("Payment record not found for refund.");
-  }
-
-  if (order.payment.paymentStatus === "REFUNDED") {
-    throw new Error("Order payment has already been refunded.");
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    const updatedPayment = await tx.payment.update({
-      where: { id: order.payment!.id },
-      data: { paymentStatus: "REFUNDED" },
-    });
-
-    const updatedOrder = await tx.order.update({
-      where: { id: orderId },
-      data: { status: "CANCELLED" },
-    });
-
-    return { updatedPayment, updatedOrder };
-  });
-
-  logger.security("Order payment refunded", {
-    orderId,
-    reason,
-    amount: Number(order.payment.amount),
-  });
-
-  await publishAgroEvent("REFUND_EXECUTED", {
-    userId: order.buyer.userId,
-    orderId: order.id,
-    orderNumber: order.orderNumber,
-    amount: Number(order.payment.amount),
-    remarks: reason,
-  });
-
-  return result;
 }

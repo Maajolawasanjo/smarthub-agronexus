@@ -96,7 +96,7 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
   });
 
   test("2. Business Rule: Atomic Deposit Wallet Credit & Transaction Log", async () => {
-    vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue({
+    const wallet = {
       id: "w_101",
       userId: mockUserId,
       balance: 100000.0 as any,
@@ -105,24 +105,44 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
       frozen: 0.0 as any,
       createdAt: new Date(),
       updatedAt: new Date(),
+    };
+    const pendingIntent = {
+      id: "tx_dep",
+      walletId: "w_101",
+      wallet,
+      type: "DEPOSIT",
+      amount: 25000 as any,
+      reference: "DEP-TEST-99",
+      description: "Pending bank transfer intent",
+      status: "PENDING",
+      createdAt: new Date(),
+    };
+    const settledIntent = { ...pendingIntent, status: "SUCCESS", description: "Verified deposit" };
+    const txFindUnique = vi.fn()
+      .mockResolvedValueOnce(pendingIntent)
+      .mockResolvedValueOnce(settledIntent);
+    const txUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const txWalletUpdate = vi.fn().mockResolvedValue({
+      ...wallet,
+      balance: 125000.0 as any,
     });
 
-    vi.spyOn(prisma, "$transaction").mockResolvedValue([
-      { id: "w_101", userId: mockUserId, balance: 125000.0 as any, escrow: 0.0 as any },
-      {
-        id: "tx_dep",
-        walletId: "w_101",
-        type: "DEPOSIT",
-        amount: 25000 as any,
-        reference: "DEP-TEST-99",
-        description: "Bank transfer",
-        status: "SUCCESS",
-        createdAt: new Date(),
-      },
-    ]);
+    vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(wallet as any);
+    vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => arg({
+      walletTransaction: { findUnique: txFindUnique, updateMany: txUpdateMany },
+      wallet: { update: txWalletUpdate },
+    }));
 
     const result = await WalletService.executeDeposit(mockUserId, 25000, "DEP-TEST-99");
 
+    expect(txUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "tx_dep", type: "DEPOSIT", status: "PENDING" },
+      data: expect.objectContaining({ status: "SUCCESS" }),
+    }));
+    expect(txWalletUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "w_101" },
+      data: { balance: { increment: 25000 } },
+    }));
     expect(result.txRecord.type).toBe("DEPOSIT");
     expect(result.txRecord.amount).toBe(25000);
     expect(result.txRecord.status).toBe("SUCCESS");
@@ -193,35 +213,48 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
     ).rejects.toThrow("ACCOUNT_FROZEN");
   });
 
-  test("6. Business Rule: Atomic Order Refund Credit to Buyer Wallet", async () => {
-    vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue({
+  test("6. Business Rule: Explicit store credit requires an existing order and records one ledger entry", async () => {
+    const wallet = {
       id: "w_101",
       userId: mockUserId,
-      balance: 10000.0 as any,
-      escrow: 0.0 as any,
-      pendingWithdrawal: 0.0 as any,
-      frozen: 0.0 as any,
+      balance: 10000.0,
+      escrow: 0.0,
+      pendingWithdrawal: 0.0,
+      frozen: 0.0,
       createdAt: new Date(),
       updatedAt: new Date(),
+    };
+    vi.spyOn(prisma.order, "findUnique").mockResolvedValue({
+      id: "ord_cancelled_101",
+      orderNumber: "AGRO-101",
+      totalAmount: 10000,
+      buyer: { userId: mockUserId },
+      payment: null,
+    } as any);
+    vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(wallet as any);
+
+    const txFindUnique = vi.fn().mockResolvedValue(null);
+    const txWalletUpdate = vi.fn(async ({ data }: any) => {
+      if (data.balance?.increment) wallet.balance += Number(data.balance.increment);
+      return wallet as any;
     });
+    const txWalletCreate = vi.fn(async ({ data }: any) => ({ id: "tx_ref", ...data }));
+    const txWalletFindUnique = vi.fn(async () => wallet);
+    vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => arg({
+      walletTransaction: { findUnique: txFindUnique, create: txWalletCreate },
+      wallet: { update: txWalletUpdate, findUnique: txWalletFindUnique },
+    }));
 
-    vi.spyOn(prisma, "$transaction").mockResolvedValue([
-      { id: "w_101", userId: mockUserId, balance: 20000.0 as any, escrow: 0.0 as any },
-      {
-        id: "tx_ref",
-        walletId: "w_101",
-        type: "REFUND",
-        amount: 10000 as any,
-        reference: "REF-101",
-        description: "Refund credited",
-        status: "SUCCESS",
-        createdAt: new Date(),
-      },
-    ]);
-
-    const result = await WalletService.executeRefund(mockUserId, 10000, "ord_cancelled_101");
+    const result = await WalletService.executeStoreCreditRefund(
+      mockUserId,
+      10000,
+      "ord_cancelled_101",
+      "Admin approved"
+    );
 
     expect(result.txRecord.type).toBe("REFUND");
     expect(result.txRecord.amount).toBe(10000);
+    expect(result.txRecord.reference).toBe("STORE-CREDIT-ord_cancelled_101");
+    expect(wallet.balance).toBe(20000);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Trash2, Plus, Minus, ChevronDown, ChevronUp, ShoppingBag, Lock, MapPin, Store } from "lucide-react";
@@ -9,11 +9,55 @@ import { useCart, CartItem } from "@/context/CartContext";
 import { PaymentModal } from "@/components/cart/PaymentModal";
 
 export default function CartPage() {
-    const { cartItems, updateQuantity, removeFromCart, cartTotal } = useCart();
+    const { cartItems, updateQuantity, removeFromCart, cartTotal, clearCart, isHydrated } = useCart();
     const [isMobileSummaryOpen, setIsMobileSummaryOpen] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
+    const [paymentNotice, setPaymentNotice] = useState<{
+        type: "success" | "processing" | "cancelled" | "error";
+        message: string;
+        ref?: string;
+    } | null>(null);
+
+    useEffect(() => {
+        if (!isHydrated) return;
+
+        const returnUrl = new URL(window.location.href);
+        const paymentStatus = returnUrl.searchParams.get("payment");
+        if (!paymentStatus) return;
+
+        const ref = returnUrl.searchParams.get("ref") || undefined;
+        if (paymentStatus === "success") {
+            setPaymentNotice({
+                type: "success",
+                message: "Payment confirmed. Your order is being prepared.",
+                ref,
+            });
+            clearCart();
+        } else if (paymentStatus === "processing") {
+            setPaymentNotice({
+                type: "processing",
+                message: "Your payment is verified by the gateway and settlement is still processing. Check Orders shortly; do not pay again yet.",
+                ref,
+            });
+        } else if (paymentStatus === "cancelled") {
+            setPaymentNotice({
+                type: "cancelled",
+                message: "Checkout was cancelled. Your cart has been kept unchanged.",
+                ref,
+            });
+        } else {
+            setPaymentNotice({
+                type: "error",
+                message: "We could not confirm this payment. Your cart is unchanged. Check Orders before attempting another payment.",
+                ref,
+            });
+        }
+
+        ["payment", "reason", "ref", "amount"].forEach((key) => returnUrl.searchParams.delete(key));
+        window.history.replaceState({}, "", `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`);
+    }, [isHydrated, clearCart]);
 
     // Group items by Cooperative/Farmer Seller
     const groupedCart = useMemo(() => {
@@ -89,6 +133,37 @@ export default function CartPage() {
 
     return (
         <div className="min-h-screen bg-white font-sans">
+            {paymentNotice && (
+                <div className="mx-auto max-w-7xl px-4 pt-4">
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        className={`rounded-xl border p-4 text-sm ${paymentNotice.type === "success"
+                            ? "border-green-200 bg-green-50 text-green-900"
+                            : paymentNotice.type === "processing"
+                                ? "border-amber-200 bg-amber-50 text-amber-950"
+                                : paymentNotice.type === "cancelled"
+                                    ? "border-gray-200 bg-gray-50 text-gray-800"
+                                    : "border-red-200 bg-red-50 text-red-900"}`}
+                    >
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p>{paymentNotice.message}</p>
+                                {paymentNotice.ref && (
+                                    <p className="mt-1 text-xs opacity-80">Reference: {paymentNotice.ref}</p>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setPaymentNotice(null)}
+                                className="shrink-0 font-medium underline underline-offset-2"
+                            >
+                                Dismiss
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {cartItems.length === 0 && !isPaymentModalOpen ? (
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}

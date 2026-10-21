@@ -128,6 +128,13 @@ export async function POST(req: Request) {
         }
       }
 
+      // Generate a stable server-side order reference before locking funds. The payment
+      // record and wallet escrow-lock ledger entry must share this reference.
+      const orderNumber = `AGRO-${Date.now().toString().slice(-6)}-${Math.floor(
+        100 + Math.random() * 900
+      )}`;
+      const paymentReference = `REF-${orderNumber}`;
+
       // 3. If paying with WALLET, check balance & debit atomically inside transaction
       if (validPaymentMethod === "WALLET") {
         let wallet = await tx.wallet.findUnique({
@@ -160,17 +167,12 @@ export async function POST(req: Request) {
             walletId: wallet.id,
             type: "ESCROW_LOCK",
             amount: totalAmount,
-            reference: `REF-${Date.now()}`,
+            reference: paymentReference,
             description: `Escrow locked for Order checkout`,
             status: "SUCCESS",
           },
         });
       }
-
-      // 4. Generate unique order number
-      const orderNumber = `AGRO-${Date.now().toString().slice(-6)}-${Math.floor(
-        100 + Math.random() * 900
-      )}`;
 
       // 4. Create Order + OrderItems + Payment + Delivery atomically
       const createdOrder = await tx.order.create({
@@ -188,7 +190,7 @@ export async function POST(req: Request) {
               amount: totalAmount,
               paymentMethod: validPaymentMethod,
               paymentStatus: validPaymentMethod === "WALLET" ? "PAID" : "PENDING",
-              transactionRef: `REF-${orderNumber}`,
+              transactionRef: paymentReference,
             },
           },
           delivery: {

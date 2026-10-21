@@ -323,8 +323,12 @@ describe("Phase 0 Security & Containment Suite — Real Integration Tests", () =
       vi.spyOn(prisma, "$transaction").mockImplementation(async (callback: any) => {
         if (typeof callback === "function") {
           return callback({
-            order: { update: vi.fn().mockResolvedValue({ id: "ord_cancel_99", status: "CANCELLED" }) },
+            order: {
+              update: vi.fn().mockResolvedValue({ id: "ord_cancel_99", status: "CANCELLED" }),
+              updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+            },
             payment: { update: vi.fn().mockResolvedValue({ id: "pay_99", paymentStatus: "REFUNDED" }) },
+            inventory: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
           });
         }
         return callback;

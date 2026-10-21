@@ -34,6 +34,7 @@ export async function POST(
         buyer: true,
         orderItems: { include: { product: true } },
         payment: true,
+        disputes: { where: { status: { in: ["OPEN", "UNDER_REVIEW"] } } },
       },
     });
 
@@ -66,26 +67,67 @@ export async function POST(
       return attachTraceHeaders(res, traceCtx);
     }
 
+    if ((order.disputes?.length || 0) > 0) {
+      return attachTraceHeaders(
+        NextResponse.json(
+          createErrorResponse("ACTIVE_DISPUTE", "Cancel this order through the active dispute workflow."),
+          { status: 409 }
+        ),
+        traceCtx
+      );
+    }
+
     const totalAmount = Number(order.totalAmount);
 
-    // Execute atomic refund and inventory release inside a transaction
+    // Perform the source-aware refund before marking the order/payment as cancelled.
+    // If a gateway refund fails, leave the order and inventory state unchanged.
+    const buyerUserId = order.buyer.userId;
+    if (order.payment?.paymentStatus === "PAID") {
+      if (order.payment.paymentMethod === "WALLET") {
+        await WalletService.executeWalletEscrowRefund(buyerUserId, totalAmount, order.id);
+      } else if (order.payment.paymentMethod === "CARD") {
+        await WalletService.executeGatewayCardRefund(
+          buyerUserId,
+          order.id,
+          order.payment.gatewayTransactionId || "",
+          totalAmount
+        );
+      } else {
+        return attachTraceHeaders(
+          NextResponse.json(
+            createErrorResponse(
+              "MANUAL_REFUND_REQUIRED",
+              "This payment method requires a verified provider refund before the order can be cancelled."
+            ),
+            { status: 409 }
+          ),
+          traceCtx
+        );
+      }
+    }
+
+    // Refund must succeed before inventory and order/payment states are changed.
     await prisma.$transaction(async (tx) => {
-      // 1. Restore reserved inventory back to available
       for (const item of order.orderItems) {
-        await tx.inventory.update({
-          where: { productId: item.productId },
+        const restored = await tx.inventory.updateMany({
+          where: { productId: item.productId, reservedQty: { gte: item.quantity } },
           data: {
             availableQty: { increment: item.quantity },
             reservedQty: { decrement: item.quantity },
           },
         });
+        if (restored.count !== 1) {
+          throw new Error(`INVENTORY_RESTORE_CONFLICT: Cannot restore reserved quantity for product ${item.productId}.`);
+        }
       }
 
-      // 2. Update order & payment status
-      await tx.order.update({
-        where: { id: order.id },
+      const cancellationClaim = await tx.order.updateMany({
+        where: { id: order.id, status: { in: ["PENDING", "CONFIRMED"] } },
         data: { status: "CANCELLED" },
       });
+      if (cancellationClaim.count !== 1) {
+        throw new Error("ORDER_STATE_CONFLICT: Another request already changed this order.");
+      }
 
       if (order.payment) {
         await tx.payment.update({
@@ -96,22 +138,6 @@ export async function POST(
         });
       }
     });
-
-    // 3. Payment-Source Aware Refund Routing
-    const buyerUserId = order.buyer.userId;
-    if (order.payment?.paymentMethod === "WALLET") {
-      // Wallet-paid order: unlock buyer's locked escrow funds back to available balance
-      await WalletService.executeWalletEscrowRefund(buyerUserId, totalAmount, order.id);
-    } else if (order.payment?.paymentMethod === "CARD" && order.payment?.paymentStatus === "PAID") {
-      // Card-paid order that was already captured: initiate gateway refund or credit store balance
-      await WalletService.executeGatewayCardRefund(
-        buyerUserId,
-        order.id,
-        order.payment.transactionRef || order.orderNumber,
-        totalAmount
-      );
-    }
-    // Note: If CARD payment was PENDING, no funds were captured so no wallet refund is executed.
 
     const { recordAuditEvent } = await import("@/lib/audit");
     await recordAuditEvent({
@@ -143,10 +169,25 @@ export async function POST(
     );
     return attachTraceHeaders(res, traceCtx);
   } catch (err: any) {
-    console.error("Error in POST /api/orders/[id]/cancel:", err);
+    const message = err?.message || "Failed to cancel order";
+    const conflict = [
+      "ORDER_STATE_CONFLICT",
+      "INVENTORY_RESTORE_CONFLICT",
+      "INSUFFICIENT_ESCROW",
+      "ESCROW_NOT_FUNDED",
+      "REFUND_AMOUNT_MISMATCH",
+      "REFUND_ORDER_OWNER_MISMATCH",
+      "PAYMENT_SOURCE_MISMATCH",
+      "GATEWAY_REFUND_PAYMENT_MISMATCH",
+      "CARD_REFUND_FAILED",
+      "CARD_REFUND_PENDING_RECONCILIATION",
+      "REFUND_STATE_CONFLICT",
+    ].some((code) => String(message).includes(code));
+    const status = conflict ? 409 : 500;
+    console.error("Error in POST /api/orders/[id]/cancel:", { message, status });
     const res = NextResponse.json(
-      createErrorResponse("CANCEL_FAILED", err.message || "Failed to cancel order"),
-      { status: 500 }
+      createErrorResponse(conflict ? "CANCEL_CONFLICT" : "CANCEL_FAILED", message),
+      { status }
     );
     return attachTraceHeaders(res, traceCtx);
   }

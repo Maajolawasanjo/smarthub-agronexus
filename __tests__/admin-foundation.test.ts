@@ -224,7 +224,13 @@ describe("SmartHub AgroChain: Admin Foundation Suite", () => {
         totalAmount: 50000 as any,
         status: "CONFIRMED",
         buyer: { userId: "usr_buyer_1", user: { fullName: "Buyer One", email: "b1@agro.ng" } },
-        payment: { paymentStatus: "PAID" },
+        payment: {
+          id: "pay_cancel_1",
+          paymentMethod: "WALLET",
+          paymentStatus: "PAID",
+          amount: 50000,
+          transactionRef: "REF-AGRO-CANCEL-1",
+        },
         orderItems: [
           { productId: "prod_1", quantity: 5, product: { farmerProfile: { userId: "farmer_1" } } },
         ],
@@ -233,7 +239,11 @@ describe("SmartHub AgroChain: Admin Foundation Suite", () => {
       vi.spyOn(prisma.order, "findUnique").mockResolvedValue(fakeOrder as any);
       vi.spyOn(prisma, "$transaction").mockImplementation(async (callback: any) => {
         return callback({
-          order: { update: vi.fn().mockResolvedValue({ ...fakeOrder, status: "CANCELLED" }) },
+          order: {
+            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+            findUnique: vi.fn().mockResolvedValue({ ...fakeOrder, status: "CANCELLED" }),
+          },
+          payment: { update: vi.fn().mockResolvedValue({ id: "pay_cancel_1", paymentStatus: "REFUNDED" }) },
           sellerOrder: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
           inventory: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         });

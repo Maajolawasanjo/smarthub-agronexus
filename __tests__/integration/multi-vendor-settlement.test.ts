@@ -60,6 +60,15 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         totalAmount: 100000.0,
         status: "DELIVERED",
         buyer: { userId: buyerId },
+        payment: {
+          id: "pay-mv-001",
+          paymentMethod: "CARD",
+          paymentStatus: "PAID",
+          transactionRef: "TX-MV-001",
+          amount: 100000.0,
+        },
+        disputes: [],
+        orderItems: [],
         sellerOrders: [
           {
             id: "so_A",
@@ -100,32 +109,56 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         return w as any;
       });
       vi.spyOn(prisma.order, "findUnique").mockResolvedValue(mockOrder as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue({
+        id: "tx-lock-mv",
+        walletId: buyerWallet.id,
+        wallet: buyerWallet,
+        type: "ESCROW_LOCK",
+        amount: 100000.0,
+        reference: "TX-MV-001",
+        status: "SUCCESS",
+      } as any);
 
-      // Capture transactions created in $transaction
       const createdTransactions: any[] = [];
-
-      // Mock prisma.wallet.update, prisma.sellerOrder.update, prisma.order.update, prisma.walletTransaction.create
-      (vi.spyOn(prisma.wallet, "update") as any).mockImplementation(async ({ where, data }: any) => {
-        const w = Object.values(walletsMap).find((wallet: any) => wallet.id === where.id || wallet.userId === where.userId);
-        if (w) {
-          if (data.balance?.increment) w.balance += data.balance.increment;
-          if (data.balance?.decrement) w.balance -= data.balance.decrement;
-          if (data.escrow?.decrement) w.escrow = Math.max(0, w.escrow - data.escrow.decrement);
-        }
+      const txWalletUpdate = vi.fn(async ({ where, data }: any) => {
+        const w = Object.values(walletsMap).find((wallet: any) => wallet.id === where.id);
+        if (w && data.balance?.increment) w.balance += Number(data.balance.increment);
+        if (w && data.balance?.decrement) w.balance -= Number(data.balance.decrement);
         return w as any;
       });
-      vi.spyOn(prisma.sellerOrder, "update").mockResolvedValue({ id: "so_updated" } as any);
-      vi.spyOn(prisma.order, "update").mockResolvedValue({ id: "ord_updated" } as any);
-      (vi.spyOn(prisma.walletTransaction, "create") as any).mockImplementation(async ({ data }: any) => {
+      const txWalletUpdateMany = vi.fn(async ({ where, data }: any) => {
+        const w = Object.values(walletsMap).find((wallet: any) => wallet.id === where.id);
+        if (!w || Number(w.escrow) < Number(where.escrow?.gte ?? 0)) return { count: 0 };
+        if (data.escrow?.decrement) w.escrow -= Number(data.escrow.decrement);
+        return { count: 1 };
+      });
+      const txWalletTransactionCreate = vi.fn(async ({ data }: any) => {
         createdTransactions.push(data);
         return { id: `tx_${createdTransactions.length}`, ...data } as any;
       });
+      const txSellerOrderUpdateMany = vi.fn(async ({ where, data }: any) => {
+        const sellerOrder = mockOrder.sellerOrders.find((so: any) => so.id === where.id);
+        if (!sellerOrder || sellerOrder.status !== where.status) return { count: 0 };
+        Object.assign(sellerOrder, data);
+        return { count: 1 };
+      });
+      const txMock = {
+        wallet: { update: txWalletUpdate, updateMany: txWalletUpdateMany },
+        walletTransaction: { create: txWalletTransactionCreate },
+        sellerOrder: { updateMany: txSellerOrderUpdateMany },
+      };
 
-      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => {
-        if (Array.isArray(arg)) {
-          return Promise.all(arg);
+      vi.spyOn(prisma.sellerOrder, "count").mockResolvedValue(0 as any);
+      vi.spyOn(prisma.order, "updateMany").mockImplementation(async ({ where, data }: any) => {
+        if (mockOrder.id === where.id && mockOrder.status === where.status) {
+          Object.assign(mockOrder, data);
+          return { count: 1 } as any;
         }
-        return arg({});
+        return { count: 0 } as any;
+      });
+      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => {
+        if (Array.isArray(arg)) return Promise.all(arg);
+        return arg(txMock);
       });
 
       // Execute Escrow Release
@@ -135,15 +168,17 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       // totalGrossSettled = sum of subtotals (commissionable gross): ₦38,000 + ₦57,000 = ₦95,000
       expect(result.totalGrossSettled).toBe(95000.0);
       expect(result.settledSellerOrdersCount).toBe(2);
+      expect(result.totalEscrowReleased).toBe(100000.0);
 
-      // Verify individual ESCROW_RELEASE transactions were recorded
-      expect(createdTransactions).toHaveLength(2);
-      // Farmer A: ₦38,000 subtotal × (1 - 0.05 × 1.075) = ₦38,000 × 0.94625 = ₦35,957.50
-      expect(createdTransactions[0].type).toBe("ESCROW_RELEASE");
-      expect(createdTransactions[0].amount).toBeCloseTo(35957.5, 1);
-      // Farmer B: ₦57,000 subtotal × 0.94625 = ₦53,936.25
-      expect(createdTransactions[1].type).toBe("ESCROW_RELEASE");
-      expect(createdTransactions[1].amount).toBeCloseTo(53936.25, 1);
+      // The ledger records both farmer credits and the buyer-side gross escrow debits.
+      expect(createdTransactions).toHaveLength(4);
+      const farmerCredits = createdTransactions.filter((tx) => tx.reference.startsWith("REL-"));
+      const buyerDebits = createdTransactions.filter((tx) => tx.reference.startsWith("ESCROW-DRAIN-"));
+      expect(farmerCredits).toHaveLength(2);
+      expect(buyerDebits).toHaveLength(2);
+      expect(farmerCredits[0].amount).toBeCloseTo(35957.5, 1);
+      expect(farmerCredits[1].amount).toBeCloseTo(53936.25, 1);
+      expect(buyerDebits.reduce((sum, tx) => sum + tx.amount, 0)).toBe(100000.0);
 
       // Wallet balances verification:
       // Farmer A: ₦10,000 + ₦35,957.50 = ₦45,957.50
@@ -152,10 +187,121 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(farmerBWallet.balance).toBeCloseTo(73936.25, 1);
       // Buyer escrow: ₦100,000 - ₦100,000 (totalEscrowToRelease = ₦40,000 + ₦60,000) = ₦0
       expect(buyerWallet.escrow).toBe(0.0);
+      expect(mockOrder.status).toBe("COMPLETED");
+
+      // Replaying the same release cannot create a second set of payouts.
+      await expect(WalletService.executeEscrowRelease(orderId))
+        .rejects.toThrow("ORDER_NOT_DELIVERED");
+      expect(createdTransactions).toHaveLength(4);
+    });
+  });
+
+  describe("Invariant 1b: Escrow release fails closed without a funded order intent", () => {
+    it("does not credit sellers when no matching successful escrow lock exists", async () => {
+      const orderId = "ord-unfunded-escrow";
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue({
+        id: orderId,
+        orderNumber: "ORD-UNFUNDED",
+        totalAmount: 10000,
+        status: "DELIVERED",
+        buyer: { userId: "buyer-unfunded" },
+        payment: {
+          paymentStatus: "PAID",
+          paymentMethod: "CARD",
+          transactionRef: "TX-NO-LOCK",
+          amount: 10000,
+        },
+        disputes: [],
+        sellerOrders: [],
+        orderItems: [],
+      } as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+      const transactionSpy = vi.spyOn(prisma, "$transaction");
+
+      await expect(WalletService.executeEscrowRelease("buyer-unfunded", orderId))
+        .rejects.toThrow("ESCROW_NOT_FUNDED");
+
+      expect(transactionSpy).not.toHaveBeenCalled();
     });
   });
 
   describe("Invariant 2: Card Refund Never Mints Internal Wallet Balance", () => {
+    it("records card refund state on Payment and never posts a wallet credit", async () => {
+      const buyerId = "usr_card_buyer_success";
+      const orderId = "ord_card_success";
+      const payment = {
+        id: "pay-card-success",
+        paymentMethod: "CARD",
+        paymentStatus: "PAID",
+        transactionRef: "AGRO-FLW-refund-success",
+        gatewayTransactionId: "98765",
+        gatewayRefundId: null,
+        refundStatus: null,
+        amount: 75000,
+      };
+      const order = {
+        id: orderId,
+        orderNumber: "AGRO-CARD-SUCCESS",
+        totalAmount: 75000,
+        buyer: { userId: buyerId },
+        payment,
+      };
+
+      const originalKey = process.env.FLUTTERWAVE_SECRET_KEY;
+      const originalFetch = globalThis.fetch;
+      process.env.FLUTTERWAVE_SECRET_KEY = "test-flutterwave-key";
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: "success", data: { id: "refund-provider-55" } }),
+      });
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+      const paymentUpdateMany = vi.spyOn(prisma.payment, "updateMany").mockImplementation(async ({ where, data }: any) => {
+        if (where.id !== payment.id) return { count: 0 };
+        if (where.refundStatus === null && payment.refundStatus === null && payment.paymentStatus === "PAID") {
+          Object.assign(payment, data);
+          return { count: 1 };
+        }
+        if (where.refundStatus === "PENDING" && payment.refundStatus === "PENDING") {
+          Object.assign(payment, data);
+          return { count: 1 };
+        }
+        return { count: 0 };
+      });
+      const walletTransactionCreate = vi.spyOn(prisma.walletTransaction, "create");
+
+      try {
+        const result = await WalletService.executeGatewayCardRefund(
+          buyerId,
+          orderId,
+          "98765",
+          75000
+        );
+        expect(result.gatewayRefunded).toBe(true);
+        expect(payment.paymentStatus).toBe("REFUNDED");
+        expect(payment.refundStatus).toBe("SUCCEEDED");
+        expect(payment.gatewayRefundId).toBe("refund-provider-55");
+        expect(paymentUpdateMany).toHaveBeenCalledTimes(2);
+        expect(walletTransactionCreate).not.toHaveBeenCalled();
+
+        // A retry observes SUCCEEDED and must not submit another gateway refund.
+        const retry = await WalletService.executeGatewayCardRefund(
+          buyerId,
+          orderId,
+          "98765",
+          75000
+        );
+        expect(retry.alreadyRefunded).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalKey === undefined) delete process.env.FLUTTERWAVE_SECRET_KEY;
+        else process.env.FLUTTERWAVE_SECRET_KEY = originalKey;
+      }
+    });
+
     it("throws CARD_REFUND_FAILED and persists REQUIRES_MANUAL_REVIEW when gateway not configured", async () => {
       const buyerId = "usr_card_buyer_55";
       const orderId = "ord_card_checkout_55";
@@ -170,6 +316,21 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         frozen: 0,
       };
 
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue({
+        id: orderId,
+        totalAmount: 75000,
+        buyer: { userId: buyerId },
+        payment: {
+          id: "pay-card-55",
+          paymentMethod: "CARD",
+          paymentStatus: "PAID",
+          transactionRef: "TX-REF-75000",
+          gatewayTransactionId: null,
+          amount: 75000,
+        },
+      } as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+      vi.spyOn(prisma.payment, "updateMany").mockResolvedValue({ count: 1 } as any);
       vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
       (vi.spyOn(prisma.wallet, "update") as any).mockImplementation(async ({ data }: any) => {
         // Track any balance increments — these must NOT happen on failed card refund
@@ -201,11 +362,10 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(flagEntry.description).toContain("REQUIRES_MANUAL_REVIEW");
     });
 
-    it("executeWalletEscrowRefund clamps escrow deduction to available escrow", async () => {
+    it("rejects an escrow refund larger than the order's actual locked escrow without crediting balance", async () => {
       const buyerId = "usr_wallet_buyer_66";
       const orderId = "ord_wallet_66";
 
-      // Buyer only has ₦20,000 in escrow, but refund request is for ₦50,000
       const buyerWallet = {
         id: "w_wallet_buyer",
         userId: buyerId,
@@ -215,32 +375,50 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         frozen: 0,
       };
 
+      vi.spyOn(prisma.order, "findUnique").mockResolvedValue({
+        id: orderId,
+        totalAmount: 50000,
+        buyer: { userId: buyerId },
+        payment: {
+          id: "pay-wallet-66",
+          paymentMethod: "WALLET",
+          paymentStatus: "PAID",
+          transactionRef: "TX-WALLET-66",
+          amount: 50000,
+        },
+      } as any);
       vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
-      (vi.spyOn(prisma.wallet, "update") as any).mockImplementation(async ({ data }: any) => {
-        if (data.balance?.increment) buyerWallet.balance += data.balance.increment;
-        if (data.escrow?.decrement) buyerWallet.escrow = Math.max(0, buyerWallet.escrow - data.escrow.decrement);
-        return buyerWallet as any;
-      });
-      (vi.spyOn(prisma.walletTransaction, "create") as any).mockImplementation(async ({ data }: any) => ({
-        id: "tx_mock_escrow_ref",
-        ...data,
-      }));
-      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => {
-        if (Array.isArray(arg)) {
-          return Promise.all(arg);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockImplementation(async ({ where }: any) => {
+        if (where.reference === "TX-WALLET-66") {
+          return {
+            id: "tx-lock-66",
+            walletId: buyerWallet.id,
+            wallet: buyerWallet,
+            type: "ESCROW_LOCK",
+            amount: 50000,
+            status: "SUCCESS",
+            reference: "TX-WALLET-66",
+          } as any;
         }
-        return arg({});
+        return null as any;
       });
 
-      const result: any = await WalletService.executeWalletEscrowRefund(buyerId, 50000, orderId);
+      const txUpdateMany = vi.fn(async () => ({ count: 0 }));
+      const txMock = {
+        walletTransaction: { findUnique: vi.fn().mockResolvedValue(null) },
+        wallet: { updateMany: txUpdateMany },
+      };
+      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => arg(txMock));
 
-      expect(result.txRecord.amount).toBe(50000);
-      // Escrow decremented by min(20000, 50000) = 20000, leaving exactly 0
-      expect(buyerWallet.escrow).toBe(0.0);
-      expect(buyerWallet.escrow).toBeGreaterThanOrEqual(0.0);
-      // Buyer refunded ₦50,000 back to balance: 10,000 + 50,000 = 60,000
-      expect(buyerWallet.balance).toBe(60000.0);
+      await expect(
+        WalletService.executeWalletEscrowRefund(buyerId, 50000, orderId)
+      ).rejects.toThrow("INSUFFICIENT_ESCROW");
+
+      expect(txUpdateMany).toHaveBeenCalledTimes(1);
+      expect(buyerWallet.escrow).toBe(20000.0);
+      expect(buyerWallet.balance).toBe(10000.0);
     });
+
   });
 
   describe("Invariant 3: Production Withdrawal Fails Safely without Secret Key", () => {
