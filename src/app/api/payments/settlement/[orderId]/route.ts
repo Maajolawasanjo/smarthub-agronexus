@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSettlementDTO } from "@/services/payment.service";
 
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   try {
