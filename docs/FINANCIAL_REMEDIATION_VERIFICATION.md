@@ -101,10 +101,11 @@ Implemented as `reconstructGrossFromPayout(netFarmerPayout)` in `src/lib/settlem
 - **Rule**: A failed or unconfigured credit/debit card gateway refund MUST NEVER mint internal wallet balance as a silent fallback.
 - **Old Buggy Behavior**: When `FLUTTERWAVE_SECRET_KEY` was missing or Flutterwave returned an error, the code fell through to `this.executeRefund(userId, amount, orderId, true)`, minting unbacked store credit.
 - **Remediated Behavior**:
-  1. Success: Flutterwave refunds the card directly; an audit record with `type: "REFUND"`, `status: "SUCCESS"` is created. Wallet balance is untouched.
-  2. Failure or Network Exception: Logs error, creates a `REQUIRES_MANUAL_REVIEW` ledger entry with `status: "FAILED"`, and throws `CARD_REFUND_FAILED`. Wallet balance is untouched.
-  3. Explicit Store Credit: Provided as an independent method `WalletService.executeStoreCreditRefund` requiring explicit administrative authorisation notes.
-- **Verification**: Verified in `__tests__/integration/multi-vendor-settlement.test.ts` (Invariant 2).
+  1. Success: Flutterwave refunds the captured transaction using the persisted `Payment.gatewayTransactionId`. The provider result is recorded on `Payment.refundStatus` and `Payment.gatewayRefundId`; no successful card refund is written to the buyer's wallet ledger, and wallet balance is untouched.
+  2. Duplicate protection: The payment refund state is claimed as `PENDING` before the provider request. A successful retry returns the persisted result without submitting a second refund. A timeout or unknown provider outcome is moved to `MANUAL_REVIEW` and is not automatically retried.
+  3. Failure: A definitive provider rejection sets `Payment.refundStatus = FAILED`, creates a failed manual-review record, and does not change wallet balance.
+  4. Explicit Store Credit: Kept as a separate operation through `WalletService.executeStoreCreditRefund`; it is not an automatic fallback for card refunds.
+- **Verification**: Covered by `__tests__/integration/multi-vendor-settlement.test.ts` (card-refund state/idempotency and no wallet-ledger credit) and `__tests__/security/p0c3-financial-endpoint-security.test.ts` (refund endpoint authorization/source checks).
 
 ---
 
