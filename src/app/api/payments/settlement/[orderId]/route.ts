@@ -71,7 +71,11 @@ export async function POST(
     if (!order) {
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
-    if (!order.payment || order.payment.paymentStatus !== "PAID") {
+    const refundAlreadyConfirmed =
+      order.payment?.paymentMethod === "CARD" &&
+      order.payment.paymentStatus === "REFUNDED" &&
+      order.payment.refundStatus === "SUCCEEDED";
+    if (!order.payment || (order.payment.paymentStatus !== "PAID" && !refundAlreadyConfirmed)) {
       return NextResponse.json({ error: "Only settled payments can be refunded." }, { status: 409 });
     }
     if (!["PENDING", "CONFIRMED"].includes(order.status)) {
