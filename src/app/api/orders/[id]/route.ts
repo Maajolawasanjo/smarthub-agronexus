@@ -9,18 +9,17 @@ import {
 } from "@/dto";
 import { notifyOrderStateChange } from "@/lib/notifications";
 import { recordAuditEvent } from "@/lib/audit";
-import { WalletService } from "@/services/wallet.service";
 
 // ────────────────────────────────────────────────────────────
 // Valid Status Transitions
 // ────────────────────────────────────────────────────────────
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  PENDING: ["CONFIRMED", "CANCELLED"],
-  CONFIRMED: ["PROCESSING", "CANCELLED"],
+  PENDING: ["CONFIRMED"],
+  CONFIRMED: ["PROCESSING"],
   PROCESSING: ["READY_FOR_PICKUP"],
   READY_FOR_PICKUP: ["IN_TRANSIT"],
   IN_TRANSIT: ["DELIVERED"],
-  DELIVERED: ["COMPLETED"],
+  DELIVERED: [],
   COMPLETED: [],
   CANCELLED: [],
 };
@@ -350,7 +349,25 @@ export async function PUT(
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
 
+    if (typeof newStatus !== "string") {
+      return NextResponse.json({ error: "Order status must be a string." }, { status: 400 });
+    }
     const upperStatus = newStatus.toUpperCase();
+
+    // Financial transitions have dedicated source-aware handlers. The generic status
+    // endpoint must not cancel a paid order or release escrow after changing its state.
+    if (upperStatus === "COMPLETED") {
+      return NextResponse.json(
+        { error: "Use the buyer delivery-confirmation endpoint to release escrow." },
+        { status: 409 }
+      );
+    }
+    if (upperStatus === "CANCELLED") {
+      return NextResponse.json(
+        { error: "Use the dedicated order-cancellation endpoint so refunds and inventory are reconciled." },
+        { status: 409 }
+      );
+    }
 
     // Actor Role Authorization Matrix
     const isBuyer = order.buyer.userId === session.userId;
@@ -404,27 +421,6 @@ export async function PUT(
         data: { status: upperStatus as any },
       });
 
-      // Handle CANCELLED — release inventory & update payment
-      if (upperStatus === "CANCELLED") {
-        for (const item of order.orderItems) {
-          await tx.inventory.update({
-            where: { productId: item.productId },
-            data: {
-              availableQty: { increment: item.quantity },
-              reservedQty: { decrement: item.quantity },
-            },
-          });
-        }
-        if (order.payment) {
-          await tx.payment.update({
-            where: { id: order.payment.id },
-            data: {
-              paymentStatus: order.payment.paymentStatus === "PAID" ? "REFUNDED" : "FAILED",
-            },
-          });
-        }
-      }
-
       // Note: CONFIRMED no longer marks payment as PAID.
       // Payment status is verified and managed exclusively via Payment/Escrow services and webhooks.
 
@@ -452,29 +448,8 @@ export async function PUT(
         });
       }
 
-      // Handle COMPLETED — release reserved inventory, finalize escrow
-      if (upperStatus === "COMPLETED") {
-        for (const item of order.orderItems) {
-          await tx.inventory.update({
-            where: { productId: item.productId },
-            data: {
-              reservedQty: { decrement: item.quantity },
-            },
-          });
-        }
-      }
-
       return updated;
     });
-
-    // When status transitions to COMPLETED, release escrow funds to farmer(s)
-    if (upperStatus === "COMPLETED") {
-      try {
-        await WalletService.executeEscrowRelease(order.buyer.userId, order.id);
-      } catch (escrowErr) {
-        console.error(`[ESCROW_RELEASE_ERROR] Order #${order.orderNumber}:`, escrowErr);
-      }
-    }
 
     // Fire Multi-Channel Notifications for Buyer & Farmer
     const fullOrderInfo = await prisma.order.findUnique({
