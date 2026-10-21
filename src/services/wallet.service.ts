@@ -591,7 +591,6 @@ export class WalletService {
       throw new Error("REFUND_AMOUNT_MISMATCH");
     }
 
-    let escrowLock: any = null;
     if (!isStoreCredit) {
       if (order.payment?.paymentMethod !== "WALLET") {
         throw new Error("PAYMENT_SOURCE_MISMATCH: Wallet escrow refunds are only valid for wallet-paid orders.");
@@ -601,7 +600,7 @@ export class WalletService {
       }
       if (!order.payment.transactionRef) throw new Error("ESCROW_LOCK_REFERENCE_MISSING");
 
-      escrowLock = await prisma.walletTransaction.findUnique({
+      const escrowLock = await prisma.walletTransaction.findUnique({
         where: { reference: order.payment.transactionRef },
         include: { wallet: true },
       });
@@ -1070,7 +1069,7 @@ export class WalletService {
       };
     }
 
-    let sellerOrdersToSettle = targetSellerOrderId
+    const sellerOrdersToSettle = targetSellerOrderId
       ? allSellerOrders.filter((sellerOrder) => sellerOrder.id === targetSellerOrderId)
       : allSellerOrders.filter((sellerOrder) => sellerOrder.status !== "COMPLETED");
 
