@@ -1,4 +1,5 @@
 import { isTrustedMutationOrigin } from "@/lib/csrf";
+import { OrderStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
@@ -333,7 +334,7 @@ export async function GET(req: Request) {
     const skip = (page - 1) * limit;
 
     // Build where clause based on user role
-    const whereClause: Record<string, unknown> = {};
+    const whereClause: Prisma.OrderWhereInput = {};
 
     if (session.role === "BUYER") {
       const buyerProfile = await prisma.buyerProfile.findUnique({
@@ -365,7 +366,7 @@ export async function GET(req: Request) {
     // ADMIN: no filter — sees all orders
 
     if (statusFilter && statusFilter.toUpperCase() !== "ALL") {
-      whereClause.status = statusFilter.toUpperCase();
+      whereClause.status = statusFilter.toUpperCase() as OrderStatus;
     }
 
     if (search) {
@@ -401,7 +402,7 @@ export async function GET(req: Request) {
       // Aggregate status counts
       prisma.order.groupBy({
         by: ["status"],
-        where: whereClause as any,
+        where: whereClause,
         _count: { _all: true },
       }),
     ]);
@@ -436,7 +437,7 @@ export async function GET(req: Request) {
 
     // Calculate statistics
     const totalSpentResult = await prisma.order.aggregate({
-      where: whereClause as any,
+      where: whereClause,
       _sum: { totalAmount: true },
     });
     const totalSpent = Number(totalSpentResult._sum?.totalAmount || 0);
