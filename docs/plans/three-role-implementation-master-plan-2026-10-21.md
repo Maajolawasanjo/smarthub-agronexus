@@ -1,9 +1,9 @@
 # SmartHub AgroChain — Three-Role Implementation Master Plan
 
-**Version:** 1.0 proposed for sign-off  
+**Version:** 1.1 — APPROVED (four product policies locked)  
 **Date:** 2026-10-21  
 **Starting point:** [Admin Operations and Product Parity Audit](./admin-operations-product-parity-2026-10-21.md), [Cross-Role Farmer–Admin–Buyer Audit](./cross-role-farmer-admin-buyer-2026-10-21.md)  
-**State:** Planning only. No code, production schema, customer account, wallet, order, or payment mutations authorized by this document.
+**State:** The four product policies are APPROVED as of 2026-10-21. Detailed Phase 0 execution and tests are specified in [Phase 0 Execution Specification](./phase-0-security-database-ci-execution-spec-2026-10-21.md). Planning only: no application-code or production-data modification authorized by this document.
 
 ## 1. Product objective
 
@@ -31,13 +31,13 @@ Core principle: a successful button response does not establish completion. Comp
 
 1. Admin may create/edit a product **on behalf of an existing, explicitly chosen FarmerProfile ID**; admin can never fabricate or silently fall back to the first approved farmer. For customer-visible publication, farmer must be verified and active.
 2. Drafts do not go to the pending-review queue, and neither drafts nor submitted/unapproved items are visible on any unauthenticated buyer list or direct detail endpoint.
-3. Farmer submission enters PENDING_APPROVAL; admin approval or rejection is explicit. Admin-created listings follow the same validation; if an authorized admin direct-publish shortcut is approved, it must validate every publication precondition and record actor + reason.
-4. Stock, unit, MOQ and price must be real and validated. Pricing/stock edits on approved listings may stay live with audit provided business controls permit; changes affecting claimed origin, identity, grade, condition and evidence must return to PENDING_APPROVAL. Financial price snapshots on existing orders never change.
+3. **APPROVED — audited direct admin publishing:** Farmer submission enters PENDING_APPROVAL; an authenticated ADMIN may create and directly publish only on behalf of an explicitly selected existing, verified, active farmer, after validating shared listing fields, genuine inventory, publication eligibility and immutable actor/reason/timestamp audit. No silent seller fallback.
+4. **APPROVED — claims-based reapproval:** Stock/unit/MOQ/price must be validated and real. Price and available-stock edits can stay live after audit and reservation-safe checks. Changes affecting product identity, origin, grade, condition, quality evidence or photos require reapproval; do not affect immutable past order price snapshots.
 5. Published/readable/checkout-eligible predicate requires: Product APPROVED; isAvailable true; approved and active Farmer; non-archived listing; effective availableFrom; sufficient availableQty for requested order quantity and MOQ; valid price. A draft/hidden product ID cannot circumvent the policy.
 6. Farmer may manage own allocated SellerOrder only; admin manages defined operational exceptions and arbitration; buyer may view/cancel/request dispute under policy. Parent Order state is derived from all SellerOrder states with explicit fulfillment precedence and multi-vendor rules.
 7. Dispute creation invokes **defined escrow hold/freeze policy**, not just a label. Refund/release is a privileged idempotent ledger command; no orphaned status transitions or duplicate payout.
 8. Admin configuration changes must be persisted, validated and audited. Fee changes are governed separately: snapshots/effective dates and no retroactive changes to historical funds. No public admin registration.
-9. Reviews: proposed MVP is verified-purchase instant publication with abuse reporting/admin takedown; decide if pre-publication review moderation is mandatory before implementing admin review UI.
+9. **APPROVED — instant verified-purchase reviews:** Reviews from verified purchasers of delivered/completed orders publish immediately after server-side order ownership and product eligibility checks, with abuse reporting and auditable admin takedown.
 
 ## 4. Implementation workstreams and dependency gates
 
@@ -130,14 +130,24 @@ Use one well-scoped PR per phase (or smaller change set), not one sweeping unrev
 
 **Definition of Done for a cross-role operation:** correct server authorization, validated input, atomically durable authoritative state, audit, reliable recipient event/outbox, correct counterpart page after refetch/relogin, and passing positive and negative tests. No standalone success toast passes this standard.
 
-## 7. Open decisions to resolve before Phase 1 implementation
+## 7. Approved product-policy lock; technical inputs still open
 
-- **Admin product publishing:** default recommendation: admin can create on behalf of an approved existing farmer, but cannot bypass publication eligibility; direct publication may be allowed as an explicit audited admin command.
-- **Product edits:** default recommendation: price/available stock changes live with audit; identity/quality/origin/photo claims require reapproval.
-- **Units:** choose integer canonical base units (e.g. grams if supporting fractional kilograms) or restrict to whole chosen units, with quantities, prices, inventory and order calculations consistent.
-- **Reviews:** immediate verified-purchase publication with report/takedown versus mandatory admin pre-moderation.
-- **Notifications:** in-app durable notification is required; email can be asynchronous optional channel; no WhatsApp gateway needed for MVP.
-- **Demo data:** recommend separate clearly labeled demo mode, not fake purchasable inventory on real marketplace.
-- **Scope:** wallet/Flutterwave should remain disabled for real-money transactions until Phase 5 acceptance.
+### Approved policies (binding)
 
-No code implementation authorized by this plan alone; acceptance and sign-off should precede each workstream.
+| Decision | Approved implementation |
+|---|---|
+| Admin publishing | `audited-direct`: explicit eligible existing farmer; admin directly publishes only if all server-side validation and audit checks pass |
+| Product reapproval | `claims`: safe price/stock edits can stay live; identity/origin/quality/photo claims require renewed moderation |
+| Review publication | `instant`: verified-purchase reviews immediately visible after eligibility checks, with abuse reporting and admin takedown |
+| Demo catalog | `separate`: showcase products are visibly designated demo-only, separate from production inventory and checkout |
+
+### Technical details that remain to be resolved without reopening these decisions
+
+- Define canonical inventory units before changing quantity or order arithmetic (fractional kg versus integer base units).
+- Persist notifications and outbox; email may be an optional asynchronous delivery channel.
+- Keep Flutterwave and real-money checkout disabled pending separate financial ledger/escrow approval.
+- Choose a separated static showcase or isolated demo database; never mix demo products into real purchasable inventory.
+
+**Phase 0 must pass** before feature PRs can be merged or deployed. Refer to [Phase 0 Execution Specification](./phase-0-security-database-ci-execution-spec-2026-10-21.md) for tracked deliverables and tests.
+
+Approving these policies does not authorize immediate application-code changes or financial mutations.
