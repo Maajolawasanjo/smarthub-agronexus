@@ -1416,6 +1416,11 @@ export class WalletService {
       if (totalFarmerGross > orderAmount + 0.01) {
         throw new Error("SELLER_GROSS_EXCEEDS_ORDER_AMOUNT");
       }
+      // Legacy rows do not have seller-level shipping/pass-through breakdowns. Do not
+      // drain the full order escrow if the item subtotals cannot account for every cent.
+      if (Math.abs(totalFarmerGross - orderAmount) > 0.01) {
+        throw new Error("SELLER_ORDER_TOTAL_MISMATCH");
+      }
 
       const currentEscrow = Number(buyerWallet.escrow);
       if (!Number.isFinite(currentEscrow) || currentEscrow < orderAmount) {
