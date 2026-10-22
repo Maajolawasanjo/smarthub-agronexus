@@ -1343,6 +1343,19 @@ export class WalletService {
     if (order.payment.refundStatus !== null && order.payment.refundStatus !== undefined) {
       throw new Error("REFUND_STATE_CONFLICT");
     }
+
+    // Guard against legacy/partial refunds whose wallet ledger committed before an
+    // older route failed to update Payment. The ledger is durable evidence that this
+    // order's escrow must not be paid out again.
+    const priorRefundEntries = await Promise.all([
+      `WALLET-REFUND-${orderId}`,
+      `CARD-REFUND-${orderId}`,
+      `STORE-CREDIT-${orderId}`,
+    ].map((reference) => prisma.walletTransaction.findUnique({ where: { reference } })));
+    if (priorRefundEntries.some((entry) => entry?.type === "REFUND" && entry.status === "SUCCESS")) {
+      throw new Error("REFUND_STATE_CONFLICT");
+    }
+
     if ((order.disputes?.length || 0) > 0 && !options.allowActiveDispute) {
       throw new Error("ACTIVE_DISPUTE_BLOCKS_RELEASE");
     }
