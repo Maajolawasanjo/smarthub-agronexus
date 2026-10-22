@@ -175,4 +175,36 @@ describe("wallet checkout concurrent-debit guard", () => {
     expect(mock.walletUpdateMany).not.toHaveBeenCalled();
     expect(mock.orderCreate).not.toHaveBeenCalled();
   });
+
+  it("rejects zero or invalid product pricing before inventory reservation", async () => {
+    mock.productFindUnique.mockResolvedValue({
+      id: "product-1",
+      name: "Yam",
+      price: 0,
+      status: "APPROVED",
+      isAvailable: true,
+      farmerProfileId: "farmer-profile-1",
+      inventory: { availableQty: 10 },
+    });
+
+    const req = new Request("https://www.smarthubagrochain.online/api/orders", {
+      method: "POST",
+      headers: {
+        Origin: "https://www.smarthubagrochain.online",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items: [{ productId: "product-1", quantity: 1 }],
+        paymentMethod: "WALLET",
+      }),
+    });
+
+    const response = await createOrder(req);
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain("Invalid product price");
+    expect(mock.executeRaw).not.toHaveBeenCalled();
+    expect(mock.walletUpdateMany).not.toHaveBeenCalled();
+    expect(mock.walletTransactionCreate).not.toHaveBeenCalled();
+    expect(mock.orderCreate).not.toHaveBeenCalled();
+  });
 });
