@@ -544,14 +544,22 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
   });
 
   describe("Invariant 2: Card Refund Never Mints Internal Wallet Balance", () => {
-    it("records card refund state on Payment and never posts a wallet credit", async () => {
+    it("records card refund state, releases escrow and never credits wallet balance", async () => {
       const buyerId = "usr_card_buyer_success";
       const orderId = "ord_card_success";
+      const buyerWallet = {
+        id: "wallet-card-success",
+        userId: buyerId,
+        balance: 250,
+        escrow: 75000,
+        pendingWithdrawal: 0,
+        frozen: 0,
+      };
       const payment = {
         id: "pay-card-success",
         paymentMethod: "CARD",
         paymentStatus: "PAID",
-          financialState: "ESCROWED",
+        financialState: "ESCROWED",
         transactionRef: "AGRO-FLW-refund-success",
         gatewayTransactionId: "98765",
         gatewayRefundId: null,
@@ -565,6 +573,16 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         buyer: { userId: buyerId },
         payment,
       };
+      const escrowLock = {
+        id: "tx-card-lock",
+        walletId: buyerWallet.id,
+        wallet: buyerWallet,
+        type: "ESCROW_LOCK",
+        amount: 75000,
+        reference: payment.transactionRef,
+        status: "SUCCESS",
+      };
+      const ledgerByReference = new Map<string, any>([[payment.transactionRef, escrowLock]]);
 
       const originalKey = process.env.FLUTTERWAVE_SECRET_KEY;
       const originalFetch = globalThis.fetch;
@@ -576,20 +594,60 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
-      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
-      const paymentUpdateMany = vi.spyOn(prisma.payment, "updateMany").mockImplementation(async ({ where, data }: any) => {
-        if (where.id !== payment.id) return { count: 0 };
-        if (where.refundStatus === null && payment.refundStatus === null && payment.paymentStatus === "PAID") {
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockImplementation(async ({ where }: any) => {
+        return ledgerByReference.get(where.reference) ?? null;
+      });
+      const claimPayment = vi.spyOn(prisma.payment, "updateMany").mockImplementation(async ({ where, data }: any) => {
+        if (
+          where.id === payment.id &&
+          where.paymentStatus === "PAID" &&
+          where.refundStatus === null &&
+          where.financialState === "ESCROWED" &&
+          where.gatewayTransactionId === "98765" &&
+          payment.paymentStatus === "PAID" &&
+          payment.refundStatus === null &&
+          payment.financialState === "ESCROWED"
+        ) {
           Object.assign(payment, data);
-          return { count: 1 };
+          return { count: 1 } as any;
         }
-        if (where.refundStatus === "PENDING" && payment.refundStatus === "PENDING") {
+        return { count: 0 } as any;
+      });
+
+      const txPaymentUpdateMany = vi.fn().mockImplementation(async ({ where, data }: any) => {
+        if (
+          where.id === payment.id &&
+          where.paymentStatus === "PAID" &&
+          where.refundStatus === "PENDING" &&
+          where.financialState === "REFUNDING" &&
+          payment.paymentStatus === "PAID" &&
+          payment.refundStatus === "PENDING" &&
+          payment.financialState === "REFUNDING"
+        ) {
           Object.assign(payment, data);
           return { count: 1 };
         }
         return { count: 0 };
       });
-      const walletTransactionCreate = vi.spyOn(prisma.walletTransaction, "create");
+      const txWalletUpdateMany = vi.fn().mockImplementation(async ({ where, data }: any) => {
+        if (where.id !== buyerWallet.id || buyerWallet.escrow < Number(where.escrow?.gte ?? 0)) {
+          return { count: 0 };
+        }
+        if (data.escrow?.decrement) buyerWallet.escrow -= Number(data.escrow.decrement);
+        return { count: 1 };
+      });
+      const txWalletTransactionCreate = vi.fn().mockImplementation(async ({ data }: any) => {
+        const entry = { id: "tx-card-refund", wallet: buyerWallet, ...data };
+        ledgerByReference.set(data.reference, entry);
+        return entry;
+      });
+      vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => {
+        return arg({
+          payment: { updateMany: txPaymentUpdateMany },
+          wallet: { updateMany: txWalletUpdateMany },
+          walletTransaction: { create: txWalletTransactionCreate },
+        });
+      });
 
       try {
         const result = await WalletService.executeGatewayCardRefund(
@@ -600,12 +658,28 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         );
         expect(result.gatewayRefunded).toBe(true);
         expect(payment.paymentStatus).toBe("REFUNDED");
+        expect(payment.financialState).toBe("REFUNDED");
         expect(payment.refundStatus).toBe("SUCCEEDED");
         expect(payment.gatewayRefundId).toBe("refund-provider-55");
-        expect(paymentUpdateMany).toHaveBeenCalledTimes(2);
-        expect(walletTransactionCreate).not.toHaveBeenCalled();
+        expect(claimPayment).toHaveBeenCalledTimes(1);
+        expect(txPaymentUpdateMany).toHaveBeenCalledTimes(1);
+        expect(txWalletUpdateMany).toHaveBeenCalledWith({
+          where: { id: buyerWallet.id, escrow: { gte: 75000 } },
+          data: { escrow: { decrement: 75000 } },
+        });
+        expect(txWalletTransactionCreate).toHaveBeenCalledWith(expect.objectContaining({
+          data: expect.objectContaining({
+            type: "REFUND",
+            amount: 75000,
+            reference: `CARD-REFUND-${orderId}`,
+            status: "SUCCESS",
+          }),
+        }));
+        expect(buyerWallet.balance).toBe(250);
+        expect(buyerWallet.escrow).toBe(0);
 
-        // A retry observes SUCCEEDED and must not submit another gateway refund.
+        // A retry requires the persisted provider success and refund ledger and never
+        // submits another provider refund or credits the buyer wallet.
         const retry = await WalletService.executeGatewayCardRefund(
           buyerId,
           orderId,
@@ -614,6 +688,8 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         );
         expect(retry.alreadyRefunded).toBe(true);
         expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(buyerWallet.balance).toBe(250);
+        expect(buyerWallet.escrow).toBe(0);
       } finally {
         globalThis.fetch = originalFetch;
         if (originalKey === undefined) delete process.env.FLUTTERWAVE_SECRET_KEY;
