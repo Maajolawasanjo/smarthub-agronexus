@@ -923,6 +923,9 @@ export class WalletService {
 
     const payment = order.payment;
     if (payment.refundStatus === "SUCCEEDED") {
+      if (payment.paymentStatus !== "REFUNDED" || payment.financialState !== "REFUNDED") {
+        throw new Error("REFUND_STATE_CONFLICT: Provider refund marker disagrees with the payment lifecycle state.");
+      }
       return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: payment.gatewayTransactionId };
     }
     if (payment.refundStatus === "PENDING" || payment.refundStatus === "MANUAL_REVIEW") {
@@ -1208,6 +1211,9 @@ export class WalletService {
     }
     if (order.payment.financialState !== "ESCROWED") {
       throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+    }
+    if (order.payment.refundStatus !== null) {
+      throw new Error("REFUND_STATE_CONFLICT");
     }
     if ((order.disputes?.length || 0) > 0 && !options.allowActiveDispute) {
       throw new Error("ACTIVE_DISPUTE_BLOCKS_RELEASE");
