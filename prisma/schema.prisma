@@ -170,6 +170,7 @@ model Order {
   orderItems        OrderItem[]
   sellerOrders      SellerOrder[]
   payment           Payment?
+  financialLedgerEntries FinancialLedgerEntry[]
   reviews           Review[]
 
   @@index([buyerId])
@@ -209,6 +210,7 @@ model Payment {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  financialLedgerEntries FinancialLedgerEntry[]
 }
 
 model Delivery {
@@ -448,6 +450,50 @@ enum DisputeStatus {
   UNDER_REVIEW
   RESOLVED
   REJECTED
+}
+
+enum FinancialAccountType {
+  ASSET
+  LIABILITY
+  REVENUE
+  EXPENSE
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+model FinancialLedgerAccount {
+  id          String                @id @default(cuid())
+  code        String                @unique
+  name        String
+  accountType FinancialAccountType
+  currency    String                @default("NGN")
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  entries     FinancialLedgerEntry[]
+}
+
+model FinancialLedgerEntry {
+  id          String          @id @default(cuid())
+  accountId   String
+  orderId     String?
+  paymentId   String?
+  direction   LedgerDirection
+  amount      Decimal         @db.Decimal(10, 2)
+  currency    String          @default("NGN")
+  reference   String          @unique
+  description String
+  metadata    Json?
+  createdAt   DateTime        @default(now())
+  account     FinancialLedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  order       Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  payment     Payment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([accountId, createdAt])
 }
 
 model Wallet {
