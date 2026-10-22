@@ -71,10 +71,21 @@ export async function POST(
     if (!order) {
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
+    const priorWalletRefund =
+      order.payment?.paymentMethod === "WALLET" &&
+      order.payment.paymentStatus === "REFUNDED"
+        ? await prisma.walletTransaction.findUnique({
+            where: { reference: `WALLET-REFUND-${order.id}` },
+          })
+        : null;
     const refundAlreadyConfirmed =
-      order.payment?.paymentMethod === "CARD" &&
-      order.payment.paymentStatus === "REFUNDED" &&
-      order.payment.refundStatus === "SUCCEEDED";
+      (order.payment?.paymentMethod === "CARD" &&
+        order.payment.paymentStatus === "REFUNDED" &&
+        order.payment.refundStatus === "SUCCEEDED") ||
+      (order.payment?.paymentMethod === "WALLET" &&
+        order.payment.paymentStatus === "REFUNDED" &&
+        priorWalletRefund?.status === "SUCCESS" &&
+        Math.abs(Number(priorWalletRefund.amount) - Number(order.totalAmount)) <= 0.01);
     if (!order.payment || (order.payment.paymentStatus !== "PAID" && !refundAlreadyConfirmed)) {
       return NextResponse.json({ error: "Only settled payments can be refunded." }, { status: 409 });
     }
