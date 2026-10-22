@@ -76,6 +76,7 @@ vi.mock("@/services/wallet.service", () => ({
     settleGatewayWalletDeposit: mock.settleGatewayWalletDeposit,
     executeWalletEscrowRefund: mock.executeWalletEscrowRefund,
     executeGatewayCardRefund: mock.executeGatewayCardRefund,
+    formatNGN: vi.fn((amount: number) => `₦${amount.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`),
   },
 }));
 
