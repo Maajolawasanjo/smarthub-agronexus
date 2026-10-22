@@ -1650,8 +1650,9 @@ export class WalletService {
       for (const sellerOrder of sellerOrdersToSettle) {
         const farmerUserId = sellerOrder.farmerProfile.userId;
         const grossAmount = Number(sellerOrder.subtotal);
+        const shippingFee = Number(sellerOrder.shippingFee ?? 0);
         const fullOrderAmount = Number(sellerOrder.totalAmount);
-        const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
+        const { netFarmerPayout, platformFee, taxAmount } = calculateSettlement(grossAmount);
         totalGrossSettled += grossAmount;
         const farmerWallet = farmerWallets.get(farmerUserId)!;
 
@@ -1678,6 +1679,55 @@ export class WalletService {
             description: `Buyer escrow debited for Sub-Order #${sellerOrder.sellerOrderNumber} (Order #${order.orderNumber})`,
             status: "SUCCESS",
           },
+        });
+
+        const groupReference = `ESCROW-RELEASE-${sellerOrder.sellerOrderNumber}`;
+        const financialLedgerLines: FinancialLedgerLineInput[] = [{
+          reference: `${groupReference}:FARMER`,
+          debitAccount: FinancialAccountCode.USER_ESCROW_LIABILITY,
+          debitUserId: buyerUserId,
+          creditAccount: FinancialAccountCode.USER_AVAILABLE_LIABILITY,
+          creditUserId: farmerUserId,
+          amount: netFarmerPayout,
+          description: `Net farmer payout for Sub-Order #${sellerOrder.sellerOrderNumber}`,
+        }];
+        if (platformFee > 0) {
+          financialLedgerLines.push({
+            reference: `${groupReference}:PLATFORM_FEE`,
+            debitAccount: FinancialAccountCode.USER_ESCROW_LIABILITY,
+            debitUserId: buyerUserId,
+            creditAccount: FinancialAccountCode.PLATFORM_FEE_REVENUE,
+            amount: platformFee,
+            description: `Platform commission for Sub-Order #${sellerOrder.sellerOrderNumber}`,
+          });
+        }
+        if (taxAmount > 0) {
+          financialLedgerLines.push({
+            reference: `${groupReference}:VAT`,
+            debitAccount: FinancialAccountCode.USER_ESCROW_LIABILITY,
+            debitUserId: buyerUserId,
+            creditAccount: FinancialAccountCode.VAT_PAYABLE,
+            amount: taxAmount,
+            description: `VAT payable on platform fee for Sub-Order #${sellerOrder.sellerOrderNumber}`,
+          });
+        }
+        if (shippingFee > 0) {
+          financialLedgerLines.push({
+            reference: `${groupReference}:LOGISTICS`,
+            debitAccount: FinancialAccountCode.USER_ESCROW_LIABILITY,
+            debitUserId: buyerUserId,
+            creditAccount: FinancialAccountCode.LOGISTICS_PAYABLE,
+            amount: shippingFee,
+            description: `Logistics pass-through payable for Sub-Order #${sellerOrder.sellerOrderNumber}`,
+          });
+        }
+
+        await postFinancialLedgerGroup(tx, {
+          groupReference,
+          source: FinancialLedgerSource.ESCROW_RELEASE,
+          expectedAmount: fullOrderAmount,
+          description: `Balanced escrow settlement for Sub-Order #${sellerOrder.sellerOrderNumber}`,
+          lines: financialLedgerLines,
         });
       }
 
