@@ -312,7 +312,17 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         Object.assign(sellerOrder, data);
         return { count: 1 };
       });
+      const financialJournalEntries: any[] = [];
       const txMock = {
+        financialLedgerAccount: {
+          upsert: vi.fn(async ({ where, create }: any) => ({ id: `ledger-account-${where.code}`, ...create })),
+        },
+        financialLedgerEntry: {
+          create: vi.fn(async ({ data }: any) => {
+            financialJournalEntries.push(data);
+            return { id: `journal-${financialJournalEntries.length}`, ...data };
+          }),
+        },
         payment: {
           updateMany: vi.fn(async ({ where, data }: any) => {
             if (where.id !== mockOrder.payment.id || mockOrder.payment.financialState !== where.financialState) return { count: 0 };
