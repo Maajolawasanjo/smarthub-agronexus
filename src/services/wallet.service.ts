@@ -1475,8 +1475,11 @@ export class WalletService {
           },
         });
 
+        const financialLedgerLines: FinancialLedgerLineInput[] = [];
+        const groupReference = `ESCROW-RELEASE-${order.orderNumber}`;
+
         for (const [farmerUserId, grossAmount] of farmerGross.entries()) {
-          const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
+          const { netFarmerPayout, platformFee, taxAmount } = calculateSettlement(grossAmount);
           totalGrossSettled += grossAmount;
           const farmerWallet = farmerWallets.get(farmerUserId)!;
 
@@ -1494,7 +1497,45 @@ export class WalletService {
               status: "SUCCESS",
             },
           });
+
+          financialLedgerLines.push({
+            reference: `${groupReference}:FARMER:${farmerUserId}`,
+            debitAccount: FinancialAccountCode.USER_ESCROW_LIABILITY,
+            debitUserId: buyerUserId,
+            creditAccount: FinancialAccountCode.USER_AVAILABLE_LIABILITY,
+            creditUserId: farmerUserId,
+            amount: netFarmerPayout,
+            description: `Net farmer payout for Order #${order.orderNumber}`,
+          });
+          if (platformFee > 0) {
+            financialLedgerLines.push({
+              reference: `${groupReference}:PLATFORM_FEE:${farmerUserId}`,
+              debitAccount: FinancialAccountCode.USER_ESCROW_LIABILITY,
+              debitUserId: buyerUserId,
+              creditAccount: FinancialAccountCode.PLATFORM_FEE_REVENUE,
+              amount: platformFee,
+              description: `Platform commission for Order #${order.orderNumber}`,
+            });
+          }
+          if (taxAmount > 0) {
+            financialLedgerLines.push({
+              reference: `${groupReference}:VAT:${farmerUserId}`,
+              debitAccount: FinancialAccountCode.USER_ESCROW_LIABILITY,
+              debitUserId: buyerUserId,
+              creditAccount: FinancialAccountCode.VAT_PAYABLE,
+              amount: taxAmount,
+              description: `VAT payable on platform fee for Order #${order.orderNumber}`,
+            });
+          }
         }
+
+        await postFinancialLedgerGroup(tx, {
+          groupReference,
+          source: FinancialLedgerSource.ESCROW_RELEASE,
+          expectedAmount: orderAmount,
+          description: `Balanced escrow settlement for Order #${order.orderNumber}`,
+          lines: financialLedgerLines,
+        });
 
         const finalized = await tx.payment.updateMany({
           where: { id: order.payment!.id, financialState: "SETTLING" },
