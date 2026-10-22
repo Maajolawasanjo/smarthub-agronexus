@@ -1340,7 +1340,7 @@ export class WalletService {
     if (order.payment.financialState !== "ESCROWED") {
       throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
     }
-    if (order.payment.refundStatus !== null) {
+    if (order.payment.refundStatus !== null && order.payment.refundStatus !== undefined) {
       throw new Error("REFUND_STATE_CONFLICT");
     }
     if ((order.disputes?.length || 0) > 0 && !options.allowActiveDispute) {
