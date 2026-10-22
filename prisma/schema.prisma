@@ -29,6 +29,8 @@ model User {
   addresses             BuyerAddress[]
   moderatedProducts     Product[]        @relation("ProductModerator")
   sessions              Session[]
+  financialLedgerDebits  FinancialLedgerEntry[] @relation("FinancialLedgerDebitUser")
+  financialLedgerCredits FinancialLedgerEntry[] @relation("FinancialLedgerCreditUser")
 }
 
 model FarmerProfile {
@@ -493,6 +495,28 @@ model WalletTransaction {
   @@index([walletId])
 }
 
+model FinancialLedgerEntry {
+  id             String                @id @default(cuid())
+  reference      String                @unique
+  groupReference String
+  source         FinancialLedgerSource
+  debitAccount   FinancialAccountCode
+  debitUserId    String?
+  creditAccount  FinancialAccountCode
+  creditUserId   String?
+  amount         Decimal               @db.Decimal(14, 2)
+  currency       String                @default("NGN")
+  description    String
+  createdAt      DateTime              @default(now())
+  debitUser      User?                 @relation("FinancialLedgerDebitUser", fields: [debitUserId], references: [id], onDelete: SetNull)
+  creditUser     User?                 @relation("FinancialLedgerCreditUser", fields: [creditUserId], references: [id], onDelete: SetNull)
+
+  @@index([groupReference])
+  @@index([source, createdAt])
+  @@index([debitAccount, debitUserId, createdAt])
+  @@index([creditAccount, creditUserId, createdAt])
+}
+
 model Coupon {
   id          String    @id @default(cuid())
   code        String    @unique
@@ -509,6 +533,30 @@ enum TransactionType {
   ESCROW_LOCK
   ESCROW_RELEASE
   REFUND
+}
+
+enum FinancialAccountCode {
+  GATEWAY_CLEARING_ASSET
+  USER_AVAILABLE_LIABILITY
+  USER_ESCROW_LIABILITY
+  WITHDRAWAL_PAYABLE
+  PLATFORM_FEE_REVENUE
+  VAT_PAYABLE
+  LOGISTICS_PAYABLE
+  PLATFORM_SUSPENSE
+}
+
+enum FinancialLedgerSource {
+  ORDER_PAYMENT
+  WALLET_CHECKOUT
+  WALLET_DEPOSIT
+  ESCROW_RELEASE
+  WALLET_REFUND
+  CARD_REFUND
+  STORE_CREDIT
+  WITHDRAWAL_RESERVED
+  WITHDRAWAL_SETTLED
+  WITHDRAWAL_REVERSED
 }
 
 enum TxStatus {
