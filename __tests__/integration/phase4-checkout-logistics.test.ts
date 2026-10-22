@@ -122,7 +122,17 @@ describe("Phase 4: Checkout & Logistics", () => {
         Object.assign(sellerOrder, data);
         return { count: 1 };
       });
+      const financialJournalEntries: any[] = [];
       const txMock = {
+        financialLedgerAccount: {
+          upsert: vi.fn(async ({ where, create }: any) => ({ id: `ledger-account-${where.code}`, ...create })),
+        },
+        financialLedgerEntry: {
+          create: vi.fn(async ({ data }: any) => {
+            financialJournalEntries.push(data);
+            return { id: `journal-${financialJournalEntries.length}`, ...data };
+          }),
+        },
         payment: {
           updateMany: vi.fn(async ({ where, data }: any) => {
             if (where.id !== mockOrder.payment.id || mockOrder.payment.financialState !== where.financialState) return { count: 0 };
@@ -166,6 +176,9 @@ describe("Phase 4: Checkout & Logistics", () => {
 
       expect(result.success).toBe(true);
       expect(result.settledSellerOrdersCount).toBe(1);
+      expect(financialJournalEntries).toHaveLength(5);
+      expect(financialJournalEntries.reduce((sum, line) => sum + (line.direction === "DEBIT" ? Number(line.amount) : 0), 0)).toBeCloseTo(80000, 2);
+      expect(financialJournalEntries.reduce((sum, line) => sum + (line.direction === "CREDIT" ? Number(line.amount) : 0), 0)).toBeCloseTo(80000, 2);
       // Commission is on subtotal (₦75,000): net = ₦75,000 × 0.94625 = ₦70,968.75
       expect(farmerWallet.balance).toBeCloseTo(70968.75, 1);
       // Buyer escrow fully drained (₦80,000 total released)
