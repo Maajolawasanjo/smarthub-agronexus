@@ -756,8 +756,12 @@ export class WalletService {
       throw new Error("REFUND_AMOUNT_MISMATCH");
     }
 
+    if (!order.payment) {
+      throw new Error("PAYMENT_NOT_SETTLED");
+    }
+
     if (!isStoreCredit) {
-      if (order.payment?.paymentMethod !== "WALLET") {
+      if (order.payment.paymentMethod !== "WALLET") {
         throw new Error("PAYMENT_SOURCE_MISMATCH: Wallet escrow refunds are only valid for wallet-paid orders.");
       }
       if (!["PAID", "REFUNDED"].includes(order.payment.paymentStatus)) {
@@ -790,6 +794,29 @@ export class WalletService {
           throw new Error("REFUND_STATE_CONFLICT");
         }
       }
+    } else {
+      // Store credit is an explicit, auditable alternative for a non-wallet payment.
+      // It may not bypass an in-flight/settled financial state or refund a wallet order.
+      if (order.payment.paymentMethod === "WALLET") {
+        throw new Error("PAYMENT_SOURCE_MISMATCH: Wallet-paid orders must be refunded from escrow.");
+      }
+      if (order.payment.paymentStatus === "REFUNDED") {
+        const priorCredit = await prisma.walletTransaction.findUnique({
+          where: { reference: `STORE-CREDIT-${orderId}` },
+        });
+        if (
+          !priorCredit ||
+          priorCredit.status !== "SUCCESS" ||
+          Math.abs(Number(priorCredit.amount) - amount) > 0.01
+        ) {
+          throw new Error("REFUND_STATE_CONFLICT");
+        }
+      } else if (
+        order.payment.paymentStatus !== "PAID" ||
+        order.payment.financialState !== "ESCROWED"
+      ) {
+        throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+      }
     }
 
     const wallet = await this.getOrCreateWallet(userId);
@@ -804,18 +831,27 @@ export class WalletService {
         throw new Error("REFUND_ALREADY_RECORDED");
       }
 
+      // The same compare-and-set claim is shared by refunds and escrow releases.
+      // It prevents a release/refund race and commits the Payment status with the ledger.
+      const financialClaim = await tx.payment.updateMany({
+        where: {
+          id: order.payment!.id,
+          paymentStatus: "PAID",
+          financialState: "ESCROWED",
+        },
+        data: {
+          paymentStatus: "REFUNDED",
+          financialState: "REFUNDED",
+        },
+      });
+      if (financialClaim.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+
       if (isStoreCredit) {
         await tx.wallet.update({
           where: { id: wallet.id },
           data: { balance: { increment: amount } },
         });
       } else {
-        const financialClaim = await tx.payment.updateMany({
-          where: { id: order.payment!.id, paymentStatus: "PAID", financialState: "ESCROWED" },
-          data: { financialState: "REFUNDED" },
-        });
-        if (financialClaim.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
-
         const debit = await tx.wallet.updateMany({
           where: { id: wallet.id, escrow: { gte: amount } },
           data: {
