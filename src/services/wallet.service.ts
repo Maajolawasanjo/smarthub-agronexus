@@ -14,6 +14,89 @@ import {
   WithdrawalLimitDTO,
 } from "@/types/wallet.dto";
 
+type SettlementJournalInput = {
+  orderId: string;
+  paymentId: string;
+  referencePrefix: string;
+  orderAmount: number;
+  commodityGross: number;
+  shippingFee: number;
+  netFarmerPayout: number;
+  platformFee: number;
+  taxAmount: number;
+};
+
+/**
+ * Posts the non-user financial allocations that were previously implicit in settlement
+ * arithmetic. All lines share the caller's database transaction and deterministic
+ * references, so wallet credits and the accounting journal commit or roll back together.
+ */
+async function postSettlementJournal(
+  tx: Prisma.TransactionClient,
+  input: SettlementJournalInput
+) {
+  const allocations = [
+    { code: "CUSTOMER_ESCROW", name: "Customer Escrow Liability", accountType: "LIABILITY" as const },
+    { code: "FARMER_PAYABLE", name: "Farmer Wallet Payables", accountType: "LIABILITY" as const },
+    { code: "PLATFORM_FEE_REVENUE", name: "Platform Fee Revenue", accountType: "REVENUE" as const },
+    { code: "VAT_PAYABLE", name: "VAT Payable", accountType: "LIABILITY" as const },
+    { code: "LOGISTICS_PAYABLE", name: "Logistics Payable", accountType: "LIABILITY" as const },
+  ];
+
+  const amounts = [
+    { code: "CUSTOMER_ESCROW", direction: "DEBIT" as const, amount: input.orderAmount, description: "Release customer escrow liability" },
+    { code: "FARMER_PAYABLE", direction: "CREDIT" as const, amount: input.netFarmerPayout, description: "Farmer net payout liability" },
+    { code: "PLATFORM_FEE_REVENUE", direction: "CREDIT" as const, amount: input.platformFee, description: "Recognize platform service fee" },
+    { code: "VAT_PAYABLE", direction: "CREDIT" as const, amount: input.taxAmount, description: "Recognize VAT payable on platform fee" },
+    { code: "LOGISTICS_PAYABLE", direction: "CREDIT" as const, amount: input.shippingFee, description: "Recognize shipping pass-through payable" },
+  ].filter((line) => line.amount > 0);
+
+  const debitTotal = amounts.filter((line) => line.direction === "DEBIT").reduce((sum, line) => sum + line.amount, 0);
+  const creditTotal = amounts.filter((line) => line.direction === "CREDIT").reduce((sum, line) => sum + line.amount, 0);
+  if (
+    ![input.orderAmount, input.commodityGross, input.shippingFee, input.netFarmerPayout, input.platformFee, input.taxAmount].every(Number.isFinite) ||
+    input.orderAmount <= 0 ||
+    input.commodityGross <= 0 ||
+    input.shippingFee < 0 ||
+    Math.abs(input.commodityGross + input.shippingFee - input.orderAmount) > 0.01 ||
+    Math.abs(debitTotal - creditTotal) > 0.01
+  ) {
+    throw new Error("SETTLEMENT_JOURNAL_UNBALANCED");
+  }
+
+  const accounts = new Map<string, string>();
+  for (const account of allocations) {
+    const saved = await tx.financialLedgerAccount.upsert({
+      where: { code: account.code },
+      create: { code: account.code, name: account.name, accountType: account.accountType, currency: "NGN" },
+      update: {},
+      select: { id: true },
+    });
+    accounts.set(account.code, saved.id);
+  }
+
+  for (const line of amounts) {
+    await tx.financialLedgerEntry.create({
+      data: {
+        accountId: accounts.get(line.code)!,
+        orderId: input.orderId,
+        paymentId: input.paymentId,
+        direction: line.direction,
+        amount: Number(line.amount.toFixed(2)),
+        currency: "NGN",
+        reference: `${input.referencePrefix}-${line.code}`,
+        description: line.description,
+        metadata: {
+          referencePrefix: input.referencePrefix,
+          orderAmount: input.orderAmount,
+          commodityGross: input.commodityGross,
+          shippingFee: input.shippingFee,
+        },
+      },
+    });
+  }
+}
+
 export class WalletService {
   /**
    * Helper to format numbers in NGN currency format (e.g. ₦52,000.00)
@@ -1493,6 +1576,17 @@ export class WalletService {
               status: "SUCCESS",
             },
           });
+          await postSettlementJournal(tx, {
+            orderId: order.id,
+            paymentId: order.payment!.id,
+            referencePrefix: `SETTLE-${order.orderNumber}-${farmerUserId}`,
+            orderAmount: grossAmount,
+            commodityGross: grossAmount,
+            shippingFee: 0,
+            netFarmerPayout,
+            platformFee,
+            taxAmount,
+          });
         }
 
         const finalized = await tx.payment.updateMany({
@@ -1636,6 +1730,17 @@ export class WalletService {
             description: `Buyer escrow debited for Sub-Order #${sellerOrder.sellerOrderNumber} (Order #${order.orderNumber})`,
             status: "SUCCESS",
           },
+        });
+        await postSettlementJournal(tx, {
+          orderId: order.id,
+          paymentId: order.payment!.id,
+          referencePrefix: `SETTLE-${sellerOrder.sellerOrderNumber}`,
+          orderAmount: fullOrderAmount,
+          commodityGross: grossAmount,
+          shippingFee: Number(sellerOrder.shippingFee ?? 0),
+          netFarmerPayout,
+          platformFee,
+          taxAmount,
         });
       }
 
