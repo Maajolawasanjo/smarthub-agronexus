@@ -946,11 +946,31 @@ export class WalletService {
     }
 
     const payment = order.payment;
+    const cardRefundReference = `CARD-REFUND-${orderId}`;
+
     if (payment.refundStatus === "SUCCEEDED") {
       if (payment.paymentStatus !== "REFUNDED" || payment.financialState !== "REFUNDED") {
         throw new Error("REFUND_STATE_CONFLICT: Provider refund marker disagrees with the payment lifecycle state.");
       }
-      return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: payment.gatewayTransactionId };
+      const refundLedger = await prisma.walletTransaction.findUnique({
+        where: { reference: cardRefundReference },
+        include: { wallet: true },
+      });
+      if (
+        !refundLedger ||
+        refundLedger.status !== "SUCCESS" ||
+        refundLedger.type !== "REFUND" ||
+        refundLedger.wallet?.userId !== userId ||
+        Math.abs(Number(refundLedger.amount) - amount) > 0.01
+      ) {
+        throw new Error("REFUND_STATE_CONFLICT: Confirmed card refund is missing its escrow-debit ledger entry.");
+      }
+      return {
+        gatewayRefunded: true,
+        alreadyRefunded: true,
+        gatewayTransactionId: payment.gatewayTransactionId,
+        gatewayRefundId: payment.gatewayRefundId,
+      };
     }
     if (payment.refundStatus === "PENDING" || payment.refundStatus === "MANUAL_REVIEW") {
       throw new Error("CARD_REFUND_PENDING_RECONCILIATION: A previous refund attempt requires reconciliation.");
@@ -958,14 +978,54 @@ export class WalletService {
     if (payment.refundStatus === "FAILED") {
       throw new Error("CARD_REFUND_FAILED: A previous provider refund attempt failed; manual review is required.");
     }
-    if (payment.paymentStatus !== "PAID") {
-      throw new Error("CARD_REFUND_FAILED: Only a captured payment can be refunded.");
+    if (payment.paymentStatus !== "PAID" || payment.financialState !== "ESCROWED") {
+      throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
+    }
+    if (!payment.transactionRef) throw new Error("ESCROW_LOCK_REFERENCE_MISSING");
+
+    // A card refund releases the escrow liability, but must not credit the buyer's
+    // available wallet balance. Verify the exact successful lock and remaining escrow
+    // before asking the provider to move real money.
+    const escrowLock = await prisma.walletTransaction.findUnique({
+      where: { reference: payment.transactionRef },
+      include: { wallet: true },
+    });
+    if (
+      !escrowLock ||
+      escrowLock.type !== "ESCROW_LOCK" ||
+      escrowLock.status !== "SUCCESS" ||
+      escrowLock.wallet?.userId !== userId ||
+      Math.abs(Number(escrowLock.amount) - amount) > 0.01
+    ) {
+      throw new Error("ESCROW_NOT_FUNDED");
+    }
+    const buyerWallet = escrowLock.wallet;
+    if (!buyerWallet || Number(buyerWallet.escrow) + 0.01 < amount) {
+      throw new Error("INSUFFICIENT_ESCROW");
+    }
+
+    const existingCardRefundLedger = await prisma.walletTransaction.findUnique({
+      where: { reference: cardRefundReference },
+    });
+    if (existingCardRefundLedger) {
+      throw new Error("REFUND_STATE_CONFLICT: A card-refund ledger entry exists while the payment is not marked refunded.");
     }
 
     const secretKey = process.env.FLUTTERWAVE_SECRET_KEY;
-    if (!secretKey || !gatewayId || !payment.gatewayTransactionId || payment.gatewayTransactionId !== gatewayId || !/^\d+$/.test(gatewayId)) {
+    if (
+      !secretKey ||
+      !gatewayId ||
+      !payment.gatewayTransactionId ||
+      payment.gatewayTransactionId !== gatewayId ||
+      !/^\d+$/.test(gatewayId)
+    ) {
       const manualClaim = await prisma.payment.updateMany({
-        where: { id: payment.id, paymentStatus: "PAID", refundStatus: null, financialState: "ESCROWED" },
+        where: {
+          id: payment.id,
+          paymentStatus: "PAID",
+          refundStatus: null,
+          financialState: "ESCROWED",
+        },
         data: { refundStatus: "MANUAL_REVIEW", financialState: "MANUAL_REVIEW" },
       });
       if (manualClaim.count !== 1) throw new Error("PAYMENT_FINANCIAL_STATE_CONFLICT");
@@ -980,8 +1040,8 @@ export class WalletService {
       throw new Error("CARD_REFUND_FAILED: Verified provider transaction ID or gateway configuration is missing. Manual review required.");
     }
 
-    // Claim the one allowed refund attempt before calling Flutterwave. A second request
-    // cannot issue a duplicate refund while the first is pending or its outcome is unknown.
+    // Claim the single provider attempt before making the external call. This claim
+    // races on the same Payment row as escrow release and wallet refunds.
     const claim = await prisma.payment.updateMany({
       where: {
         id: payment.id,
@@ -994,8 +1054,17 @@ export class WalletService {
     });
     if (claim.count !== 1) {
       const current = await prisma.payment.findUnique({ where: { id: payment.id } });
-      if (current?.refundStatus === "SUCCEEDED") {
-        return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: current.gatewayTransactionId };
+      if (
+        current?.paymentStatus === "REFUNDED" &&
+        current.refundStatus === "SUCCEEDED" &&
+        current.financialState === "REFUNDED"
+      ) {
+        const ledger = await prisma.walletTransaction.findUnique({
+          where: { reference: cardRefundReference },
+        });
+        if (ledger?.status === "SUCCESS" && Math.abs(Number(ledger.amount) - amount) <= 0.01) {
+          return { gatewayRefunded: true, alreadyRefunded: true, gatewayTransactionId: current.gatewayTransactionId };
+        }
       }
       throw new Error("CARD_REFUND_PENDING_RECONCILIATION: Refund state changed before provider submission.");
     }
@@ -1015,7 +1084,7 @@ export class WalletService {
       );
     } catch (error: unknown) {
       await prisma.payment.updateMany({
-        where: { id: payment.id, refundStatus: "PENDING" },
+        where: { id: payment.id, refundStatus: "PENDING", financialState: "REFUNDING" },
         data: { refundStatus: "MANUAL_REVIEW", financialState: "MANUAL_REVIEW" },
       });
       const message = error instanceof Error ? error.message : "Unknown network error";
@@ -1027,7 +1096,7 @@ export class WalletService {
     if (!flwRes.ok || flwData.status !== "success") {
       const errMsg = flwData?.message || "Gateway returned non-success status";
       await prisma.payment.updateMany({
-        where: { id: payment.id, refundStatus: "PENDING" },
+        where: { id: payment.id, refundStatus: "PENDING", financialState: "REFUNDING" },
         data: { refundStatus: "FAILED", financialState: "MANUAL_REVIEW" },
       });
       await this.persistManualReviewFlag(userId, orderId, amount, `Gateway rejection: ${errMsg}`);
@@ -1036,28 +1105,63 @@ export class WalletService {
 
     const providerRefundId = String(flwData.data?.id ?? flwData.data?.refund_id ?? "").trim() || null;
     try {
-      const finalized = await prisma.payment.updateMany({
-        where: { id: payment.id, refundStatus: "PENDING" },
-        data: {
-          paymentStatus: "REFUNDED",
-          refundStatus: "SUCCEEDED",
-          financialState: "REFUNDED",
-          gatewayRefundId: providerRefundId,
-        },
+      await prisma.$transaction(async (tx) => {
+        const finalized = await tx.payment.updateMany({
+          where: {
+            id: payment.id,
+            paymentStatus: "PAID",
+            refundStatus: "PENDING",
+            financialState: "REFUNDING",
+            gatewayTransactionId: gatewayId,
+          },
+          data: {
+            paymentStatus: "REFUNDED",
+            refundStatus: "SUCCEEDED",
+            financialState: "REFUNDED",
+            gatewayRefundId: providerRefundId,
+          },
+        });
+        if (finalized.count !== 1) throw new Error("REFUND_STATE_FINALIZATION_CONFLICT");
+
+        const escrowDebit = await tx.wallet.updateMany({
+          where: { id: buyerWallet.id, escrow: { gte: amount } },
+          data: { escrow: { decrement: amount } },
+        });
+        if (escrowDebit.count !== 1) throw new Error("INSUFFICIENT_ESCROW");
+
+        await tx.walletTransaction.create({
+          data: {
+            walletId: buyerWallet.id,
+            type: "REFUND",
+            amount,
+            reference: cardRefundReference,
+            description: `Flutterwave confirmed refund to original card for Order #${order.orderNumber}; buyer escrow released without wallet balance credit.`,
+            status: "SUCCESS",
+          },
+        });
       });
-      if (finalized.count !== 1) throw new Error("REFUND_STATE_FINALIZATION_CONFLICT");
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown persistence error";
       await prisma.payment.updateMany({
-        where: { id: payment.id, refundStatus: "PENDING" },
+        where: { id: payment.id, refundStatus: "PENDING", financialState: "REFUNDING" },
         data: { refundStatus: "MANUAL_REVIEW", financialState: "MANUAL_REVIEW" },
       }).catch(() => undefined);
-      await this.persistManualReviewFlag(userId, orderId, amount, `Provider refund succeeded but local state finalization failed: ${message}`);
-      throw new Error("CARD_REFUND_PENDING_RECONCILIATION: Provider refunded the charge but local state requires manual reconciliation.");
+      await this.persistManualReviewFlag(
+        userId,
+        orderId,
+        amount,
+        `Provider refund succeeded but escrow finalization failed: ${message}`
+      );
+      throw new Error("CARD_REFUND_PENDING_RECONCILIATION: Provider refunded the charge but local escrow state requires manual reconciliation.");
     }
 
     console.log(`[FLUTTERWAVE_REFUND_SUCCESS] Refunded ₦${amount} to card for Order #${orderId}`);
-    return { gatewayRefunded: true, alreadyRefunded: false, gatewayTransactionId: gatewayId, gatewayRefundId: providerRefundId };
+    return {
+      gatewayRefunded: true,
+      alreadyRefunded: false,
+      gatewayTransactionId: gatewayId,
+      gatewayRefundId: providerRefundId,
+    };
   }
 
   /**
