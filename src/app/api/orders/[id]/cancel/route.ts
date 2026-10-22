@@ -207,8 +207,8 @@ export async function POST(
       })
     );
     return attachTraceHeaders(res, traceCtx);
-  } catch (err: any) {
-    const message = err?.message || "Failed to cancel order";
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to cancel order";
     const conflict = [
       "ORDER_STATE_CONFLICT",
       "INVENTORY_RESTORE_CONFLICT",
