@@ -95,8 +95,17 @@ export async function POST(
               where: { reference: `WALLET-REFUND-${order.id}` },
             })
           : null;
+      const priorCardRefund =
+        order.payment.paymentMethod === "CARD"
+          ? await prisma.walletTransaction.findUnique({
+              where: { reference: `CARD-REFUND-${order.id}` },
+            })
+          : null;
       const refundConfirmed =
-        (order.payment.paymentMethod === "CARD" && order.payment.refundStatus === "SUCCEEDED") ||
+        (order.payment.paymentMethod === "CARD" &&
+          order.payment.refundStatus === "SUCCEEDED" &&
+          priorCardRefund?.status === "SUCCESS" &&
+          Math.abs(Number(priorCardRefund.amount) - totalAmount) <= 0.01) ||
         (order.payment.paymentMethod === "WALLET" &&
           priorWalletRefund?.status === "SUCCESS" &&
           Math.abs(Number(priorWalletRefund.amount) - totalAmount) <= 0.01);
