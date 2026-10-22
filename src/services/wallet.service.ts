@@ -1558,7 +1558,7 @@ export class WalletService {
         });
 
         for (const [farmerUserId, grossAmount] of farmerGross.entries()) {
-          const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
+          const { netFarmerPayout, platformFee, taxAmount } = calculateSettlement(grossAmount);
           totalGrossSettled += grossAmount;
           const farmerWallet = farmerWallets.get(farmerUserId)!;
 
@@ -1703,7 +1703,7 @@ export class WalletService {
         const farmerUserId = sellerOrder.farmerProfile.userId;
         const grossAmount = Number(sellerOrder.subtotal);
         const fullOrderAmount = Number(sellerOrder.totalAmount);
-        const { netFarmerPayout, platformFee } = calculateSettlement(grossAmount);
+        const { netFarmerPayout, platformFee, taxAmount } = calculateSettlement(grossAmount);
         totalGrossSettled += grossAmount;
         const farmerWallet = farmerWallets.get(farmerUserId)!;
 
