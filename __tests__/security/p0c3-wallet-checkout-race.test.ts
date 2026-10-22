@@ -154,4 +154,25 @@ describe("wallet checkout concurrent-debit guard", () => {
     expect(mock.walletTransactionCreate).not.toHaveBeenCalled();
     expect(mock.orderCreate).not.toHaveBeenCalled();
   });
+
+  it("rejects unsupported payment methods instead of silently treating them as wallet checkout", async () => {
+    const req = new Request("https://www.smarthubagrochain.online/api/orders", {
+      method: "POST",
+      headers: {
+        Origin: "https://www.smarthubagrochain.online",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items: [{ productId: "product-1", quantity: 1 }],
+        paymentMethod: "BANK_TRANSFER",
+      }),
+    });
+
+    const response = await createOrder(req);
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain("Unsupported checkout payment method");
+    expect(mock.transaction).not.toHaveBeenCalled();
+    expect(mock.walletUpdateMany).not.toHaveBeenCalled();
+    expect(mock.orderCreate).not.toHaveBeenCalled();
+  });
 });
