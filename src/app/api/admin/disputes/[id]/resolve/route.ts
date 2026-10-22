@@ -275,8 +275,8 @@ export async function POST(
       );
       return attachTraceHeaders(res, traceCtx);
     }
-  } catch (error: any) {
-    const message = error?.message || "Failed to arbitrate dispute.";
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to arbitrate dispute.";
     const conflict = [
       "CARD_REFUND_FAILED",
       "CARD_REFUND_PENDING_RECONCILIATION",
