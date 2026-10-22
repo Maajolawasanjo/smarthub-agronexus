@@ -156,7 +156,7 @@ export async function POST(
         await tx.payment.update({
           where: { id: order.payment.id },
           data: {
-            paymentStatus: order.payment.paymentStatus === "PAID" ? "REFUNDED" : "FAILED",
+            paymentStatus: ["PAID", "REFUNDED"].includes(order.payment.paymentStatus) ? "REFUNDED" : "FAILED",
           },
         });
       }
