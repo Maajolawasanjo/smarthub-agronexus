@@ -826,7 +826,31 @@ export class WalletService {
       const existing = await tx.walletTransaction.findUnique({ where: { reference: txRef } });
       if (existing) {
         if (existing.status === "SUCCESS" && Math.abs(Number(existing.amount) - amount) <= 0.01) {
-          return { updatedWallet: wallet, txRecord: existing, alreadyRefunded: true };
+          if (
+            order.payment!.paymentStatus === "REFUNDED" &&
+            order.payment!.financialState === "REFUNDED"
+          ) {
+            return { updatedWallet: wallet, txRecord: existing, alreadyRefunded: true };
+          }
+
+          // Repair the only safe legacy state: a successful deterministic refund ledger
+          // exists but the old route failed before marking the payment refunded. If another
+          // operation has already moved the payment elsewhere, do not guess or pay twice.
+          const legacyRepair = await tx.payment.updateMany({
+            where: {
+              id: order.payment!.id,
+              paymentStatus: "PAID",
+              financialState: "ESCROWED",
+            },
+            data: {
+              paymentStatus: "REFUNDED",
+              financialState: "REFUNDED",
+            },
+          });
+          if (legacyRepair.count === 1) {
+            return { updatedWallet: wallet, txRecord: existing, alreadyRefunded: true };
+          }
+          throw new Error("REFUND_STATE_CONFLICT");
         }
         throw new Error("REFUND_ALREADY_RECORDED");
       }
