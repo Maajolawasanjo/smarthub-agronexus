@@ -756,6 +756,9 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
       }));
       mock.walletTransactionFindUnique.mockResolvedValue({
         id: "wallet-refund-1",
+        walletId: "wallet-buyer-1",
+        wallet: { userId: "buyer-1" },
+        type: "REFUND",
         status: "SUCCESS",
         amount: 1200,
         reference: "WALLET-REFUND-order-1",
