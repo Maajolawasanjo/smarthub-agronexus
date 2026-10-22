@@ -38,6 +38,7 @@ describe("wallet checkout concurrent-debit guard", () => {
       id: "product-1",
       name: "Yam",
       price: 200,
+      status: "APPROVED",
       isAvailable: true,
       farmerProfileId: "farmer-profile-1",
       inventory: { availableQty: 10 },
@@ -100,5 +101,57 @@ describe("wallet checkout concurrent-debit guard", () => {
     expect(mock.orderCreate).not.toHaveBeenCalled();
     expect(mock.sellerOrderCreate).not.toHaveBeenCalled();
     expect(mock.recordAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-buyer roles even if a buyer profile exists", async () => {
+    mock.getSession.mockResolvedValue({ userId: "farmer-1", role: "FARMER", email: "farmer@example.com" });
+
+    const req = new Request("https://www.smarthubagrochain.online/api/orders", {
+      method: "POST",
+      headers: {
+        Origin: "https://www.smarthubagrochain.online",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ items: [{ productId: "product-1", quantity: 1 }], paymentMethod: "WALLET" }),
+    });
+
+    const response = await createOrder(req);
+    expect(response.status).toBe(403);
+    expect(mock.transaction).not.toHaveBeenCalled();
+    expect(mock.walletUpdateMany).not.toHaveBeenCalled();
+    expect(mock.orderCreate).not.toHaveBeenCalled();
+  });
+
+  it("does not reserve inventory or debit wallet for a non-approved listing", async () => {
+    mock.productFindUnique.mockResolvedValue({
+      id: "product-1",
+      name: "Yam",
+      price: 200,
+      status: "PENDING_APPROVAL",
+      isAvailable: true,
+      farmerProfileId: "farmer-profile-1",
+      inventory: { availableQty: 10 },
+    });
+
+    const req = new Request("https://www.smarthubagrochain.online/api/orders", {
+      method: "POST",
+      headers: {
+        Origin: "https://www.smarthubagrochain.online",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        items: [{ productId: "product-1", quantity: 1 }],
+        paymentMethod: "WALLET",
+        shippingAddress: "Lagos",
+      }),
+    });
+
+    const response = await createOrder(req);
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain("not approved and available");
+    expect(mock.executeRaw).not.toHaveBeenCalled();
+    expect(mock.walletUpdateMany).not.toHaveBeenCalled();
+    expect(mock.walletTransactionCreate).not.toHaveBeenCalled();
+    expect(mock.orderCreate).not.toHaveBeenCalled();
   });
 });
