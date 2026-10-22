@@ -318,4 +318,134 @@ describe.skipIf(!enabled)("PostgreSQL financial state compare-and-set", () => {
       if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
   });
+
+  it("quarantines a legacy successful refund ledger instead of releasing the same escrow twice", async () => {
+    const legacySuffix = randomUUID();
+    let legacyBuyerId = "";
+    let legacyFarmerId = "";
+    let legacyOrderId = "";
+    let legacyBuyerWalletId = "";
+    let legacyFarmerWalletId = "";
+
+    try {
+      const buyerUser = await prisma.user.create({
+        data: {
+          fullName: "Legacy Refund CI Buyer",
+          email: `legacy-refund-buyer-${legacySuffix}@example.invalid`,
+          phoneNumber: `legacy-buyer-${legacySuffix}`,
+          password: "not-a-real-login-secret",
+          role: "BUYER",
+        },
+      });
+      legacyBuyerId = buyerUser.id;
+      const farmerUser = await prisma.user.create({
+        data: {
+          fullName: "Legacy Refund CI Farmer",
+          email: `legacy-refund-farmer-${legacySuffix}@example.invalid`,
+          phoneNumber: `legacy-farmer-${legacySuffix}`,
+          password: "not-a-real-login-secret",
+          role: "FARMER",
+        },
+      });
+      legacyFarmerId = farmerUser.id;
+
+      const buyer = await prisma.buyerProfile.create({ data: { userId: buyerUser.id } });
+      const farmer = await prisma.farmerProfile.create({
+        data: {
+          userId: farmerUser.id,
+          farmName: "Legacy Refund Test Farm",
+          farmAddress: "CI Test Address",
+          state: "Lagos",
+          lga: "Ikeja",
+        },
+      });
+      const order = await prisma.order.create({
+        data: {
+          orderNumber: `CI-LEGACY-REFUND-${legacySuffix}`,
+          buyerId: buyer.id,
+          totalAmount: 1000,
+          status: "DELIVERED",
+        },
+      });
+      legacyOrderId = order.id;
+      const paymentReference = `CI-LEGACY-LOCK-${legacySuffix}`;
+      await prisma.payment.create({
+        data: {
+          orderId: order.id,
+          amount: 1000,
+          paymentMethod: "WALLET",
+          paymentStatus: "PAID",
+          transactionRef: paymentReference,
+          financialState: "ESCROWED",
+        },
+      });
+      const sellerOrder = await prisma.sellerOrder.create({
+        data: {
+          sellerOrderNumber: `CI-LEGACY-SELLER-${legacySuffix}`,
+          orderId: order.id,
+          farmerProfileId: farmer.id,
+          subtotal: 1000,
+          shippingFee: 0,
+          totalAmount: 1000,
+          status: "DELIVERED",
+        },
+      });
+      const buyerWallet = await prisma.wallet.create({
+        data: { userId: buyerUser.id, balance: 1000, escrow: 1000 },
+      });
+      legacyBuyerWalletId = buyerWallet.id;
+      const farmerWallet = await prisma.wallet.create({
+        data: { userId: farmerUser.id, balance: 0, escrow: 0 },
+      });
+      legacyFarmerWalletId = farmerWallet.id;
+      await prisma.walletTransaction.createMany({
+        data: [
+          {
+            walletId: buyerWallet.id,
+            type: "ESCROW_LOCK",
+            amount: 1000,
+            reference: paymentReference,
+            description: "Legacy inconsistent escrow lock fixture",
+            status: "SUCCESS",
+          },
+          {
+            walletId: buyerWallet.id,
+            type: "REFUND",
+            amount: 1000,
+            reference: `WALLET-REFUND-${order.id}`,
+            description: "Legacy refund ledger committed before payment state update",
+            status: "SUCCESS",
+          },
+        ],
+      });
+
+      await expect(WalletService.executeEscrowRelease(buyerUser.id, order.id))
+        .rejects.toThrow("REFUND_STATE_CONFLICT");
+
+      const [persistedPayment, persistedOrder, persistedSellerOrder, persistedBuyerWallet, persistedFarmerWallet, ledger] =
+        await Promise.all([
+          prisma.payment.findUniqueOrThrow({ where: { orderId: order.id } }),
+          prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
+          prisma.sellerOrder.findUniqueOrThrow({ where: { id: sellerOrder.id } }),
+          prisma.wallet.findUniqueOrThrow({ where: { id: buyerWallet.id } }),
+          prisma.wallet.findUniqueOrThrow({ where: { id: farmerWallet.id } }),
+          prisma.walletTransaction.findMany({ where: { walletId: { in: [buyerWallet.id, farmerWallet.id] } } }),
+        ]);
+
+      expect(persistedPayment.financialState).toBe("MANUAL_REVIEW");
+      expect(persistedOrder.status).toBe("DELIVERED");
+      expect(persistedSellerOrder.status).toBe("DELIVERED");
+      expect(Number(persistedBuyerWallet.escrow)).toBe(1000);
+      expect(Number(persistedBuyerWallet.balance)).toBe(1000);
+      expect(Number(persistedFarmerWallet.balance)).toBe(0);
+      expect(ledger.some((entry) => entry.reference === `REL-${sellerOrder.sellerOrderNumber}`)).toBe(false);
+      expect(ledger.some((entry) => entry.reference === `ESCROW-DRAIN-${sellerOrder.sellerOrderNumber}`)).toBe(false);
+    } finally {
+      if (legacyOrderId) await prisma.order.deleteMany({ where: { id: legacyOrderId } });
+      const walletIds = [legacyBuyerWalletId, legacyFarmerWalletId].filter(Boolean);
+      if (walletIds.length) await prisma.wallet.deleteMany({ where: { id: { in: walletIds } } });
+      const userIds = [legacyBuyerId, legacyFarmerId].filter(Boolean);
+      if (userIds.length) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+  });
 });
