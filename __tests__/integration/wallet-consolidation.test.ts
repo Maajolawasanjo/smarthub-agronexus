@@ -213,7 +213,81 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
     ).rejects.toThrow("ACCOUNT_FROZEN");
   });
 
-  test("6. Business Rule: Explicit store credit requires an existing order and records one ledger entry", async () => {
+  test("6. Business Rule: Wallet refund atomically returns escrow and marks payment refunded", async () => {
+    const wallet = {
+      id: "w_refund_101",
+      userId: mockUserId,
+      balance: 1000,
+      escrow: 9000,
+      pendingWithdrawal: 0,
+      frozen: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const payment = {
+      id: "pay_refund_101",
+      orderId: "ord_refund_101",
+      amount: 10000,
+      paymentMethod: "WALLET",
+      paymentStatus: "PAID",
+      financialState: "ESCROWED",
+      transactionRef: "LOCK-ord_refund_101",
+    };
+    const order = {
+      id: "ord_refund_101",
+      orderNumber: "AGRO-REFUND-101",
+      totalAmount: 10000,
+      buyer: { userId: mockUserId },
+      payment,
+    };
+    const escrowLock = {
+      id: "lock_refund_101",
+      walletId: wallet.id,
+      wallet,
+      type: "ESCROW_LOCK",
+      amount: 10000,
+      reference: payment.transactionRef,
+      status: "SUCCESS",
+    };
+    vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+    vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(escrowLock as any);
+    vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(wallet as any);
+
+    const paymentClaim = vi.fn().mockImplementation(async ({ data }: any) => {
+      Object.assign(payment, data);
+      return { count: 1 };
+    });
+    const escrowDebit = vi.fn().mockImplementation(async ({ data }: any) => {
+      wallet.escrow -= Number(data.escrow.decrement);
+      wallet.balance += Number(data.balance.increment);
+      return { count: 1 };
+    });
+    const txWalletTransactionFind = vi.fn().mockResolvedValue(null);
+    const txWalletTransactionCreate = vi.fn(async ({ data }: any) => ({ id: "refund_tx_101", ...data }));
+    vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => arg({
+      payment: { updateMany: paymentClaim },
+      wallet: { updateMany: escrowDebit, findUnique: vi.fn().mockResolvedValue(wallet) },
+      walletTransaction: { findUnique: txWalletTransactionFind, create: txWalletTransactionCreate },
+    }));
+
+    const result = await WalletService.executeWalletEscrowRefund(mockUserId, 10000, order.id);
+
+    expect(paymentClaim).toHaveBeenCalledWith({
+      where: { id: payment.id, paymentStatus: "PAID", financialState: "ESCROWED" },
+      data: { paymentStatus: "REFUNDED", financialState: "REFUNDED" },
+    });
+    expect(escrowDebit).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: wallet.id, escrow: { gte: 10000 } },
+      data: { escrow: { decrement: 10000 }, balance: { increment: 10000 } },
+    }));
+    expect(payment.paymentStatus).toBe("REFUNDED");
+    expect(payment.financialState).toBe("REFUNDED");
+    expect(wallet.escrow).toBe(-1000);
+    expect(wallet.balance).toBe(11000);
+    expect(result.txRecord.reference).toBe("WALLET-REFUND-ord_refund_101");
+  });
+
+  test("7. Business Rule: Explicit store credit requires an existing order and records one ledger entry", async () => {
     const wallet = {
       id: "w_101",
       userId: mockUserId,
@@ -229,11 +303,18 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
       orderNumber: "AGRO-101",
       totalAmount: 10000,
       buyer: { userId: mockUserId },
-      payment: null,
+      payment: {
+        id: "pay_store_credit_101",
+        paymentMethod: "CARD",
+        paymentStatus: "PAID",
+        financialState: "ESCROWED",
+        amount: 10000,
+      },
     } as any);
     vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(wallet as any);
 
     const txFindUnique = vi.fn().mockResolvedValue(null);
+    const txPaymentUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const txWalletUpdate = vi.fn(async ({ data }: any) => {
       if (data.balance?.increment) wallet.balance += Number(data.balance.increment);
       return wallet as any;
@@ -241,6 +322,7 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
     const txWalletCreate = vi.fn(async ({ data }: any) => ({ id: "tx_ref", ...data }));
     const txWalletFindUnique = vi.fn(async () => wallet);
     vi.spyOn(prisma, "$transaction").mockImplementation(async (arg: any) => arg({
+      payment: { updateMany: txPaymentUpdateMany },
       walletTransaction: { findUnique: txFindUnique, create: txWalletCreate },
       wallet: { update: txWalletUpdate, findUnique: txWalletFindUnique },
     }));
@@ -255,6 +337,17 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
     expect(result.txRecord.type).toBe("REFUND");
     expect(result.txRecord.amount).toBe(10000);
     expect(result.txRecord.reference).toBe("STORE-CREDIT-ord_cancelled_101");
+    expect(txPaymentUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: "pay_store_credit_101",
+        paymentStatus: "PAID",
+        financialState: "ESCROWED",
+      },
+      data: {
+        paymentStatus: "REFUNDED",
+        financialState: "REFUNDED",
+      },
+    });
     expect(wallet.balance).toBe(20000);
   });
 });
