@@ -79,6 +79,29 @@ export async function POST(
 
     const totalAmount = Number(order.totalAmount);
 
+    // A prior REFUNDED status is not sufficient proof for a retry. Require the
+    // provider success marker or the exact successful wallet-refund ledger entry.
+    if (order.payment?.paymentStatus === "REFUNDED") {
+      const priorWalletRefund =
+        order.payment.paymentMethod === "WALLET"
+          ? await prisma.walletTransaction.findUnique({
+              where: { reference: `WALLET-REFUND-${order.id}` },
+            })
+          : null;
+      const refundConfirmed =
+        (order.payment.paymentMethod === "CARD" && order.payment.refundStatus === "SUCCEEDED") ||
+        (order.payment.paymentMethod === "WALLET" &&
+          priorWalletRefund?.status === "SUCCESS" &&
+          Math.abs(Number(priorWalletRefund.amount) - totalAmount) <= 0.01);
+      if (!refundConfirmed) {
+        const res = NextResponse.json(
+          createErrorResponse("REFUND_STATE_CONFLICT", "The payment is marked refunded but no matching successful refund can be verified."),
+          { status: 409 }
+        );
+        return attachTraceHeaders(res, traceCtx);
+      }
+    }
+
     // Perform the source-aware refund before marking the order/payment as cancelled.
     // If a gateway refund fails, leave the order and inventory state unchanged.
     const buyerUserId = order.buyer.userId;
