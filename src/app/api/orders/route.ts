@@ -301,6 +301,7 @@ export async function POST(req: Request) {
       err.message?.includes("Insufficient stock") ||
       err.message?.includes("INSUFFICIENT_STOCK") ||
       err.message?.includes("not available") ||
+      err.message?.includes("not approved and available") ||
       err.message?.includes("Invalid quantity") ||
       err.message?.includes("Insufficient wallet balance") ||
       err.message?.includes("INSUFFICIENT_FUNDS")
