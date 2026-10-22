@@ -55,7 +55,17 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         txRecord.push(data);
         return { id: "tx-gateway-lock", ...data };
       });
+      const financialJournalEntries: any[] = [];
       const txMock = {
+        financialLedgerAccount: {
+          upsert: vi.fn(async ({ where, create }: any) => ({ id: `ledger-account-${where.code}`, ...create })),
+        },
+        financialLedgerEntry: {
+          create: vi.fn(async ({ data }: any) => {
+            financialJournalEntries.push(data);
+            return { id: `journal-${financialJournalEntries.length}`, ...data };
+          }),
+        },
         payment: {
           findFirst: vi.fn().mockResolvedValue(payment),
           updateMany: txPaymentClaim,
@@ -348,6 +358,9 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       expect(result.totalGrossSettled).toBe(95000.0);
       expect(result.settledSellerOrdersCount).toBe(2);
       expect(result.totalEscrowReleased).toBe(100000.0);
+      expect(financialJournalEntries).toHaveLength(10);
+      expect(financialJournalEntries.reduce((sum, line) => sum + (line.direction === "DEBIT" ? Number(line.amount) : 0), 0)).toBeCloseTo(100000, 2);
+      expect(financialJournalEntries.reduce((sum, line) => sum + (line.direction === "CREDIT" ? Number(line.amount) : 0), 0)).toBeCloseTo(100000, 2);
 
       // The ledger records both farmer credits and the buyer-side gross escrow debits.
       expect(createdTransactions).toHaveLength(4);
