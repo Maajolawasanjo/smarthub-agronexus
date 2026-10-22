@@ -785,10 +785,13 @@ export class WalletService {
       if (order.payment.paymentStatus === "REFUNDED") {
         const priorRefund = await prisma.walletTransaction.findUnique({
           where: { reference: `WALLET-REFUND-${order.id}` },
+          include: { wallet: true },
         });
         if (
           !priorRefund ||
+          priorRefund.type !== "REFUND" ||
           priorRefund.status !== "SUCCESS" ||
+          priorRefund.wallet?.userId !== userId ||
           Math.abs(Number(priorRefund.amount) - amount) > 0.01
         ) {
           throw new Error("REFUND_STATE_CONFLICT");
@@ -803,10 +806,13 @@ export class WalletService {
       if (order.payment.paymentStatus === "REFUNDED") {
         const priorCredit = await prisma.walletTransaction.findUnique({
           where: { reference: `STORE-CREDIT-${order.id}` },
+          include: { wallet: true },
         });
         if (
           !priorCredit ||
+          priorCredit.type !== "REFUND" ||
           priorCredit.status !== "SUCCESS" ||
+          priorCredit.wallet?.userId !== userId ||
           Math.abs(Number(priorCredit.amount) - amount) > 0.01
         ) {
           throw new Error("REFUND_STATE_CONFLICT");
@@ -825,7 +831,12 @@ export class WalletService {
     return await prisma.$transaction(async (tx) => {
       const existing = await tx.walletTransaction.findUnique({ where: { reference: txRef } });
       if (existing) {
-        if (existing.status === "SUCCESS" && Math.abs(Number(existing.amount) - amount) <= 0.01) {
+        if (
+          existing.type === "REFUND" &&
+          existing.walletId === wallet.id &&
+          existing.status === "SUCCESS" &&
+          Math.abs(Number(existing.amount) - amount) <= 0.01
+        ) {
           if (
             order.payment!.paymentStatus === "REFUNDED" &&
             order.payment!.financialState === "REFUNDED"
