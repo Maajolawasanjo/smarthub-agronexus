@@ -76,6 +76,7 @@ export async function POST(
       order.payment.paymentStatus === "REFUNDED"
         ? await prisma.walletTransaction.findUnique({
             where: { reference: `WALLET-REFUND-${order.id}` },
+            include: { wallet: true },
           })
         : null;
     const priorCardRefund =
@@ -83,17 +84,22 @@ export async function POST(
       order.payment.paymentStatus === "REFUNDED"
         ? await prisma.walletTransaction.findUnique({
             where: { reference: `CARD-REFUND-${order.id}` },
+            include: { wallet: true },
           })
         : null;
     const refundAlreadyConfirmed =
       (order.payment?.paymentMethod === "CARD" &&
         order.payment.paymentStatus === "REFUNDED" &&
         order.payment.refundStatus === "SUCCEEDED" &&
-        priorCardRefund?.status === "SUCCESS" &&
+        priorCardRefund?.type === "REFUND" &&
+        priorCardRefund.status === "SUCCESS" &&
+        priorCardRefund.wallet?.userId === order.buyer.userId &&
         Math.abs(Number(priorCardRefund.amount) - Number(order.totalAmount)) <= 0.01) ||
       (order.payment?.paymentMethod === "WALLET" &&
         order.payment.paymentStatus === "REFUNDED" &&
-        priorWalletRefund?.status === "SUCCESS" &&
+        priorWalletRefund?.type === "REFUND" &&
+        priorWalletRefund.status === "SUCCESS" &&
+        priorWalletRefund.wallet?.userId === order.buyer.userId &&
         Math.abs(Number(priorWalletRefund.amount) - Number(order.totalAmount)) <= 0.01);
     if (!order.payment || (order.payment.paymentStatus !== "PAID" && !refundAlreadyConfirmed)) {
       return NextResponse.json({ error: "Only settled payments can be refunded." }, { status: 409 });
