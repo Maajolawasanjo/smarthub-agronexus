@@ -704,6 +704,19 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
   });
 
   describe("order cancellation refund evidence and retries", () => {
+    it("rejects a farmer role before reading an order for cancellation", async () => {
+      mock.getSession.mockResolvedValue({ userId: "farmer-1", role: "FARMER", email: "farmer@example.com" });
+
+      const res = await cancelOrder(
+        request("/api/orders/order-1/cancel", "POST", {}),
+        { params: Promise.resolve({ id: "order-1" }) }
+      );
+
+      expect(res.status).toBe(403);
+      expect(mock.orderFindUnique).not.toHaveBeenCalled();
+      expect(mock.transaction).not.toHaveBeenCalled();
+    });
+
     it("rejects a refunded card payment without confirmed provider refund evidence", async () => {
       mock.orderFindUnique.mockResolvedValue(orderRecord({
         status: "CONFIRMED",
