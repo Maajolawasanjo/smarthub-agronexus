@@ -97,8 +97,8 @@ export async function POST(req: Request) {
           );
         }
 
-        const requestedQty = parseInt(item.quantity?.toString() || "1", 10);
-        if (requestedQty <= 0) {
+        const requestedQty = Number.parseInt(item.quantity?.toString() || "1", 10);
+        if (!Number.isSafeInteger(requestedQty) || requestedQty <= 0) {
           throw new Error(`Invalid quantity for product "${product.name}".`);
         }
 
@@ -112,7 +112,18 @@ export async function POST(req: Request) {
         // Server-side price (NEVER trust client price)
         const unitPrice = Number(product.price);
         const subtotal = unitPrice * requestedQty;
+        if (
+          !Number.isFinite(unitPrice) ||
+          unitPrice <= 0 ||
+          !Number.isFinite(subtotal) ||
+          subtotal <= 0
+        ) {
+          throw new Error(`Invalid product price for "${product.name}".`);
+        }
         totalAmount += subtotal;
+        if (!Number.isFinite(totalAmount) || totalAmount > 99_999_999.99) {
+          throw new Error("ORDER_AMOUNT_LIMIT_EXCEEDED: The order total exceeds the supported NGN limit.");
+        }
 
         orderItemsData.push({
           productId: product.id,
@@ -308,6 +319,8 @@ export async function POST(req: Request) {
       err.message?.includes("not available") ||
       err.message?.includes("not approved and available") ||
       err.message?.includes("Invalid quantity") ||
+      err.message?.includes("Invalid product price") ||
+      err.message?.includes("ORDER_AMOUNT_LIMIT_EXCEEDED") ||
       err.message?.includes("Insufficient wallet balance") ||
       err.message?.includes("INSUFFICIENT_FUNDS")
     ) {
