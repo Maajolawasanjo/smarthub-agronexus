@@ -15,7 +15,12 @@ ADD COLUMN "financialState" "PaymentFinancialState" NOT NULL DEFAULT 'PENDING';
 -- already completed; the settlement service still verifies the actual escrow-lock ledger.
 UPDATE "Payment" AS p
 SET "financialState" = CASE
-  WHEN p."paymentStatus" = 'REFUNDED' THEN 'REFUNDED'::"PaymentFinancialState"
+  -- Any incomplete/failed provider refund must block escrow release until reviewed.
+  WHEN p."refundStatus" IN ('PENDING', 'FAILED', 'MANUAL_REVIEW')
+    THEN 'MANUAL_REVIEW'::"PaymentFinancialState"
+  -- Confirmed provider refunds and historical wallet refunds must never be re-released.
+  WHEN p."refundStatus" = 'SUCCEEDED' OR p."paymentStatus" = 'REFUNDED'
+    THEN 'REFUNDED'::"PaymentFinancialState"
   WHEN p."paymentStatus" = 'PAID' AND EXISTS (
     SELECT 1 FROM "Order" AS o
     WHERE o."id" = p."orderId" AND o."status" = 'COMPLETED'
