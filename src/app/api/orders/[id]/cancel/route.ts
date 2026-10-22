@@ -25,6 +25,13 @@ export async function POST(
     if (!isTrustedMutationOrigin(req)) {
       return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
+    if (session.role !== "BUYER" && session.role !== "ADMIN") {
+      const res = NextResponse.json(
+        createErrorResponse("FORBIDDEN", "Only the buyer or an administrator may cancel this order."),
+        { status: 403 }
+      );
+      return attachTraceHeaders(res, traceCtx);
+    }
 
     const { id: orderId } = await context.params;
 
