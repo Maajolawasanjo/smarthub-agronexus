@@ -1353,6 +1353,16 @@ export class WalletService {
       `STORE-CREDIT-${orderId}`,
     ].map((reference) => prisma.walletTransaction.findUnique({ where: { reference } })));
     if (priorRefundEntries.some((entry) => entry?.type === "REFUND" && entry.status === "SUCCESS")) {
+      // Quarantine a legacy inconsistent state durably (outside the settlement
+      // transaction) so every later release/refund attempt remains blocked.
+      await prisma.payment.updateMany({
+        where: {
+          id: order.payment.id,
+          paymentStatus: "PAID",
+          financialState: "ESCROWED",
+        },
+        data: { financialState: "MANUAL_REVIEW" },
+      });
       throw new Error("REFUND_STATE_CONFLICT");
     }
 
