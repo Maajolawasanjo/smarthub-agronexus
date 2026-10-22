@@ -21,6 +21,19 @@ SET "financialState" = CASE
   -- Confirmed provider refunds and historical wallet refunds must never be re-released.
   WHEN p."refundStatus" = 'SUCCEEDED' OR p."paymentStatus" = 'REFUNDED'
     THEN 'REFUNDED'::"PaymentFinancialState"
+  -- Older code could commit a refund ledger before updating Payment. Freeze such
+  -- records for reconciliation instead of treating them as releasable escrow.
+  WHEN EXISTS (
+    SELECT 1
+    FROM "WalletTransaction" AS wt
+    WHERE wt."reference" IN (
+      'WALLET-REFUND-' || p."orderId",
+      'CARD-REFUND-' || p."orderId",
+      'STORE-CREDIT-' || p."orderId"
+    )
+      AND wt."type" = 'REFUND'
+      AND wt."status" = 'SUCCESS'
+  ) THEN 'MANUAL_REVIEW'::"PaymentFinancialState"
   WHEN p."paymentStatus" = 'PAID' AND EXISTS (
     SELECT 1 FROM "Order" AS o
     WHERE o."id" = p."orderId" AND o."status" = 'COMPLETED'
