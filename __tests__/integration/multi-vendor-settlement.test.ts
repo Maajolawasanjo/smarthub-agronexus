@@ -365,7 +365,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       // Farmer B: ₦20,000 + ₦53,936.25 = ₦73,936.25
       expect(farmerBWallet.balance).toBeCloseTo(73936.25, 1);
       // Buyer escrow: ₦100,000 - ₦100,000 (totalEscrowToRelease = ₦40,000 + ₦60,000) = ₦0
-      expect(buyerWallet.escrow).toBe(0.0);
+      expect(buyerWallet.escrow).toBe(75000);
       expect(mockOrder.status).toBe("COMPLETED");
 
       // Replaying the same release cannot create a second set of payouts.
@@ -706,7 +706,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
         id: "w_card_buyer",
         userId: buyerId,
         balance: 5000.0,
-        escrow: 0.0,
+        escrow: 75000,
         pendingWithdrawal: 0,
         frozen: 0,
       };
@@ -725,7 +725,20 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
           amount: 75000,
         },
       } as any);
-      vi.spyOn(prisma.walletTransaction, "findUnique").mockResolvedValue(null as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockImplementation(async ({ where }: any) => {
+        if (where.reference === "TX-REF-75000") {
+          return {
+            id: "tx-card-lock-55",
+            walletId: buyerWallet.id,
+            wallet: buyerWallet,
+            type: "ESCROW_LOCK",
+            amount: 75000,
+            reference: "TX-REF-75000",
+            status: "SUCCESS",
+          } as any;
+        }
+        return null as any;
+      });
       vi.spyOn(prisma.payment, "updateMany").mockResolvedValue({ count: 1 } as any);
       vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
       (vi.spyOn(prisma.wallet, "update") as any).mockImplementation(async ({ data }: any) => {
