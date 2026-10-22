@@ -762,7 +762,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
 
       // CRITICAL: Buyer wallet balance must NOT have increased
       expect(buyerWallet.balance).toBe(5000.0);
-      expect(buyerWallet.escrow).toBe(0.0);
+      expect(buyerWallet.escrow).toBe(75000);
 
       // A REQUIRES_MANUAL_REVIEW ledger entry must have been persisted
       expect(createdFlagEntry.length).toBeGreaterThan(0);
@@ -774,7 +774,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
     it("records a definitive provider rejection and does not credit wallet balance", async () => {
       const buyerId = "usr_card_buyer_rejected";
       const orderId = "ord_card_rejected";
-      const buyerWallet = { id: "w-card-rejected", userId: buyerId, balance: 1200, escrow: 0 };
+      const buyerWallet = { id: "w-card-rejected", userId: buyerId, balance: 1200, escrow: 75000 };
       const payment = {
         id: "pay-card-rejected",
         paymentMethod: "CARD",
@@ -804,6 +804,20 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockImplementation(async ({ where }: any) => {
+        if (where.reference === payment.transactionRef) {
+          return {
+            id: `tx-card-lock-${orderId}`,
+            walletId: buyerWallet.id,
+            wallet: buyerWallet,
+            type: "ESCROW_LOCK",
+            amount: 75000,
+            reference: payment.transactionRef,
+            status: "SUCCESS",
+          } as any;
+        }
+        return null as any;
+      });
       vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
       const paymentUpdateMany = vi.spyOn(prisma.payment, "updateMany").mockImplementation(async ({ where, data }: any) => {
         if (where.id !== payment.id) return { count: 0 };
@@ -855,7 +869,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
     it("marks a network-uncertain refund for manual reconciliation and blocks automatic retry", async () => {
       const buyerId = "usr_card_buyer_timeout";
       const orderId = "ord_card_timeout";
-      const buyerWallet = { id: "w-card-timeout", userId: buyerId, balance: 900, escrow: 0 };
+      const buyerWallet = { id: "w-card-timeout", userId: buyerId, balance: 900, escrow: 75000 };
       const payment = {
         id: "pay-card-timeout",
         paymentMethod: "CARD",
@@ -881,6 +895,20 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       vi.spyOn(prisma.order, "findUnique").mockResolvedValue(order as any);
+      vi.spyOn(prisma.walletTransaction, "findUnique").mockImplementation(async ({ where }: any) => {
+        if (where.reference === payment.transactionRef) {
+          return {
+            id: `tx-card-lock-${orderId}`,
+            walletId: buyerWallet.id,
+            wallet: buyerWallet,
+            type: "ESCROW_LOCK",
+            amount: 75000,
+            reference: payment.transactionRef,
+            status: "SUCCESS",
+          } as any;
+        }
+        return null as any;
+      });
       vi.spyOn(prisma.wallet, "findUnique").mockResolvedValue(buyerWallet as any);
       const paymentUpdateMany = vi.spyOn(prisma.payment, "updateMany").mockImplementation(async ({ where, data }: any) => {
         if (where.id !== payment.id) return { count: 0 };
