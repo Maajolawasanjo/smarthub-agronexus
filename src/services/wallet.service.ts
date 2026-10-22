@@ -784,7 +784,7 @@ export class WalletService {
       }
       if (order.payment.paymentStatus === "REFUNDED") {
         const priorRefund = await prisma.walletTransaction.findUnique({
-          where: { reference: `WALLET-REFUND-${orderId}` },
+          where: { reference: `WALLET-REFUND-${order.id}` },
         });
         if (
           !priorRefund ||
@@ -802,7 +802,7 @@ export class WalletService {
       }
       if (order.payment.paymentStatus === "REFUNDED") {
         const priorCredit = await prisma.walletTransaction.findUnique({
-          where: { reference: `STORE-CREDIT-${orderId}` },
+          where: { reference: `STORE-CREDIT-${order.id}` },
         });
         if (
           !priorCredit ||
@@ -820,7 +820,7 @@ export class WalletService {
     }
 
     const wallet = await this.getOrCreateWallet(userId);
-    const txRef = isStoreCredit ? `STORE-CREDIT-${orderId}` : `WALLET-REFUND-${orderId}`;
+    const txRef = isStoreCredit ? `STORE-CREDIT-${order.id}` : `WALLET-REFUND-${order.id}`;
 
     return await prisma.$transaction(async (tx) => {
       const existing = await tx.walletTransaction.findUnique({ where: { reference: txRef } });
@@ -946,7 +946,7 @@ export class WalletService {
     }
 
     const payment = order.payment;
-    const cardRefundReference = `CARD-REFUND-${orderId}`;
+    const cardRefundReference = `CARD-REFUND-${order.id}`;
 
     if (payment.refundStatus === "SUCCEEDED") {
       if (payment.paymentStatus !== "REFUNDED" || payment.financialState !== "REFUNDED") {
@@ -1348,9 +1348,9 @@ export class WalletService {
     // older route failed to update Payment. The ledger is durable evidence that this
     // order's escrow must not be paid out again.
     const priorRefundEntries = await Promise.all([
-      `WALLET-REFUND-${orderId}`,
-      `CARD-REFUND-${orderId}`,
-      `STORE-CREDIT-${orderId}`,
+      `WALLET-REFUND-${order.id}`,
+      `CARD-REFUND-${order.id}`,
+      `STORE-CREDIT-${order.id}`,
     ].map((reference) => prisma.walletTransaction.findUnique({ where: { reference } })));
     if (priorRefundEntries.some((entry) => entry?.type === "REFUND" && entry.status === "SUCCESS")) {
       // Quarantine a legacy inconsistent state durably (outside the settlement
