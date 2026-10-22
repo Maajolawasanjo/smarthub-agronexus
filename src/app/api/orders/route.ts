@@ -26,6 +26,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Untrusted mutation origin." }, { status: 403 });
     }
 
+    if (session.role !== "BUYER") {
+      return NextResponse.json({ error: "Only buyer accounts can place marketplace orders." }, { status: 403 });
+    }
+
     // Find buyer profile from authenticated user
     const buyerProfile = await prisma.buyerProfile.findUnique({
       where: { userId: session.userId },
@@ -82,9 +86,9 @@ export async function POST(req: Request) {
           include: { inventory: true },
         });
 
-        if (!product || !product.isAvailable) {
+        if (!product || product.status !== "APPROVED" || !product.isAvailable) {
           throw new Error(
-            `Product "${item.productId}" is not available for purchase.`
+            `Product "${item.productId}" is not approved and available for purchase.`
           );
         }
 
