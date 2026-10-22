@@ -828,6 +828,25 @@ export class WalletService {
 
     const wallet = await this.getOrCreateWallet(userId);
     const txRef = isStoreCredit ? `STORE-CREDIT-${order.id}` : `WALLET-REFUND-${order.id}`;
+    const refundLedgerGroup = {
+      groupReference: txRef,
+      source: isStoreCredit ? FinancialLedgerSource.STORE_CREDIT : FinancialLedgerSource.WALLET_REFUND,
+      expectedAmount: amount,
+      description: isStoreCredit
+        ? `Admin-authorized store credit for Order #${order.orderNumber}`
+        : `Wallet escrow refund for Order #${order.orderNumber}`,
+      lines: [{
+        reference: `${txRef}:ESCROW_TO_AVAILABLE`,
+        debitAccount: FinancialAccountCode.USER_ESCROW_LIABILITY,
+        debitUserId: userId,
+        creditAccount: FinancialAccountCode.USER_AVAILABLE_LIABILITY,
+        creditUserId: userId,
+        amount,
+        description: isStoreCredit
+          ? `Store credit issued for Order #${order.orderNumber}`
+          : `Buyer escrow returned to available wallet balance for Order #${order.orderNumber}`,
+      }],
+    };
 
     return await prisma.$transaction(async (tx) => {
       const existing = await tx.walletTransaction.findUnique({ where: { reference: txRef } });
@@ -842,6 +861,7 @@ export class WalletService {
             order.payment!.paymentStatus === "REFUNDED" &&
             order.payment!.financialState === "REFUNDED"
           ) {
+            await postFinancialLedgerGroup(tx, refundLedgerGroup);
             return { updatedWallet: wallet, txRecord: existing, alreadyRefunded: true };
           }
 
@@ -860,6 +880,7 @@ export class WalletService {
             },
           });
           if (legacyRepair.count === 1) {
+            await postFinancialLedgerGroup(tx, refundLedgerGroup);
             return { updatedWallet: wallet, txRecord: existing, alreadyRefunded: true };
           }
           throw new Error("REFUND_STATE_CONFLICT");
@@ -911,6 +932,7 @@ export class WalletService {
         },
       });
 
+      await postFinancialLedgerGroup(tx, refundLedgerGroup);
       const updatedWallet = await tx.wallet.findUnique({ where: { id: wallet.id } });
       return { updatedWallet, txRecord, alreadyRefunded: false };
     });
