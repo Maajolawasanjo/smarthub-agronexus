@@ -58,12 +58,17 @@ export async function POST(req: Request) {
       );
     }
 
-    const validPaymentMethod =
-      paymentMethod.toUpperCase() === "BANK_TRANSFER"
-        ? "BANK_TRANSFER"
-        : paymentMethod.toUpperCase() === "CARD"
-        ? "CARD"
+    const requestedPaymentMethod =
+      typeof paymentMethod === "string" && paymentMethod.trim()
+        ? paymentMethod.trim().toUpperCase()
         : "WALLET";
+    if (requestedPaymentMethod !== "CARD" && requestedPaymentMethod !== "WALLET") {
+      return NextResponse.json(
+        { error: "Unsupported checkout payment method. Use CARD or WALLET." },
+        { status: 400 }
+      );
+    }
+    const validPaymentMethod = requestedPaymentMethod === "CARD" ? "CARD" : "WALLET";
 
     const fullDeliveryAddress = destinationPort
       ? `${shippingAddress} (Port: ${destinationPort}, Incoterm: ${incoterm})`
