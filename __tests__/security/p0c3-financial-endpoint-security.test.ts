@@ -92,6 +92,7 @@ import { POST as initializeFlutterwave } from "@/app/api/payments/flutterwave/in
 import { POST as flutterwaveWebhook } from "@/app/api/payments/flutterwave/webhook/route";
 import { GET as verifyFlutterwaveRedirect } from "@/app/api/payments/flutterwave/verify/route";
 import { GET as getSettlement, POST as postSettlement } from "@/app/api/payments/settlement/[orderId]/route";
+import { POST as cancelOrder } from "@/app/api/orders/[id]/cancel/route";
 
 const ORIGIN = "https://www.smarthubagrochain.online";
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -694,6 +695,65 @@ describe("P0-C3 financial endpoint authorization and gateway intent verification
         where: { id: "order-1", status: { in: ["PENDING", "CONFIRMED"] } },
         data: { status: "CANCELLED" },
       }));
+      expect(mock.paymentUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: "payment-1" },
+        data: { paymentStatus: "REFUNDED" },
+      }));
+    });
+  });
+
+  describe("order cancellation refund evidence and retries", () => {
+    it("rejects a refunded card payment without confirmed provider refund evidence", async () => {
+      mock.orderFindUnique.mockResolvedValue(orderRecord({
+        status: "CONFIRMED",
+        payment: {
+          id: "payment-1",
+          paymentMethod: "CARD",
+          paymentStatus: "REFUNDED",
+          refundStatus: "MANUAL_REVIEW",
+          amount: 1200,
+          transactionRef: "AGRO-FLW-ref",
+          gatewayTransactionId: "98765",
+        },
+      }));
+
+      const res = await cancelOrder(
+        request("/api/orders/order-1/cancel", "POST", {}),
+        { params: Promise.resolve({ id: "order-1" }) }
+      );
+
+      expect(res.status).toBe(409);
+      expect(mock.transaction).not.toHaveBeenCalled();
+      expect(mock.executeGatewayCardRefund).not.toHaveBeenCalled();
+    });
+
+    it("recovers a wallet-refund retry from the exact ledger entry without changing REFUNDED back to FAILED", async () => {
+      mock.orderFindUnique.mockResolvedValue(orderRecord({
+        status: "CONFIRMED",
+        payment: {
+          id: "payment-1",
+          paymentMethod: "WALLET",
+          paymentStatus: "REFUNDED",
+          financialState: "REFUNDED",
+          amount: 1200,
+          transactionRef: "REF-AGRO-001",
+          gatewayTransactionId: null,
+        },
+      }));
+      mock.walletTransactionFindUnique.mockResolvedValue({
+        id: "wallet-refund-1",
+        status: "SUCCESS",
+        amount: 1200,
+        reference: "WALLET-REFUND-order-1",
+      });
+
+      const res = await cancelOrder(
+        request("/api/orders/order-1/cancel", "POST", {}),
+        { params: Promise.resolve({ id: "order-1" }) }
+      );
+
+      expect(res.status).toBe(200);
+      expect(mock.executeWalletEscrowRefund).not.toHaveBeenCalled();
       expect(mock.paymentUpdate).toHaveBeenCalledWith(expect.objectContaining({
         where: { id: "payment-1" },
         data: { paymentStatus: "REFUNDED" },
