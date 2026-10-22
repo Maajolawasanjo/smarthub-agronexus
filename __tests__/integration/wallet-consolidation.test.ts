@@ -218,7 +218,7 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
       id: "w_refund_101",
       userId: mockUserId,
       balance: 1000,
-      escrow: 9000,
+      escrow: 10000,
       pendingWithdrawal: 0,
       frozen: 0,
       createdAt: new Date(),
@@ -282,7 +282,7 @@ describe("Wallet Domain Consolidation Integration Suite", () => {
     }));
     expect(payment.paymentStatus).toBe("REFUNDED");
     expect(payment.financialState).toBe("REFUNDED");
-    expect(wallet.escrow).toBe(-1000);
+    expect(wallet.escrow).toBe(0);
     expect(wallet.balance).toBe(11000);
     expect(result.txRecord.reference).toBe("WALLET-REFUND-ord_refund_101");
   });
