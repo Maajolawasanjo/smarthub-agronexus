@@ -365,7 +365,7 @@ describe("P0 Forensic Remediation: Multi-Vendor Settlement & Financial Invariant
       // Farmer B: ₦20,000 + ₦53,936.25 = ₦73,936.25
       expect(farmerBWallet.balance).toBeCloseTo(73936.25, 1);
       // Buyer escrow: ₦100,000 - ₦100,000 (totalEscrowToRelease = ₦40,000 + ₦60,000) = ₦0
-      expect(buyerWallet.escrow).toBe(75000);
+      expect(buyerWallet.escrow).toBe(0);
       expect(mockOrder.status).toBe("COMPLETED");
 
       // Replaying the same release cannot create a second set of payouts.
